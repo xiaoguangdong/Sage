@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from sage_app.data.data_provider import DataProvider
+from scripts.data._shared.runtime import get_tushare_token
 
 # 配置日志
 logging.basicConfig(
@@ -26,8 +27,7 @@ logger = logging.getLogger(__name__)
 
 def test_fina_indicator_no_stock():
     """测试fina_indicator接口不传股票代码"""
-    token = "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"
-    provider = DataProvider(tushare_token=token)
+    provider = DataProvider(tushare_token=get_tushare_token())
 
     logger.info("=" * 70)
     logger.info("测试fina_indicator接口 - 不传股票代码")

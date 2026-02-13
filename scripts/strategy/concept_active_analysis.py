@@ -15,28 +15,25 @@ python concept_active_analysis.py --update  # 更新数据
 python concept_active_analysis.py --mainline  # 识别主线逻辑
 """
 
+import argparse
+import os
+import sys
+import time
+from datetime import datetime, timedelta
+from pathlib import Path
+
+import numpy as np
 import pandas as pd
 import tushare as ts
-import argparse
-import time
-import os
-from datetime import datetime, timedelta
-import logging
-import numpy as np
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/concept_active_analysis.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.runtime import get_tushare_token, setup_logger
+
+logger = setup_logger(Path(__file__).stem, module="strategy")
 
 # 配置参数
-TS_TOKEN = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
 TIMEOUT = 30
 DATA_DIR = 'data/tushare/sectors'
 START_DATE = '20240924'
@@ -46,8 +43,8 @@ END_DATE = '20260206'
 class ConceptActiveAnalyzer:
     """概念活跃度分析器"""
     
-    def __init__(self, token=TS_TOKEN, timeout=TIMEOUT):
-        self.pro = ts.pro_api(token)
+    def __init__(self, token=None, timeout=TIMEOUT):
+        self.pro = ts.pro_api(get_tushare_token(token))
         self.timeout = timeout
         self.data_dir = DATA_DIR
         self.market = 'EB'

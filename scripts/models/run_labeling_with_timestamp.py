@@ -9,15 +9,15 @@
 
 import sys
 import os
-import tushare as ts
+import shutil
+from pathlib import Path
 import pandas as pd
-from datetime import datetime
 
-# 添加项目根目录到路径
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
-sys.path.insert(0, project_root)
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.models.label_hs300_daily_weekly import HS300Labeler
+from scripts.data.tushare_suite import download_index_ohlc
 
 
 def download_index_data(start_date, end_date):
@@ -32,38 +32,31 @@ def download_index_data(start_date, end_date):
     print(f"下载指数数据: {start_date} 至 {end_date}")
     print("=" * 80)
     
-    # 初始化Tushare
-    ts_pro = ts.pro_api('2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e')
-    
-    # 下载沪深300数据
-    df = ts_pro.index_daily(
-        ts_code='000300.SH',
-        start_date=start_date.replace('-', ''),
-        end_date=end_date.replace('-', '')
+    # 使用统一下载入口
+    output_root = download_index_ohlc(
+        start_date=start_date,
+        end_date=end_date,
+        output_dir="data",
+        indices=[("000300.SH", "沪深300")],
+        sleep_seconds=1,
     )
-    
-    if df is not None and not df.empty:
-        print(f"✓ 成功获取 {len(df)} 条记录")
-        print(f"  日期范围: {df['trade_date'].min()} 至 {df['trade_date'].max()}")
-        
-        # 重命名列
-        df = df.rename(columns={
-            'trade_date': 'date',
-            'ts_code': 'code',
-            'pct_chg': 'pct_change'
-        })
-        
-        # 保存数据
-        output_dir = "data/tushare/index"
-        os.makedirs(output_dir, exist_ok=True)
-        output_file = os.path.join(output_dir, "index_000300_SH_ohlc.parquet")
-        df.to_parquet(output_file)
-        
-        print(f"✓ 数据已保存: {output_file}")
-        return True
-    else:
+
+    src_file = output_root / "index_000300_SH_ohlc.parquet"
+    if not src_file.exists():
         print("✗ 数据下载失败")
         return False
+
+    legacy_dir = PROJECT_ROOT / "data" / "tushare" / "index"
+    legacy_dir.mkdir(parents=True, exist_ok=True)
+    output_file = legacy_dir / "index_000300_SH_ohlc.parquet"
+    shutil.copy2(src_file, output_file)
+
+    df = pd.read_parquet(output_file)
+    print(f"✓ 成功获取 {len(df)} 条记录")
+    if not df.empty and "date" in df.columns:
+        print(f"  日期范围: {df['date'].min()} 至 {df['date'].max()}")
+    print(f"✓ 数据已保存: {output_file}")
+    return True
 
 
 def run_labeling(start_date, end_date):

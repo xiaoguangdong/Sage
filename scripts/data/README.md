@@ -28,18 +28,66 @@ python scripts/data/tushare_suite.py --action margin \
 
 ### 其他示例（YYYYMMDD）
 
-- 日线K线：`--action daily_kline --start-date 20240101 --end-date 20240105`
-- 指数OHLC：`--action index_ohlc --start-date 20240101 --end-date 20240105`
-- 沪深300成分：`--action hs300_constituents --start-year 2020 --end-year 2021`
-- 沪深300资金流：`--action hs300_moneyflow --start-date 20240101 --end-date 20240105`
-- 申万行业分类：`--action sw_industry_classify`
-- 申万行业日线：`--action sw_industry_daily --start-date 20240101 --end-date 20240105`
-- 期权日线：`--action opt_daily --start-date 20240101 --end-date 20240105`
-- 财务指标：`--action fina_indicator --start-date 20240101 --end-date 20241231`
-- 财务指标VIP：`--action fina_indicator_vip --start-year 2020 --end-year 2021`
-- 行业/概念列表：`--action tushare_sectors`
-- 概念更新（Tushare）：`--action concept_update_tushare --mode init|update|calculate`
-- 概念更新（东财）：`--action concept_update_eastmoney --mode init|update|calculate`
+```bash
+# 日线K线
+python scripts/data/tushare_suite.py --action daily_kline \
+  --start-date 20240101 --end-date 20240105 \
+  --output-dir /tmp/sage_data
+
+# 指数OHLC
+python scripts/data/tushare_suite.py --action index_ohlc \
+  --start-date 20240101 --end-date 20240105 \
+  --output-dir /tmp/sage_data
+
+# 沪深300成分
+python scripts/data/tushare_suite.py --action hs300_constituents \
+  --start-year 2020 --end-year 2021 \
+  --output-dir /tmp/sage_data
+
+# 沪深300资金流
+python scripts/data/tushare_suite.py --action hs300_moneyflow \
+  --start-date 20240101 --end-date 20240105 \
+  --output-dir /tmp/sage_data
+
+# 申万行业分类
+python scripts/data/tushare_suite.py --action sw_industry_classify \
+  --output-dir /tmp/sage_data
+
+# 申万行业日线
+python scripts/data/tushare_suite.py --action sw_industry_daily \
+  --start-date 20240101 --end-date 20240105 \
+  --output-dir /tmp/sage_data
+
+# 期权日线
+python scripts/data/tushare_suite.py --action opt_daily \
+  --start-date 20240101 --end-date 20240105 \
+  --output-dir /tmp/sage_data
+
+# 财务指标
+python scripts/data/tushare_suite.py --action fina_indicator \
+  --start-date 20240101 --end-date 20241231 \
+  --stock-list-csv data/tushare/filtered_stocks_list.csv \
+  --output-dir /tmp/sage_data
+
+# 财务指标VIP
+python scripts/data/tushare_suite.py --action fina_indicator_vip \
+  --start-year 2020 --end-year 2021 \
+  --output-dir /tmp/sage_data
+
+# 行业/概念列表
+python scripts/data/tushare_suite.py --action tushare_sectors \
+  --output-dir /tmp/sage_data
+
+# 概念更新（Tushare）
+python scripts/data/tushare_suite.py --action concept_update_tushare \
+  --mode update --start-date 20240924 --end-date 20241231 \
+  --min-stock-count 10 --output-dir /tmp/sage_data
+
+# 概念更新（东财）
+python scripts/data/tushare_suite.py --action concept_update_eastmoney \
+  --mode update --start-date 20240924 --end-date 20241231 \
+  --output-dir /tmp/sage_data
+```
 
 ## Baostock 下载器
 
