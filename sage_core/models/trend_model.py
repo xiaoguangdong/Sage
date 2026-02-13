@@ -11,8 +11,19 @@ logger = logging.getLogger(__name__)
 
 class TrendModelRule:
     """趋势状态模型（规则版本）"""
-    
-    def __init__(self, ma_short: int = 20, ma_medium: int = 60, ma_long: int = 120):
+
+    def __init__(
+        self,
+        ma_short: int = 20,
+        ma_medium: int = 60,
+        ma_long: int = 120,
+        price_gap: float = 0.01,
+        vol_window: int = 4,
+        vol_median_window: int = 60,
+        slope_window: int = 20,
+        slope_threshold: float = 0.0,
+        use_slope_filter: bool = False,
+    ):
         """
         初始化趋势模型
         
@@ -20,10 +31,22 @@ class TrendModelRule:
             ma_short: 短期均线周期
             ma_medium: 中期均线周期
             ma_long: 长期均线周期
+            price_gap: 价格与均线的最小偏离比例
+            vol_window: 波动率计算窗口
+            vol_median_window: 波动率中位数窗口
+            slope_window: 斜率计算窗口
+            slope_threshold: 斜率阈值
+            use_slope_filter: 是否启用斜率过滤
         """
         self.ma_short = ma_short
         self.ma_medium = ma_medium
         self.ma_long = ma_long
+        self.price_gap = price_gap
+        self.vol_window = vol_window
+        self.vol_median_window = vol_median_window
+        self.slope_window = slope_window
+        self.slope_threshold = slope_threshold
+        self.use_slope_filter = use_slope_filter
         
     def predict(self, df_index: pd.DataFrame) -> dict:
         """
@@ -44,15 +67,14 @@ class TrendModelRule:
         ma_120 = df_index['close'].rolling(self.ma_long, min_periods=self.ma_long).mean()
         
         # 计算波动率
-        vol_4w = df_index['close'].pct_change().rolling(4).std()
-        vol_median = vol_4w.rolling(60).median()
+        vol_4w = df_index['close'].pct_change().rolling(self.vol_window).std()
+        vol_median = vol_4w.rolling(self.vol_median_window).median()
         
         # 判断条件
-        price_gap = 0.01
         if pd.isna(ma_120.iloc[-1]):
             is_up_trend = (
                 ma_20.iloc[-1] > ma_60.iloc[-1] and
-                df_index['close'].iloc[-1] > ma_60.iloc[-1] * (1 + price_gap)
+                df_index['close'].iloc[-1] > ma_60.iloc[-1] * (1 + self.price_gap)
             )
         else:
             is_up_trend = (
@@ -60,8 +82,21 @@ class TrendModelRule:
                 ma_60.iloc[-1] > ma_120.iloc[-1] and
                 df_index['close'].iloc[-1] > ma_120.iloc[-1]
             )
-        
+
         is_low_vol = vol_4w.iloc[-1] <= vol_median.iloc[-1]
+
+        trend_strength = np.nan
+        if not pd.isna(ma_60.iloc[-1]) and ma_60.iloc[-1] != 0:
+            trend_strength = (ma_20.iloc[-1] - ma_60.iloc[-1]) / ma_60.iloc[-1]
+
+        slope = np.nan
+        if len(ma_20) > self.slope_window and not pd.isna(ma_20.iloc[-1 - self.slope_window]):
+            base = ma_20.iloc[-1 - self.slope_window]
+            if base != 0:
+                slope = (ma_20.iloc[-1] - base) / base
+
+        if self.use_slope_filter and not pd.isna(slope):
+            is_up_trend = is_up_trend and slope > self.slope_threshold
         
         # 构造标签
         if is_up_trend and is_low_vol:
@@ -78,6 +113,22 @@ class TrendModelRule:
             state_name = 'RISK_OFF'
         
         # 返回结果
+        confidence = 0.5
+        if is_up_trend and not pd.isna(trend_strength):
+            confidence += min(0.3, max(0.0, trend_strength * 10))
+        if is_low_vol:
+            confidence += 0.2
+        if not is_up_trend and not is_low_vol:
+            confidence -= 0.2
+        confidence = float(np.clip(confidence, 0.0, 1.0))
+
+        if state == 2:
+            position = 0.8 if confidence >= 0.7 else 0.6
+        elif state == 1:
+            position = 0.3
+        else:
+            position = 0.0
+
         result = {
             'state': state,
             'state_name': state_name,
@@ -86,6 +137,10 @@ class TrendModelRule:
             'prob_risk_off': 0.8 if state == 0 else 0.1,
             'is_up_trend': is_up_trend,
             'is_low_vol': is_low_vol,
+            'trend_strength': trend_strength,
+            'trend_slope': slope,
+            'confidence': confidence,
+            'position_suggestion': position,
             'ma_20': ma_20.iloc[-1],
             'ma_60': ma_60.iloc[-1],
             'ma_120': ma_120.iloc[-1],
