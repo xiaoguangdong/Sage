@@ -14,7 +14,6 @@ from typing import Callable, Optional
 
 import pandas as pd
 import tushare as ts
-import yaml
 
 from scripts.data._shared.runtime import get_project_root, get_tushare_token, setup_logger
 
@@ -46,6 +45,7 @@ def load_config(config_path: Optional[Path] = None) -> DownloadConfig:
     config = {}
     if path.exists():
         try:
+            import yaml  # type: ignore
             with open(path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
         except Exception as exc:
