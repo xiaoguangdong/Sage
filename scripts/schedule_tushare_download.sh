@@ -14,7 +14,7 @@ rm -f "$LOG_DIR/download_state_optimized.json"
 
 # 运行下载脚本
 cd "$PROJECT_DIR"
-nohup venv/bin/python ml_stock_forecast/scripts/batch_download_tushare_optimized.py > "$LOG_DIR/download_batch.log" 2>&1 &
+nohup venv/bin/python scripts/data/batch_download_tushare_optimized.py > "$LOG_DIR/download_batch.log" 2>&1 &
 
 echo "Tushare下载任务已启动，PID: $!"
 echo "日志文件: $LOG_DIR/download_batch.log"

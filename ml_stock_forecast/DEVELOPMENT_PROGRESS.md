@@ -6,47 +6,28 @@
 
 ```
 ml_stock_forecast/
-├── config/              # 配置文件目录
-│   ├── __init__.py
-│   ├── trend_model.yaml  # 趋势模型配置
-│   ├── rank_model.yaml   # 排序模型配置
-│   └── entry_model.yaml  # 买卖点模型配置
-├── data/                # 数据目录
-│   ├── __init__.py
-│   ├── raw/             # 原始数据
-│   └── processed/       # 处理后数据
-├── features/            # 特征工程目录
-│   ├── __init__.py
-│   ├── price_features.py    # 价格特征（动量、流动性、稳定性、技术指标）
-│   └── market_features.py   # 市场特征（基于沪深300指数）
-├── models/              # 模型目录
-│   ├── __init__.py
-│   ├── trend_model.py       # 趋势状态模型（规则版）
-│   ├── rank_model.py        # 选股排序模型（LightGBM）
-│   └── entry_model.py       # 买卖点过滤模型（Logistic Regression）
-├── portfolio/           # 组合管理目录
-│   ├── __init__.py
-│   ├── construction.py      # 组合构建（等权重、行业限制）
-│   └── risk_control.py      # 风险控制（止损、回撤、仓位限制）
-├── backtest/            # 回测目录
-│   ├── __init__.py
-│   └── walk_forward.py      # Walk-forward回测
-├── utils/               # 工具目录
-│   ├── __init__.py
-│   └── data_loader.py       # 数据加载器和质量检查
+├── core/                # 核心算法模块
+│   ├── backtest/
+│   ├── data/
+│   ├── features/
+│   ├── models/
+│   ├── portfolio/
+│   └── utils/
+├── non_core/            # 非核心模块（数据接入/调度）
+│   ├── config/
+│   ├── data/
+│   └── pipelines/
 ├── tests/               # 测试目录
 │   ├── __init__.py
 │   ├── test_data_loader.py  # 数据加载器测试
 │   ├── test_trend_model.py  # 趋势模型测试
 │   └── test_models.py       # 排序和买卖点模型测试
-├── __init__.py
-├── README.md            # 项目说明文档
-└── run_weekly.py        # 主入口文件
+└── README.md            # 项目说明文档
 ```
 
 ### 2. 核心模块开发 ✅
 
-#### 2.1 数据模块 (data/)
+#### 2.1 数据模块 (core/data/ + non_core/data/)
 
 **data_loader.py**
 - `DataLoader` 类：负责加载Baostock数据
@@ -58,7 +39,7 @@ ml_stock_forecast/
 - 支持ST股票排除、停牌股票排除
 - 支持换手率、市值过滤
 
-#### 2.2 特征工程模块 (features/)
+#### 2.2 特征工程模块 (core/features/)
 
 **price_features.py**
 - `PriceFeatures` 类：价格特征提取器
@@ -72,7 +53,7 @@ ml_stock_forecast/
 - 8个基础特征：MA20/60/120、4周波动率、12周波动率、MACD指标、价格位置
 - 10个硬核特征：均线多头排列、波动率分位、MACD金叉、价格创新高、量价背离等
 
-#### 2.3 模型模块 (models/)
+#### 2.3 模型模块 (core/models/)
 
 **trend_model.py**
 - `TrendModelRule` 类：规则版趋势模型
@@ -102,7 +83,7 @@ ml_stock_forecast/
 - `predict()` 方法：预测买卖点
 - `get_model_params()` 方法：获取模型参数
 
-#### 2.4 组合管理模块 (portfolio/)
+#### 2.4 组合管理模块 (core/portfolio/)
 
 **construction.py**
 - `PortfolioConstruction` 类：组合构建器

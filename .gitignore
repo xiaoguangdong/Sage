@@ -15,6 +15,15 @@ venv*/
 
 # Data / outputs
 data/
+!ml_stock_forecast/core/data/
+!ml_stock_forecast/core/data/**
+!ml_stock_forecast/non_core/data/
+!ml_stock_forecast/non_core/data/**
+ml_stock_forecast/non_core/data/raw/
+ml_stock_forecast/non_core/data/__pycache__/
+ml_stock_forecast/non_core/data/.DS_Store
+ml_stock_forecast/core/data/__pycache__/
+ml_stock_forecast/core/data/.DS_Store
 logs/
 session/
 checkpoints/

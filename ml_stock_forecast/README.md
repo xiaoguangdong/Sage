@@ -11,29 +11,19 @@
 
 ```
 ml_stock_forecast/
-├── config/              # 配置文件
-│   ├── trend_model.yaml
-│   ├── rank_model.yaml
-│   └── entry_model.yaml
-├── data/                # 数据目录
-│   ├── raw/             # 原始数据
-│   └── processed/       # 处理后数据
-├── features/            # 特征工程
-│   ├── price_features.py
-│   └── market_features.py
-├── models/              # 模型
-│   ├── trend_model.py
-│   ├── rank_model.py
-│   └── entry_model.py
-├── portfolio/           # 组合管理
-│   ├── construction.py
-│   └── risk_control.py
-├── backtest/            # 回测
-│   └── walk_forward.py
-├── utils/               # 工具
-│   └── data_loader.py
+├── core/                # 核心算法模块
+│   ├── backtest/
+│   ├── data/
+│   ├── features/
+│   ├── models/
+│   ├── portfolio/
+│   └── utils/
+├── non_core/            # 非核心模块（数据接入/调度）
+│   ├── config/
+│   ├── data/
+│   └── pipelines/
 ├── tests/               # 测试
-└── run_weekly.py        # 主入口
+└── README.md
 ```
 
 ## 快速开始
@@ -55,14 +45,14 @@ python -m unittest discover tests -v
 
 ```bash
 cd ml_stock_forecast
-python run_weekly.py weekly
+python non_core/pipelines/run_weekly.py weekly
 ```
 
 ### 运行回测
 
 ```bash
 cd ml_stock_forecast
-python run_weekly.py backtest
+python non_core/pipelines/run_weekly.py backtest
 ```
 
 ## 数据准备

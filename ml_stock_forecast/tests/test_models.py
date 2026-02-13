@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 # 导入被测试的模块
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from models.entry_model import EntryModelLR
+from core.models.entry_model import EntryModelLR
 
 
 class TestEntryModel(unittest.TestCase):

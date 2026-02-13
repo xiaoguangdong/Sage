@@ -8,10 +8,10 @@ from pathlib import Path
 
 # 导入被测试的模块
 import sys
-sys.path.append(str(Path(__file__).parent.parent))
+sys.path.append(str(Path(__file__).resolve().parents[1]))
 
-from utils.data_loader import DataLoader
-from data.universe import Universe
+from non_core.data.data_loader import DataLoader
+from core.data.universe import Universe
 
 
 class TestDataLoader(unittest.TestCase):
