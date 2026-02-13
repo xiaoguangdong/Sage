@@ -141,6 +141,7 @@ class TrendModelEnhanced:
         ma60_slope = row[f'ma_{self.ma_medium}_slope']
         rsi = row['rsi']
         macd = row['macd']
+        macd_signal = row['macd_signal']
         bb_position = row['bb_position']
         momentum_4w = row['momentum_4w']
         volatility = row['volatility']
@@ -187,6 +188,7 @@ class TrendModelEnhanced:
         ma60_slope = row[f'ma_{self.ma_medium}_slope']
         rsi = row['rsi']
         macd = row['macd']
+        macd_signal = row['macd_signal']
         bb_position = row['bb_position']
         momentum_4w = row['momentum_4w']
         volatility = row['volatility']
@@ -233,13 +235,14 @@ class TrendModelEnhanced:
         ma60_slope = row[f'ma_{self.ma_medium}_slope']
         bb_width = row['bb_width']
         volatility = row['volatility']
+        vol_ma = row.get('volatility_ma', np.nan)
         rsi = row['rsi']
         momentum_4w = row['momentum_4w']
         
         confidence = 0.65
         
         # 1. 检测扩张三角（波动加大）
-        if bb_width > 0.15 and volatility > volatility.rolling(60).median().iloc[-1] * 1.5:
+        if bb_width > 0.15 and pd.notna(vol_ma) and volatility > vol_ma * 1.5:
             return 'EXPANDING_VOLATILITY', 0.7
         
         # 2. 检测箱体震荡

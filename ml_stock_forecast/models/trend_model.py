@@ -22,7 +22,7 @@ class TrendModelRule:
             ma_long: 长期均线周期
         """
         self.ma_short = ma_short
-        ma_medium = ma_medium
+        self.ma_medium = ma_medium
         self.ma_long = ma_long
         
     def predict(self, df_index: pd.DataFrame) -> dict:
