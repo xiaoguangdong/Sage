@@ -330,6 +330,8 @@ class NorthboundFlow:
         if 'north_money' not in result.columns:
             print("警告: 缺少north_money字段")
             return result
+
+        result['north_money'] = pd.to_numeric(result['north_money'], errors='coerce')
         
         # 计算布林带
         result['flow_ma'] = result['north_money'].rolling(window=window).mean()
@@ -369,8 +371,9 @@ class NorthboundFlow:
         result = result.sort_values(['industry_code', 'trade_date'])
 
         if 'ratio' in result.columns and result['ratio'].notna().any():
-            result['industry_ratio'] = result['ratio']
+            result['industry_ratio'] = pd.to_numeric(result['ratio'], errors='coerce')
         else:
+            result['vol'] = pd.to_numeric(result['vol'], errors='coerce')
             total_vol = result.groupby('trade_date')['vol'].transform('sum')
             result['industry_ratio'] = result['vol'] / total_vol.replace(0, np.nan)
 
