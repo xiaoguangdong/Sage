@@ -16,7 +16,6 @@
 
 - `sage_core/`：核心算法库（趋势/宏观/选股/风控/回测等）
 - `ml_stock_forecast/non_core/`：非核心管线（数据接入/调度/入口脚本）
-- `sage/`：平台骨架与可替换注册器（逐步对齐到 `sage_core`）
 - `scripts/`：脚本入口（data/models/strategy/backtest/monitoring/legacy）
 
 ## 数据不丢失机制（推荐启用）
