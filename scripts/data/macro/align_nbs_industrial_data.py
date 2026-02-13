@@ -17,10 +17,11 @@ import os
 import sys
 from typing import Dict, List, Optional
 from datetime import datetime
+from pathlib import Path
 import argparse
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
-sys.path.insert(0, PROJECT_ROOT)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data.macro.paths import MACRO_DIR
 
@@ -35,7 +36,7 @@ class NBSIndustrialDataAligner:
         Args:
             data_dir: 数据目录
         """
-        self.data_dir = data_dir or str(MACRO_DIR)
+        self.data_dir = Path(data_dir) if data_dir else Path(MACRO_DIR)
         
         # 工业品到申万行业的映射（简化版，需要完善）
         self.product_to_sw_industry = {
@@ -205,21 +206,52 @@ class NBSIndustrialDataAligner:
                 return industry
         return None
 
-    def load_output_csv(self) -> Optional[pd.DataFrame]:
+    def _resolve_macro_dir(self) -> Path:
+        if self.data_dir.exists():
+            return self.data_dir
+        fallback = PROJECT_ROOT / "data" / "tushare" / "macro"
+        if fallback.exists():
+            return fallback
+        fallback_raw = PROJECT_ROOT / "data" / "raw" / "tushare" / "macro"
+        if fallback_raw.exists():
+            return fallback_raw
+        return self.data_dir
+
+    def load_output_csv(self, macro_dir: Path) -> Optional[pd.DataFrame]:
         """
         加载工业品产量CSV（优先nbs_output_2020.csv，其次nbs_output_202512.csv）
         """
         candidates = [
-            os.path.join(self.data_dir, 'nbs_output_2020.csv'),
-            os.path.join(self.data_dir, 'nbs_output_202512.csv'),
+            macro_dir / "nbs_output_2020.csv",
+            macro_dir / "nbs_output_202512.csv",
         ]
         for path in candidates:
-            if os.path.exists(path):
+            if path.exists():
                 df = pd.read_csv(path)
                 if 'product' in df.columns:
                     df = df.rename(columns={'product': 'product_name'})
                 return df
         return None
+
+    def load_output_json(self, macro_dir: Path) -> Optional[pd.DataFrame]:
+        """
+        加载工业品产量JSON（支持A020901/A020902等easyquery导出）
+        """
+        patterns = ["A020901*.json", "A020902*.json", "A0209*.json"]
+        files: List[Path] = []
+        for pattern in patterns:
+            files.extend(sorted(macro_dir.glob(pattern)))
+        if not files:
+            return None
+
+        dfs = []
+        for path in files:
+            df = self.parse_nbs_json(str(path))
+            if df is not None and len(df) > 0:
+                dfs.append(df)
+        if not dfs:
+            return None
+        return pd.concat(dfs, ignore_index=True)
     
     def calculate_growth_rate(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -285,14 +317,17 @@ class NBSIndustrialDataAligner:
         print("=" * 80)
         
         results = {}
+        macro_dir = self._resolve_macro_dir()
         
         # 1. 处理工业品产量数据
         print("\n1. 处理工业品产量数据...")
-        output_df = self.load_output_csv()
+        output_df = self.load_output_csv(macro_dir)
+        if output_df is None or len(output_df) == 0:
+            output_df = self.load_output_json(macro_dir)
         if output_df is None:
-            output_file = os.path.join(self.data_dir, 'A020901_工业品产量.json')
-            if os.path.exists(output_file):
-                output_df = self.parse_nbs_json(output_file)
+            output_file = macro_dir / "A020901_工业品产量.json"
+            if output_file.exists():
+                output_df = self.parse_nbs_json(str(output_file))
         if output_df is not None and len(output_df) > 0:
             print(f"  原始数据: {len(output_df)}条记录")
 
@@ -321,9 +356,9 @@ class NBSIndustrialDataAligner:
         
         # 2. 处理固定资产投资数据
         print("\n2. 处理固定资产投资数据...")
-        fai_file = os.path.join(self.data_dir, 'A0403_固定资产投资.json')
-        if os.path.exists(fai_file):
-            fai_df = self.parse_nbs_json(fai_file)
+        fai_file = macro_dir / "A0403_固定资产投资.json"
+        if fai_file.exists():
+            fai_df = self.parse_nbs_json(str(fai_file))
             print(f"  原始数据: {len(fai_df)}条记录")
             
             # 计算增长率
@@ -344,9 +379,9 @@ class NBSIndustrialDataAligner:
         
         # 3. 处理价格指数数据
         print("\n3. 处理价格指数数据...")
-        price_file = os.path.join(self.data_dir, 'A010D02_价格指数.json')
-        if os.path.exists(price_file):
-            price_df = self.parse_nbs_json(price_file)
+        price_file = macro_dir / "A010D02_价格指数.json"
+        if price_file.exists():
+            price_df = self.parse_nbs_json(str(price_file))
             print(f"  原始数据: {len(price_df)}条记录")
             
             # 价格指数本身就是增长率形式，不需要额外计算
