@@ -41,6 +41,14 @@ class HS300Labeler:
         
         # 加载数据
         self.load_data()
+
+        # 平滑参数（可按需调整）
+        self.smooth_window = 10
+        self.smooth_confirm_ratio = {
+            0: 0.8,  # 熊市确认阈值
+            1: 0.8,  # 震荡确认阈值
+            2: 0.9   # 牛市确认阈值（更严格）
+        }
     
     def load_data(self):
         """加载沪深300指数和成分股数据"""
@@ -239,6 +247,37 @@ class HS300Labeler:
         self.df['new_high_ratio'] = self.df['new_high_ratio'].fillna(0)
         
         print("✓ 市场广度指标计算完成")
+
+    def smooth_labels(self, labels):
+        """
+        标签平滑：基于最近窗口的状态占比进行确认，未达到阈值则保持上一状态
+        """
+        window = self.smooth_window
+        confirm_ratio = self.smooth_confirm_ratio
+        smoothed = []
+
+        for i in range(len(labels)):
+            start = max(0, i - window + 1)
+            window_labels = labels[start:i + 1]
+            total = len(window_labels)
+            counts = {0: 0, 1: 0, 2: 0}
+            for v in window_labels:
+                counts[int(v)] += 1
+
+            candidates = []
+            for state, ratio in confirm_ratio.items():
+                if counts[state] / total >= ratio:
+                    candidates.append(state)
+
+            if candidates:
+                # 选择占比最高的候选状态
+                chosen = max(candidates, key=lambda s: counts[s])
+            else:
+                chosen = smoothed[-1] if smoothed else labels[i]
+
+            smoothed.append(chosen)
+
+        return smoothed
     
     def calculate_score(self, i):
         """
@@ -417,6 +456,27 @@ class HS300Labeler:
         print(f"  熊市: {labels.count(0)} 天/周")
         
         return labels
+
+    def label_original_smooth(self):
+        """方法1b：原始标签平滑"""
+        print("\n" + "=" * 80)
+        print("方法1b：原始标签平滑...")
+        print("=" * 80)
+
+        if 'label_original' not in self.df.columns:
+            raise ValueError("请先生成原始标签 label_original")
+
+        labels = self.df['label_original'].tolist()
+        smoothed = self.smooth_labels(labels)
+        self.df['label_original_smooth'] = smoothed
+
+        print(f"✓ 原始标签平滑完成（window={self.smooth_window}, "
+              f"ratio={self.smooth_confirm_ratio})")
+        print(f"  牛市: {smoothed.count(2)} 天/周")
+        print(f"  震荡: {smoothed.count(1)} 天/周")
+        print(f"  熊市: {smoothed.count(0)} 天/周")
+
+        return smoothed
     
     def label_hmm(self, mapping_mode: str = "future_return"):
         """方法2：HMM模型（隐马尔可夫）"""
@@ -664,6 +724,7 @@ class HS300Labeler:
         
         methods = [
             ('原始标签', 'label_original'),
+            ('原始标签(平滑)', 'label_original_smooth'),
             ('HMM模型', 'label_hmm'),
             ('均线确认', 'label_ma_confirmation'),
             ('多均线系统', 'label_multi_ma')
@@ -698,15 +759,22 @@ class HS300Labeler:
         
         df = self.df
         
-        # 创建图表（4个子图）
-        fig, axes = plt.subplots(4, 1, figsize=(16, 16), sharex=True)
-        
         methods = [
-            ('原始标签', 'label_original', axes[0]),
-            ('HMM模型', 'label_hmm', axes[1]),
-            ('均线确认', 'label_ma_confirmation', axes[2]),
-            ('多均线系统', 'label_multi_ma', axes[3])
+            ('原始标签', 'label_original'),
+            ('原始标签(平滑)', 'label_original_smooth'),
+            ('HMM模型', 'label_hmm'),
+            ('均线确认', 'label_ma_confirmation'),
+            ('多均线系统', 'label_multi_ma')
         ]
+
+        methods = [(name, col) for name, col in methods if col in df.columns]
+
+        # 创建图表（动态子图数量）
+        fig, axes = plt.subplots(len(methods), 1, figsize=(16, 4 * len(methods)), sharex=True)
+        if len(methods) == 1:
+            axes = [axes]
+        
+        methods = [(name, col, axes[i]) for i, (name, col) in enumerate(methods)]
         
         for name, col, ax in methods:
             # 绘制价格
@@ -777,6 +845,7 @@ class HS300Labeler:
         
         # 4. 生成4种标签
         self.label_original()
+        self.label_original_smooth()
         self.label_hmm()
         self.label_ma_confirmation()
         self.label_multi_ma()
