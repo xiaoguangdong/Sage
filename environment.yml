@@ -16,4 +16,4 @@ dependencies:
       - xgboost
       - pyarrow
       - pytest
-
+      - APScheduler
