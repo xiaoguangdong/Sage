@@ -45,3 +45,10 @@
 - 任何破坏性操作（`rm -rf`、`pkill -9`、清空数据目录）在未被明确要求时**先问一句**再做。
 - 输出文件要可重跑：尽量断点续传、增量更新，不要默认全量重写。
 - 搜索/批处理时默认排除 `venv/`、`venv310/`、`data/`、`logs/`（它们不是源码）。
+
+## 7) 数据备份机制（本机）
+- 代码进 Git；`data/` 不进 Git（见 `.gitignore`）。
+- `data/` 镜像备份到外置盘（默认）：`/Volumes/SPEED/BizData/Stock/Sage/data/`
+- 触发方式：
+  - Git hooks（提交/切换/合并后同步）：`./scripts/backup/install_git_hooks.sh`
+  - macOS launchd 监听 `data/` 变化即同步：`./scripts/backup/install_launchd_watch.sh`
