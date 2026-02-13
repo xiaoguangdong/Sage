@@ -101,7 +101,8 @@ class MacroPredictor:
                 'systemic_scenario': 'SYSTEMIC RECESSION',
                 'opportunity_industries': [],
                 'risk_level': 'HIGH',
-                'message': systemic_scenario['message']
+                'message': systemic_scenario['message'],
+                'summary': systemic_scenario['message']
             }
         
         # 2. 为每个行业计算景气度评分和场景
