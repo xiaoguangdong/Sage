@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import argparse
 import re
+import subprocess
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
@@ -119,11 +121,72 @@ def match_gb_industry(text: str, gb_names: List[str]) -> Optional[str]:
     return None
 
 
+def convert_doc_to_txt(path: Path) -> Path:
+    if path.suffix.lower() == ".txt":
+        return path
+    out_dir = Path(tempfile.mkdtemp(prefix="nbs_product_"))
+    out_path = out_dir / f"{path.stem}.txt"
+    subprocess.run(
+        ["textutil", "-convert", "txt", str(path), "-output", str(out_path)],
+        check=True,
+    )
+    return out_path
+
+
+def parse_product_txt(path: Path) -> pd.DataFrame:
+    content = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+    lines = [line.strip() for line in content if line.strip()]
+    code_pattern = re.compile(r"^\d{6,}$")
+    records = []
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if not code_pattern.match(line):
+            i += 1
+            continue
+        code = line
+        i += 1
+        while i < len(lines) and not lines[i].strip():
+            i += 1
+        if i >= len(lines):
+            break
+        name = lines[i].strip()
+        i += 1
+        while i < len(lines) and not lines[i].strip():
+            i += 1
+        if i >= len(lines):
+            break
+        unit = lines[i].strip()
+        i += 1
+
+        desc_lines = []
+        while i < len(lines) and not code_pattern.match(lines[i].strip()):
+            text = lines[i].strip()
+            if text and text != "　":
+                desc_lines.append(text)
+            i += 1
+        desc = " ".join(desc_lines).strip()
+
+        records.append(
+            {
+                "product_code": code,
+                "product_name": name,
+                "unit": unit,
+                "description": desc,
+            }
+        )
+    return pd.DataFrame(records)
+
+
 def load_product_catalog(path: Path) -> pd.DataFrame:
-    if path.suffix.lower() in {".xlsx", ".xls"}:
+    suffix = path.suffix.lower()
+    if suffix in {".xlsx", ".xls"}:
         return pd.read_excel(path)
-    if path.suffix.lower() in {".csv"}:
+    if suffix == ".csv":
         return pd.read_csv(path)
+    if suffix in {".doc", ".docx", ".txt"}:
+        txt_path = convert_doc_to_txt(path)
+        return parse_product_txt(txt_path)
     raise ValueError(f"Unsupported product catalog file: {path}")
 
 
@@ -132,7 +195,7 @@ def detect_columns(df: pd.DataFrame) -> Tuple[Optional[str], Optional[str], Opti
     name_candidates = ["产品", "产品名称", "product", "product_name", "指标名称", "名称"]
     code_candidates = ["产品代码", "product_code", "指标代码", "代码"]
     industry_candidates = ["行业", "所属行业", "行业名称", "行业大类"]
-    desc_candidates = ["说明", "指标解释", "主要生产活动", "产品说明"]
+    desc_candidates = ["说明", "补充说明", "指标解释", "主要生产活动", "产品说明", "description"]
 
     def pick(cands):
         for c in cands:
@@ -149,6 +212,7 @@ def main():
     parser.add_argument("--gbt-notes", default=None, help="GB/T 4754-2017 注释（xlsx）路径")
     parser.add_argument("--sw-map", default="config/sw_nbs_mapping.yaml", help="申万-国统局映射")
     parser.add_argument("--output", default="config/nbs_product_sw_mapping.yaml")
+    parser.add_argument("--unmatched-output", default="data/processed/nbs_product_sw_unmatched.csv")
     args = parser.parse_args()
 
     refs_dir = PROJECT_ROOT / "refs_docs"
@@ -227,15 +291,25 @@ def main():
         raise SystemExit("缺少 PyYAML，请先安装后再运行。")
 
     products = []
+    def _clean(value):
+        if value is None:
+            return None
+        try:
+            if pd.isna(value):
+                return None
+        except Exception:
+            pass
+        return str(value)
+
     for _, row in result_df.iterrows():
         products.append(
             {
-                "product_code": row.get("product_code"),
-                "product_name": row.get("product_name"),
-                "gb_industry": row.get("gb_name"),
-                "gb_code": row.get("gb_code"),
-                "sw_industry": row.get("sw_industry"),
-                "map_source": row.get("map_source"),
+                "product_code": _clean(row.get("product_code")),
+                "product_name": _clean(row.get("product_name")),
+                "gb_industry": _clean(row.get("gb_name")),
+                "gb_code": _clean(row.get("gb_code")),
+                "sw_industry": _clean(row.get("sw_industry")),
+                "map_source": _clean(row.get("map_source")),
             }
         )
 
@@ -253,6 +327,13 @@ def main():
     mapped = result_df["sw_industry"].notna().sum()
     print(f"映射完成: {mapped}/{total} 有申万行业映射")
     print(f"输出: {out_path}")
+
+    unmatched = result_df[result_df["sw_industry"].isna()]
+    if not unmatched.empty and args.unmatched_output:
+        unmatched_path = PROJECT_ROOT / args.unmatched_output
+        unmatched_path.parent.mkdir(parents=True, exist_ok=True)
+        unmatched.to_csv(unmatched_path, index=False, encoding="utf-8-sig")
+        print(f"未匹配清单: {unmatched_path}")
 
 
 if __name__ == "__main__":
