@@ -54,6 +54,11 @@ class HS300Labeler:
         self.fusion_confirm_days = 3
         # 默认主信号列
         self.main_label_col = "label_ma_confirmation"
+        # 置信度参数（均线确认）
+        self.conf_min_scale = 1e-6
+        self.conf_slope_scale = None
+        self.conf_diff_scale = None
+        self.conf_price_scale = None
     
     def load_data(self):
         """加载沪深300指数和成分股数据"""
@@ -620,12 +625,63 @@ class HS300Labeler:
         self.df['label_main'] = self.df[main_col].tolist()
         labels = self.df['label_main'].tolist()
 
+        if main_col == "label_ma_confirmation":
+            self.df['label_main_confidence'] = self._calc_ma_confidence(labels)
+        else:
+            self.df['label_main_confidence'] = np.nan
+            print(f"⚠️ 主信号来源非均线确认，置信度暂未计算：{main_col}")
+
         print(f"✓ 主信号完成（source={main_col})")
         print(f"  牛市: {labels.count(2)} 天/周")
         print(f"  震荡: {labels.count(1)} 天/周")
         print(f"  熊市: {labels.count(0)} 天/周")
 
         return labels
+
+    def _calc_ma_confidence(self, labels):
+        """
+        均线确认置信度（0~1）
+        - 依据：ma_diff_norm、ma_slope、价格偏离MA20
+        - 牛/熊：0.5~1.0；震荡：0.2~0.5
+        """
+        df = self.df
+
+        ma20 = df['ma20']
+        ma60 = df['ma60']
+        ma_slope = df['ma_slope']
+        close = df['close']
+        ma_diff_norm = df['ma_diff_norm']
+
+        price_dist = (close / ma20 - 1.0)
+
+        diff_abs = ma_diff_norm.abs()
+        slope_abs = ma_slope.abs()
+        price_abs = price_dist.abs()
+
+        diff_scale = self.conf_diff_scale or max(diff_abs.median(skipna=True), self.conf_min_scale)
+        slope_scale = self.conf_slope_scale or max(slope_abs.median(skipna=True), self.conf_min_scale)
+        price_scale = self.conf_price_scale or max(price_abs.median(skipna=True), self.conf_min_scale)
+
+        diff_score = np.tanh(diff_abs / diff_scale)
+        slope_score = np.tanh(slope_abs / slope_scale)
+        price_score = np.tanh(price_abs / price_scale)
+
+        base_score = (diff_score + slope_score + price_score) / 3.0
+        conf = []
+
+        for i, label in enumerate(labels):
+            if pd.isna(ma20.iloc[i]) or pd.isna(ma60.iloc[i]) or pd.isna(ma_slope.iloc[i]):
+                conf.append(0.3)
+                continue
+
+            if label == 1:
+                value = 0.2 + 0.3 * base_score.iloc[i]
+            else:
+                value = 0.5 + 0.5 * base_score.iloc[i]
+
+            conf.append(round(float(value), 4))
+
+        return conf
     
     def label_hmm(self, mapping_mode: str = "future_return"):
         """方法2：HMM模型（隐马尔可夫）"""
