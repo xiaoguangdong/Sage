@@ -1,6 +1,12 @@
 version: 1
 source: 工业品产量目录 + GB/T 4754-2017 注释 + 申万映射
 products:
+- product_code: '09883'
+  product_name: 液化石油气
+  gb_industry: 石油、煤炭及其他燃料加工业
+  gb_code: C25
+  sw_industry: 石油石化
+  map_source: manual
 - product_code: '1011010'
   product_name: 石灰石
   gb_industry: null
