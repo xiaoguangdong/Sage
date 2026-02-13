@@ -93,22 +93,24 @@ if [[ -z "$preview" ]]; then
   exit 0
 fi
 
-# Avoid huge output when running from hooks/launchd (no TTY).
-rsync_progress_args=()
-if [[ -t 1 ]]; then
-  rsync_progress_args+=(--progress)
-fi
-
 {
   echo "== Sage data sync =="
-  echo "time: $(date -Is)"
+  echo "time: $(date +\"%Y-%m-%dT%H:%M:%S%z\")"
   echo "src:  $src/"
   echo "dst:  $dst/"
-  rsync -a \
-    --human-readable \
-    --stats \
-    --exclude ".DS_Store" \
-    "${rsync_progress_args[@]}" \
-    "$src/" "$dst/"
+  if [[ -t 1 ]]; then
+    rsync -a \
+      --human-readable \
+      --stats \
+      --exclude ".DS_Store" \
+      --progress \
+      "$src/" "$dst/"
+  else
+    rsync -a \
+      --human-readable \
+      --stats \
+      --exclude ".DS_Store" \
+      "$src/" "$dst/"
+  fi
   echo
 } | tee -a "$log_file"
