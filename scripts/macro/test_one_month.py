@@ -9,7 +9,6 @@ import pandas as pd
 import tushare as ts
 import time
 
-from tushare_auth import get_tushare_token
 
 def test_one_industry_one_month():
     """测试1个行业1个月的数据"""
@@ -17,7 +16,9 @@ def test_one_industry_one_month():
     print("测试Tushare sw_daily接口")
     print("=" * 80)
     
-    pro = ts.pro_api(get_tushare_token())
+    # 设置Tushare token
+    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    pro = ts.pro_api(token)
     
     # 测试农林牧渔（801010.SI）
     print("\n测试1个行业1个月的数据:")

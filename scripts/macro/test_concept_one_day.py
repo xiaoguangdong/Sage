@@ -8,9 +8,8 @@
 import tushare as ts
 import time
 
-from tushare_auth import get_tushare_token
-
-pro = ts.pro_api(get_tushare_token())
+token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+pro = ts.pro_api(token)
 
 print("=" * 80)
 print("测试概念板块接口单日数据量")

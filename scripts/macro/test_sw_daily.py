@@ -11,7 +11,6 @@ import tushare as ts
 import time
 from datetime import datetime, timedelta
 
-from tushare_auth import get_tushare_token
 
 def test_sw_daily():
     """测试sw_daily接口"""
@@ -19,7 +18,9 @@ def test_sw_daily():
     print("测试Tushare sw_daily接口")
     print("=" * 80)
     
-    pro = ts.pro_api(get_tushare_token())
+    # 设置Tushare token
+    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    pro = ts.pro_api(token)
     
     # 获取申万行业指数列表
     print("\n1. 获取申万行业指数列表...")

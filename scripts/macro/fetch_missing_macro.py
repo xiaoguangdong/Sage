@@ -17,11 +17,10 @@ import pandas as pd
 import os
 from datetime import datetime, timedelta
 
-from tushare_auth import get_tushare_token
 
 class MissingMacroDataFetcher:
     def __init__(self, token=None):
-        self.token = get_tushare_token(token)
+        self.token = token or '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
         self.pro = ts.pro_api(self.token)
         self.output_dir = 'data/tushare/macro'
         self.northbound_dir = 'data/tushare/northbound'

@@ -14,7 +14,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from tushare_auth import get_tushare_token
 
 def get_sw_daily_with_retry(pro, start_date, end_date, offset=0, max_retries=3):
     """
@@ -101,7 +100,9 @@ def fetch_sw_valuation_data():
     print("获取申万行业估值数据")
     print("=" * 80)
 
-    pro = ts.pro_api(get_tushare_token())
+    # 设置Tushare token
+    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    pro = ts.pro_api(token)
 
     # 创建输出目录
     output_dir = Path('data/tushare/macro')

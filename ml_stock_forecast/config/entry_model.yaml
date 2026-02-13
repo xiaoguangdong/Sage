@@ -1,0 +1,114 @@
+# 买卖点过滤模型配置
+
+# 买卖点模型配置
+entry_model:
+  # 是否启用买卖点模型
+  enabled: true
+  
+  # 模型类型：lr（Logistic Regression） / lgbm（LightGBM）
+  model_type: lr
+  
+  # 是否使用20个特征
+  use_all_features: true
+
+# Logistic Regression参数
+lr_params:
+  multi_class: 'binary'
+  solver: 'lbfgs'
+  C: 0.5
+  max_iter: 1000
+  random_state: 42
+
+# LightGBM参数（如果使用）
+lgbm_params:
+  objective: 'binary'
+  num_leaves: 8
+  max_depth: 3
+  learning_rate: 0.05
+  n_estimators: 200
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_alpha: 1.0
+  reg_lambda: 1.0
+  min_child_samples: 20
+  verbose: -1
+
+# 触发规则参数
+rules:
+  # 概率阈值（方案B：平衡型）
+  prob_threshold: 0.6
+  
+  # 均线周期
+  ma_period: 20
+  
+  # 波动率阈值
+  vol_threshold: 0.05
+  
+  # 其他规则
+  enable_limit_check: true  # 是否检查涨停
+  enable_volume_check: true  # 是否检查成交量
+
+# 标签配置
+label:
+  # 预测周期（天）
+  horizon: 10
+  
+  # 收益阈值
+  return_threshold: 0.05  # 5%
+  
+  # 最大回撤限制
+  max_drawdown: -0.03  # -3%
+
+# 特征配置
+features:
+  # 特征数量限制
+  max_features: 20
+  
+  # 股票相对历史位置（4个）
+  price_position:
+    price_percentile_60d: true
+    price_percentile_120d: true
+    price_vs_ma20: true
+    price_vs_ma60: true
+  
+  # 交易量分析（4个）
+  volume_analysis:
+    volume_bottom_surge: true
+    volume_top_shrink: true
+    volume_trend_5d: true
+    volume_trend_10d: true
+  
+  # MACD形态（4个）
+  macd:
+    macd_golden_cross: true
+    macd_death_cross: true
+    macd_histogram: true
+    macd_signal_line: true
+  
+  # 形态学分析（4个）
+  pattern:
+    is_consolidation: true
+    is_breakout: true
+    is_pullback: true
+    support_level: true
+  
+  # 其他技术指标（4个）
+  other:
+    rsi: true
+    atr: true
+    volatility_20d: true
+    is_near_limit: true
+
+# MACD参数
+macd_params:
+  fast_period: 12
+  slow_period: 26
+  signal_period: 9
+
+# RSI参数
+rsi_params:
+  period: 14
+
+# ATR参数
+atr_params:
+  period: 14

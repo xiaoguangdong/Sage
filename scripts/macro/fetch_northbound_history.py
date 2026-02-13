@@ -15,7 +15,6 @@ import os
 import time
 from datetime import datetime, timedelta
 
-from tushare_auth import get_tushare_token
 
 def fetch_northbound_flow(token=None, start_date='20200101', end_date='20251231'):
     """
@@ -26,7 +25,7 @@ def fetch_northbound_flow(token=None, start_date='20200101', end_date='20251231'
         start_date: 开始日期
         end_date: 结束日期
     """
-    pro = ts.pro_api(get_tushare_token(token))
+    pro = ts.pro_api(token or '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e')
 
     all_data = []
     offset = 0
@@ -146,7 +145,7 @@ def fetch_northbound_hold(token=None, start_date='20200101', end_date='20251231'
         start_date: 开始日期
         end_date: 结束日期
     """
-    pro = ts.pro_api(get_tushare_token(token))
+    pro = ts.pro_api(token or '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e')
 
     all_data = []
     offset = 0
@@ -272,7 +271,7 @@ def fetch_northbound_top10(token=None, start_date='20200101', end_date='20251231
         start_date: 开始日期
         end_date: 结束日期
     """
-    pro = ts.pro_api(get_tushare_token(token))
+    pro = ts.pro_api(token or '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e')
 
     all_data = []
     offset = 0

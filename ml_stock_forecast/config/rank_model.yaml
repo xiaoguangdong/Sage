@@ -1,0 +1,96 @@
+# 选股排序模型配置
+
+# 排序模型配置
+rank_model:
+  # 是否启用排序模型
+  enabled: true
+  
+  # 模型类型：lgbm（LightGBM） / xgbm（XGBoost）
+  model_type: lgbm
+  
+  # 是否启用IC动态权重
+  enable_ic_weight: false
+  
+  # IC窗口大小
+  ic_window: 20
+  
+  # IC权重平滑
+  ic_smooth: false
+
+# LightGBM参数
+lgbm_params:
+  objective: 'lambdarank'
+  num_leaves: 16
+  max_depth: 4
+  learning_rate: 0.05
+  n_estimators: 200
+  subsample: 0.8
+  colsample_bytree: 0.8
+  reg_alpha: 1.0
+  reg_lambda: 1.0
+  min_child_samples: 20
+  verbose: -1
+
+# 特征配置
+features:
+  # 特征数量限制
+  max_features: 20
+  
+  # 动量类特征（8个）
+  momentum:
+    mom_4w: true
+    mom_12w: true
+    mom_20w: true
+    rs_4w: true
+    rs_12w: true
+    rs_20w: true
+    mom_acceleration: true
+    relative_strength: true
+  
+  # 流动性类特征（6个）
+  liquidity:
+    turnover_4w: true
+    turnover_12w: true
+    amt_chg_4w: true
+    amt_chg_12w: true
+    volume_trend: true
+    liquidity_ratio: true
+  
+  # 稳定性类特征（4个）
+  stability:
+    vol_4w: true
+    vol_12w: true
+    max_dd_4w: true
+    price_stability: true
+  
+  # 技术指标类（2个）
+  technical:
+    ma_slope: true
+    rsi: true
+
+# Walk-forward回测参数
+walk_forward:
+  # 训练窗口（周）
+  train_weeks: 130  # 约2.5年
+  
+  # 测试窗口（周）
+  test_weeks: 26  # 约半年
+  
+  # 滚动步长（周）
+  roll_step: 26  # 每半年滚动一次
+
+# 标签配置
+label:
+  # 预测周期（周）
+  horizon: 4
+  
+  # 标签类型：rank（排名）
+  label_type: rank
+
+# 输出配置
+output:
+  # 选股数量
+  top_n: 15
+  
+  # 最低分数阈值
+  min_score: 0.0

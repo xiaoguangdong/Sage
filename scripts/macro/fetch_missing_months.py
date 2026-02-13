@@ -11,7 +11,6 @@ import tushare as ts
 import time
 from pathlib import Path
 
-from tushare_auth import get_tushare_token
 
 def get_sw_daily_with_retry(pro, start_date, end_date, offset=0, max_retries=3):
     """获取申万行业日线数据，带重试机制"""
@@ -37,7 +36,9 @@ def fetch_missing_months():
     print("补充遗漏的申万行业估值数据")
     print("=" * 80)
 
-    pro = ts.pro_api(get_tushare_token())
+    # 设置Tushare token
+    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    pro = ts.pro_api(token)
 
     # 遗漏的月份
     missing_months = [
