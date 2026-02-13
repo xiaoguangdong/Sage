@@ -14,6 +14,9 @@ import time
 from datetime import datetime, timedelta
 
 from tushare_auth import get_tushare_token
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
+sys.path.insert(0, PROJECT_ROOT)
+
 from scripts.data.macro.paths import MACRO_DIR
 
 def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='20251231', output_dir=None):
