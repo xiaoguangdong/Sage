@@ -8,7 +8,10 @@ import requests
 import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
-import baostock as bs
+try:
+    import baostock as bs  # type: ignore
+except ModuleNotFoundError:
+    bs = None
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,10 @@ class DataProvider:
     
     def _init_baostock(self):
         """初始化Baostock"""
+        if bs is None:
+            logger.warning("baostock 未安装，相关接口将不可用")
+            self.bs = None
+            return
         try:
             lg = bs.login()
             if lg.error_code != '0':

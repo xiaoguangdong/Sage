@@ -178,13 +178,13 @@ class StockSelector:
         price_col = cfg.price_col
 
         group = df.groupby(code_col, group_keys=False)
-        future_returns: List[pd.Series] = []
+        future_returns: List[Tuple[pd.Series, float]] = []
 
         base_returns = group[price_col].pct_change()
         vol = base_returns.groupby(df[code_col]).rolling(cfg.vol_window).std().reset_index(level=0, drop=True)
         vol = vol.replace(0, np.nan)
 
-        for horizon in horizons:
+        for horizon, weight in zip(horizons, weights):
             future_ret = group[price_col].shift(-horizon) / df[price_col] - 1
             if cfg.risk_adjusted:
                 label = future_ret / (vol + 1e-8)
@@ -195,12 +195,26 @@ class StockSelector:
                 label = label.groupby([df[date_col], df[cfg.industry_col]]).rank(pct=True)
             elif cfg.industry_rank:
                 label = label.groupby(df[date_col]).rank(pct=True)
-            future_returns.append(label)
+            if label.notna().any():
+                future_returns.append((label, weight))
 
         if not future_returns:
             return pd.Series(index=df.index, dtype="float64")
 
-        combined = sum(w * s for w, s in zip(weights, future_returns))
+        total_weight = float(sum(weight for _, weight in future_returns)) or 1.0
+        mask_any = None
+        combined = None
+        for label, weight in future_returns:
+            scaled = (weight / total_weight) * label.fillna(0)
+            if combined is None:
+                combined = scaled
+                mask_any = label.notna()
+            else:
+                combined = combined + scaled
+                mask_any = mask_any | label.notna()
+
+        combined = combined.astype("float64")
+        combined[~mask_any] = np.nan
         return combined
 
     # -----------------------------
@@ -287,4 +301,3 @@ class StockSelector:
         if date_col in df.columns:
             return df.groupby(date_col)["score"].rank(ascending=False, method="first")
         return df["score"].rank(ascending=False, method="first")
-

@@ -80,7 +80,7 @@ class DataCatalog:
         return pd.read_parquet(path, **kwargs)
 
     def write_parquet(self, name: str, df: pd.DataFrame, **kwargs) -> Path:
-        path = self.get_path(name, root_kind="primary", ensure=True)
+        path = self.get_path(name, root_kind="primary", ensure=False)
         path.parent.mkdir(parents=True, exist_ok=True)
         df.to_parquet(path, **kwargs)
         return path
