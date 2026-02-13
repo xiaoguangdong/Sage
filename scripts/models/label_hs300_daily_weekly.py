@@ -47,6 +47,9 @@ class HS300Labeler:
         self.short_segment_max = 5
         self.smooth_stay_prob = 0.90
         self.smooth_obs_acc = 0.85
+
+        # 融合参数（原始标签 + 均线确认）
+        self.fusion_confirm_days = 3
     
     def load_data(self):
         """加载沪深300指数和成分股数据"""
@@ -516,6 +519,60 @@ class HS300Labeler:
         print(f"  熊市: {smoothed.count(0)} 天/周")
 
         return smoothed
+
+    def label_fused(self):
+        """方法1c：原始标签与均线确认融合"""
+        print("\n" + "=" * 80)
+        print("方法1c：原始标签与均线确认融合...")
+        print("=" * 80)
+
+        if 'label_original' not in self.df.columns:
+            raise ValueError("请先生成原始标签 label_original")
+        if 'label_ma_confirmation' not in self.df.columns:
+            raise ValueError("请先生成均线确认标签 label_ma_confirmation")
+
+        orig = self.df['label_original'].tolist()
+        ma = self.df['label_ma_confirmation'].tolist()
+
+        fused = []
+        confirm_days = self.fusion_confirm_days
+        last_ma = None
+        ma_streak = 0
+
+        for i in range(len(orig)):
+            o = int(orig[i])
+            m = int(ma[i])
+
+            if not fused:
+                fused.append(o)
+                last_ma = m
+                ma_streak = 1
+                continue
+
+            if m == last_ma:
+                ma_streak += 1
+            else:
+                last_ma = m
+                ma_streak = 1
+
+            if o == m:
+                fused.append(o)
+                continue
+
+            # 原始与均线不一致：等待均线连续确认
+            if ma_streak >= confirm_days:
+                fused.append(m)
+            else:
+                fused.append(fused[-1])
+
+        self.df['label_fused'] = fused
+
+        print(f"✓ 融合完成（confirm_days={confirm_days})")
+        print(f"  牛市: {fused.count(2)} 天/周")
+        print(f"  震荡: {fused.count(1)} 天/周")
+        print(f"  熊市: {fused.count(0)} 天/周")
+
+        return fused
     
     def label_hmm(self, mapping_mode: str = "future_return"):
         """方法2：HMM模型（隐马尔可夫）"""
@@ -764,6 +821,7 @@ class HS300Labeler:
         methods = [
             ('原始标签', 'label_original'),
             ('原始标签(平滑)', 'label_original_smooth'),
+            ('原始+均线融合', 'label_fused'),
             ('HMM模型', 'label_hmm'),
             ('均线确认', 'label_ma_confirmation'),
             ('多均线系统', 'label_multi_ma')
@@ -801,6 +859,7 @@ class HS300Labeler:
         methods = [
             ('原始标签', 'label_original'),
             ('原始标签(平滑)', 'label_original_smooth'),
+            ('原始+均线融合', 'label_fused'),
             ('HMM模型', 'label_hmm'),
             ('均线确认', 'label_ma_confirmation'),
             ('多均线系统', 'label_multi_ma')
@@ -887,6 +946,7 @@ class HS300Labeler:
         self.label_original_smooth()
         self.label_hmm()
         self.label_ma_confirmation()
+        self.label_fused()
         self.label_multi_ma()
         
         # 5. 生成统计
