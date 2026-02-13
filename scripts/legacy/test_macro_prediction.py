@@ -17,10 +17,10 @@ import sys
 from datetime import datetime, timedelta
 
 # 添加项目根目录到路径
-project_root = os.path.abspath(os.path.dirname(__file__))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
 
-from ml_stock_forecast.models.macro_predictor import MacroPredictor
+from sage_core.models.macro_predictor import MacroPredictor
 
 
 def create_test_data():

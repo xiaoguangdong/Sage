@@ -13,11 +13,12 @@
 import pandas as pd
 import numpy as np
 import os
+import re
 import sys
 from datetime import datetime
 
 # 添加项目根目录到路径
-project_root = os.path.abspath(os.path.dirname(__file__))
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.insert(0, project_root)
 
 from sage_core.models.macro_predictor import MacroPredictor
@@ -141,6 +142,19 @@ def load_real_data():
     print(f"  最终行业数据: {len(industry_final)}条记录")
     
     return macro, industry_final
+
+
+def build_output_path(base_name: str) -> str:
+    log_dir = os.path.join('logs', 'backtest')
+    os.makedirs(log_dir, exist_ok=True)
+    date_str = datetime.now().strftime('%Y%m%d')
+    pattern = re.compile(rf'^{date_str}_(\\d{{3}})_{re.escape(base_name)}$')
+    next_seq = 1
+    for name in os.listdir(log_dir):
+        match = pattern.match(name)
+        if match:
+            next_seq = max(next_seq, int(match.group(1)) + 1)
+    return os.path.join(log_dir, f'{date_str}_{next_seq:03d}_{base_name}')
 
 
 def run_backtest():
@@ -321,7 +335,7 @@ def run_backtest():
         print(f"  {discovery}")
     
     # 保存结果
-    output_file = 'backtest_2024_q4_results.csv'
+    output_file = build_output_path('backtest_2024_q4_results.csv')
     results_df.to_csv(output_file, index=False, encoding='utf-8-sig')
     print(f"\n详细结果已保存到: {output_file}")
     

@@ -43,7 +43,7 @@
 
 ### 2. 市场风格状态机
 
-**文件**: `ml_stock_forecast/scripts/calculate_market_regime.py`
+**文件**: `scripts/strategy/calculate_market_regime.py`
 
 **计算10个风格特征**：
 
@@ -103,7 +103,7 @@ speculative_raw = (
 
 ### 3. 自适应因子权重系统
 
-**文件**: `ml_stock_forecast/scripts/adaptive_factor_weights.py`
+**文件**: `scripts/models/adaptive_factor_weights.py`
 
 **权重调整逻辑**：
 
@@ -286,8 +286,8 @@ risk_weight /= total
 | 文件 | 说明 |
 |------|------|
 | `scripts/models/calculate_stock_factors.py` | 因子计算系统 |
-| `ml_stock_forecast/scripts/calculate_market_regime.py` | 市场风格状态机 |
-| `ml_stock_forecast/scripts/adaptive_factor_weights.py` | 自适应因子权重系统 |
+| `scripts/strategy/calculate_market_regime.py` | 市场风格状态机 |
+| `scripts/models/adaptive_factor_weights.py` | 自适应因子权重系统 |
 | `run_factor_calculation.sh` | 后台任务运行脚本 |
 | `data/tushare/factors/stock_factors_with_score.parquet` | 固定因子得分 |
 | `data/tushare/factors/stock_factors_with_adaptive_score.parquet` | 自适应因子得分 |

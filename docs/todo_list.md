@@ -59,7 +59,7 @@
 
 ### 相关文件
 - `scripts/data/update_concept_data.py`
-- `ml_stock_forecast/scripts/update_concept_data_eastmoney.py`
+- `scripts/data/update_concept_data_eastmoney.py`
 - `data/tushare/sectors/all_concept_details.csv` (100个概念)
 
 ---
@@ -100,8 +100,8 @@
 - [ ] 实现风险控制机制
 
 ### 相关文件
-- `ml_stock_forecast/strategies/signal_generator.py` (待实现)
-- `ml_stock_forecast/strategies/risk_manager.py` (待实现)
+- `sage_core/strategy/signal_generator.py` (待实现)
+- `sage_core/portfolio/risk_manager.py` (待实现)
 
 ---
 
@@ -161,8 +161,8 @@
 
 ### 相关文件
 - `data/tushare/macro/` (待创建)
-- `ml_stock_forecast/scripts/fetch_macro_data.py` (待实现)
-- `ml_stock_forecast/scripts/clean_macro_data.py` (待实现)
+- `scripts/data/macro/fetch_macro_data.py` (待实现)
+- `scripts/data/macro/clean_macro_data.py` (待完善)
 
 ---
 

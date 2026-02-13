@@ -61,33 +61,19 @@
 ### 2.2 目录结构（已实现）
 
 ```
-deep_final_kp/
-├── lstm_stock_forecast/      # LSTM深度学习模型（已废弃，仅作为研究原型）
-│   ├── models/               # LSTM、Transformer、TFT
-│   ├── features/             # 技术指标、形态识别
-│   ├── training/             # 训练框架、在线学习
-│   ├── backtest/             # 回测引擎
-│   ├── strategies/           # 交易策略、风险管理
-│   ├── evaluation/           # 模型评估
-│   ├── config/               # 配置文件
-│   ├── scripts/              # LSTM相关脚本
-│   └── main.py               # LSTM主入口
-│
-├── ml_stock_forecast/       # 树模型系统（核心系统）
-│   ├── models/               # LightGBM、XGBoost
-│   ├── features/             # 特征工程
-│   ├── training/             # 树模型训练
-│   ├── evaluation/           # 模型评估
-│   └── config/               # 配置文件
-│
-├── data/                     # 共用数据
-│   ├── processed/            # 处理后的数据
-│   ├── features/             # 特征数据
-│   ├── baostock/             # Baostock历史数据（2020-2024）
-│   └── baostock_recent/      # Baostock近期数据（2024-2026）
-│
-├── utils/                    # 共用工具
-├── scripts/                  # 公共脚本
+Sage/
+├── sage_core/                # 核心算法库（模型/特征/回测/组合）
+│   ├── models/
+│   ├── features/
+│   ├── backtest/
+│   ├── portfolio/
+│   └── utils/
+├── sage_app/                 # 非核心管线（数据接入/调度/入口）
+│   ├── config/
+│   ├── data/
+│   └── pipelines/
+├── scripts/                  # 分模块脚本（data/models/strategy/backtest/monitoring/legacy）
+├── data/                     # 数据区（原始/处理/特征/信号）
 ├── docs/                     # 文档
 ├── checkpoints/              # 模型保存
 └── logs/                     # 日志
@@ -627,9 +613,9 @@ trend_fallback_mode = 'empty_portfolio'
 **目标**：实现基础的树模型系统
 
 **关键文件**：
-- `sage_core/models/lgbm_rank.py` - LightGBM排序模型
-- `sage_core/features/rank_features.py` - 排序特征工程
-- `ml_stock_forecast/training/rank_trainer.py` - 排序模型训练
+- `sage_core/models/rank_model.py` - 排序模型
+- `sage_core/features/` - 特征工程（目录）
+- `scripts/models/rank_trainer.py` - 排序模型训练（待实现）
 - `sage_core/backtest/walk_forward.py` - 周频滚动回测
 
 **核心参数**：
@@ -654,9 +640,9 @@ trend_fallback_mode = 'empty_portfolio'
 **目标**：三模型协同，完整回测
 
 **关键文件**：
-- `ml_stock_forecast/strategies/entry_strategy.py` - 入场策略
-- `ml_stock_forecast/strategies/portfolio_construction.py` - 组合构建
-- `ml_stock_forecast/strategies/risk_control.py` - 风险控制
+- `sage_core/strategy/entry_strategy.py` - 入场策略（待实现）
+- `sage_core/portfolio/portfolio_construction.py` - 组合构建（待实现）
+- `sage_core/portfolio/risk_control.py` - 风险控制（待实现）
 
 **回测周期**：
 - 2020-2022训练 → 2023H1测试
