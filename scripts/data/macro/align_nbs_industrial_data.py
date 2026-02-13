@@ -37,6 +37,7 @@ class NBSIndustrialDataAligner:
             data_dir: 数据目录
         """
         self.data_dir = Path(data_dir) if data_dir else Path(MACRO_DIR)
+        self._mapping_cache = None
         
         # 工业品到申万行业的映射（简化版，需要完善）
         self.product_to_sw_industry = {
@@ -98,6 +99,53 @@ class NBSIndustrialDataAligner:
             (['原盐', '磷矿石'], '基础化工'),
             (['乳制品', '成品糖', '白酒', '植物油', '饲料', '鲜、冷藏肉'], '食品饮料'),
         ]
+
+    def _normalize_product_name(self, name: str) -> str:
+        if not isinstance(name, str):
+            return ""
+        value = name.strip()
+        for suffix in ["_当期值", "当期值", "本月值"]:
+            if value.endswith(suffix):
+                value = value[: -len(suffix)]
+        value = value.replace("（", "(").replace("）", ")").replace(" ", "")
+        return value
+
+    def _load_mapping_config(self):
+        if self._mapping_cache is not None:
+            return self._mapping_cache
+
+        config_path = PROJECT_ROOT / "config" / "nbs_product_sw_mapping.yaml"
+        code_map = {}
+        name_map = {}
+        keywords = []
+
+        if config_path.exists():
+            try:
+                import yaml  # type: ignore
+
+                cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+                for item in cfg.get("products", []) or []:
+                    sw = (item or {}).get("sw_industry")
+                    if not sw:
+                        continue
+                    code = (item or {}).get("product_code")
+                    name = (item or {}).get("product_name")
+                    if code:
+                        code_map[str(code).strip()] = sw
+                    if name:
+                        name_map[self._normalize_product_name(str(name))] = sw
+
+                for item in cfg.get("keywords", []) or []:
+                    sw = (item or {}).get("sw_industry")
+                    kws = (item or {}).get("keywords") or []
+                    kws = [str(k).strip() for k in kws if str(k).strip()]
+                    if sw and kws:
+                        keywords.append((kws, sw))
+            except Exception:
+                pass
+
+        self._mapping_cache = (code_map, name_map, keywords)
+        return self._mapping_cache
     
     def parse_nbs_json(self, json_file: str) -> pd.DataFrame:
         """
@@ -169,34 +217,48 @@ class NBSIndustrialDataAligner:
         
         return df
     
-    def align_to_sw_industry(self, df: pd.DataFrame) -> pd.DataFrame:
+    def assign_sw_industry(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        对齐到申万行业
-        
-        Args:
-            df: 原始数据
-        
-        Returns:
-            DataFrame: 对齐后的数据
+        为产品数据添加申万行业映射（不丢弃未匹配项）
         """
         if len(df) == 0:
             return pd.DataFrame()
-        
-        # 添加申万行业映射
-        df['sw_industry'] = df['product_code'].map(self.product_to_sw_industry)
+        df = df.copy()
+        code_map, name_map, keyword_overrides = self._load_mapping_config()
+        keyword_rules = keyword_overrides + list(self.product_keywords)
 
-        # 基于名称的回退映射
-        if 'product_name' in df.columns:
-            missing_mask = df['sw_industry'].isna()
-            if missing_mask.any():
-                df.loc[missing_mask, 'sw_industry'] = df.loc[missing_mask, 'product_name'].apply(
-                    self._infer_industry_by_name
-                )
-        
-        # 移除无法映射的数据
-        df = df[df['sw_industry'].notna()]
-        
+        def _map_row(row):
+            code = row.get("product_code")
+            if code is not None:
+                code_str = str(code).strip()
+                if code_str in code_map:
+                    return code_map[code_str], "config_code"
+                if code_str in self.product_to_sw_industry:
+                    return self.product_to_sw_industry[code_str], "default_code"
+
+            name = row.get("product_name") or row.get("product")
+            name_norm = self._normalize_product_name(name)
+            if name_norm in name_map:
+                return name_map[name_norm], "config_name"
+
+            for keywords, industry in keyword_rules:
+                if any(k in name_norm for k in keywords):
+                    return industry, "keyword"
+            return None, None
+
+        mapped = df.apply(_map_row, axis=1, result_type="expand")
+        df["sw_industry"] = mapped[0]
+        df["sw_map_source"] = mapped[1]
         return df
+
+    def align_to_sw_industry(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        对齐到申万行业（仅保留可映射项）
+        """
+        if len(df) == 0:
+            return pd.DataFrame()
+        df = self.assign_sw_industry(df)
+        return df[df['sw_industry'].notna()]
 
     def _infer_industry_by_name(self, name: str) -> Optional[str]:
         if not isinstance(name, str) or not name:
@@ -341,7 +403,10 @@ class NBSIndustrialDataAligner:
                 output_df = output_df.rename(columns={'output_value': 'value'})
             output_df = self.calculate_growth_rate(output_df)
 
-            # 对齐到申万行业
+            # 产品级（保留全部产品）
+            product_level_df = self.assign_sw_industry(output_df)
+
+            # 对齐到申万行业（行业代理）
             output_df = self.align_to_sw_industry(output_df)
             print(f"  对齐后: {len(output_df)}条记录")
 
@@ -351,6 +416,7 @@ class NBSIndustrialDataAligner:
 
             results['output'] = {
                 'raw': output_df,
+                'product': product_level_df,
                 'industry': industry_output_df
             }
         
@@ -485,6 +551,13 @@ def main():
         # 显示样例数据
         print("\n样例数据:")
         print(results['combined'].head(10))
+
+    if 'output' in results and isinstance(results['output'], dict):
+        product_df = results['output'].get('product')
+        if product_df is not None and len(product_df) > 0:
+            product_file = os.path.join(output_dir, 'nbs_output_product_level.parquet')
+            product_df.to_parquet(product_file, index=False)
+            print(f"\n产品级产量数据已保存到: {product_file}")
 
 
 if __name__ == '__main__':
