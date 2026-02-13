@@ -3,6 +3,7 @@
 """
 from .trend_model import TrendModelRule, TrendModelLGBM, TrendModelHMM, create_trend_model
 from .entry_model import EntryModelLR
+from .stock_selector import StockSelector, SelectionConfig
 
 try:
     from .rank_model import RankModelLGBM
@@ -15,5 +16,7 @@ __all__ = [
     'TrendModelHMM',
     'create_trend_model',
     'RankModelLGBM',
-    'EntryModelLR'
+    'EntryModelLR',
+    'StockSelector',
+    'SelectionConfig'
 ]
