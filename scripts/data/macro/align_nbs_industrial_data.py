@@ -377,11 +377,17 @@ class NBSIndustrialDataAligner:
                 # 统一列名
                 if 'output_yoy' in df.columns:
                     df['yoy'] = df['output_yoy']
-                elif 'yoy' in df.columns:
+                if 'fai_yoy' in df.columns:
+                    df['yoy'] = df['fai_yoy']
+                if 'yoy' in df.columns and 'output_yoy' not in df.columns and data_type == 'output':
                     df['output_yoy'] = df['yoy']
-                
+
                 if 'output_mom' in df.columns:
                     df['mom'] = df['output_mom']
+                if 'fai_mom' in df.columns:
+                    df['mom'] = df['fai_mom']
+                if 'mom' in df.columns and 'output_mom' not in df.columns and data_type == 'output':
+                    df['output_mom'] = df['mom']
                 
                 all_industry_data.append(df)
         
@@ -391,7 +397,7 @@ class NBSIndustrialDataAligner:
             print(f"  可用列: {combined_df.columns.tolist()}")
             
             # 检查可用的数值列
-            value_cols = [col for col in combined_df.columns if col in ['output_yoy', 'output_mom', 'yoy', 'mom', 'value']]
+            value_cols = [col for col in combined_df.columns if col in ['yoy', 'mom', 'value']]
             print(f"  数值列: {value_cols}")
             
             if value_cols:
