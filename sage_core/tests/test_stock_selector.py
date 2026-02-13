@@ -36,7 +36,13 @@ class TestStockSelector(unittest.TestCase):
         self.df = pd.DataFrame(rows)
 
     def test_build_labels(self):
-        selector = StockSelector(SelectionConfig(model_type="rule"))
+        config = SelectionConfig(
+            model_type="rule",
+            label_horizons=(20,),
+            label_weights=(1.0,),
+            industry_col="industry_l1",
+        )
+        selector = StockSelector(config)
         labels = selector.build_labels(self.df)
         valid = labels.dropna()
         self.assertTrue(len(valid) > 0)
@@ -47,6 +53,7 @@ class TestStockSelector(unittest.TestCase):
             model_type="rule",
             label_horizons=(5, 10),
             label_weights=(0.7, 0.3),
+            industry_col="industry_l1",
         )
         selector = StockSelector(config)
         selector.fit(self.df)
@@ -55,7 +62,7 @@ class TestStockSelector(unittest.TestCase):
         self.assertIn("rank", result.columns)
 
     def test_select_top(self):
-        selector = StockSelector(SelectionConfig(model_type="rule"))
+        selector = StockSelector(SelectionConfig(model_type="rule", label_horizons=(20,), label_weights=(1.0,)))
         selector.fit(self.df)
         last_date = self.df["trade_date"].max()
         picked = selector.select_top(self.df, top_n=2, trade_date=last_date)

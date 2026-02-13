@@ -15,12 +15,12 @@ class SelectionConfig:
     model_type: str = "rule"  # rule / lgbm / xgb
 
     # 标签配置
-    label_horizons: Tuple[int, ...] = (20, 60, 120)
-    label_weights: Tuple[float, ...] = (0.5, 0.3, 0.2)
+    label_horizons: Tuple[int, ...] = (120,)
+    label_weights: Tuple[float, ...] = (1.0,)
     risk_adjusted: bool = True
     vol_window: int = 20
     industry_rank: bool = True
-    industry_col: str = "industry_l1"
+    industry_col: Optional[str] = None
 
     # 列名配置
     date_col: str = "trade_date"
@@ -191,7 +191,7 @@ class StockSelector:
             else:
                 label = future_ret
 
-            if cfg.industry_rank and cfg.industry_col in df.columns:
+            if cfg.industry_rank and cfg.industry_col and cfg.industry_col in df.columns:
                 label = label.groupby([df[date_col], df[cfg.industry_col]]).rank(pct=True)
             elif cfg.industry_rank:
                 label = label.groupby(df[date_col]).rank(pct=True)
@@ -286,10 +286,13 @@ class StockSelector:
             self.config.date_col,
             self.config.code_col,
             self.config.price_col,
-            self.config.industry_col,
             "label",
         }
-        return [c for c in df.columns if c not in exclude]
+        if self.config.industry_col:
+            exclude.add(self.config.industry_col)
+
+        numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+        return [c for c in numeric_cols if c not in exclude]
 
     def _validate_columns(self, df: pd.DataFrame, columns: Iterable[str]) -> None:
         missing = [c for c in columns if c not in df.columns]
