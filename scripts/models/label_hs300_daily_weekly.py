@@ -167,16 +167,15 @@ class HS300Labeler:
             df['ret_4d'] = df['close'].pct_change(4)
             df['vol_4d'] = df['ret_4d'].rolling(window=4).std()
             df['ma_diff'] = df['ma20'] - df['ma60']
+            df['ma_diff_norm'] = df['ma_diff'] / df['ma60'] * 100
+            df['ma_slope'] = df['ma20'].diff()
         else:
             df['ret_4w'] = df['close'].pct_change(4)
             df['vol_4w'] = df['ret_4w'].rolling(window=4).std()
             df['ma_diff'] = df['ma12'] - df['ma24']
-        
-        df['ma_diff_norm'] = df['ma_diff'] / df['ma60'] * 100
-        
-        # 8. MA斜率
-        df['ma_slope'] = df['ma20'].diff()
-        
+            df['ma_diff_norm'] = df['ma_diff'] / df['ma24'] * 100
+            df['ma_slope'] = df['ma12'].diff()
+
         # 9. 成交量比率
         df['vol_ratio'] = df['vol'] / df['vol'].rolling(window=20).mean()
         
