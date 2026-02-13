@@ -24,15 +24,30 @@ class MacroSignal:
     def load_data(self):
         """加载PMI和国债收益率数据"""
         # PMI数据
-        pmi = pd.read_parquet(self.data_dir / 'tushare_pmi.parquet')
-        pmi = pmi[['MONTH', 'PMI010000']].copy()
-        pmi.columns = ['month', 'pmi']
+        pmi_path = self.data_dir / 'tushare_pmi.parquet'
+        pmi = pd.read_parquet(pmi_path)
+        if 'MONTH' in pmi.columns:
+            pmi = pmi[['MONTH', 'PMI010000']].copy()
+            pmi.columns = ['month', 'pmi']
+        elif 'month' in pmi.columns:
+            pmi = pmi[['month', 'PMI010000']].copy()
+            pmi.columns = ['month', 'pmi']
+        elif 'date' in pmi.columns:
+            pmi = pmi[['date', 'PMI010000']].copy()
+            pmi.columns = ['month', 'pmi']
+            pmi['month'] = pd.to_datetime(pmi['month']).dt.strftime('%Y%m')
+        else:
+            raise ValueError(f"PMI字段缺失: {pmi_path}")
         pmi['month'] = pmi['month'].astype(str)
         pmi = pmi.sort_values('month').reset_index(drop=True)
         
         # 10年国债收益率
-        y10 = pd.read_parquet(self.data_dir / 'yield_10y.parquet')
-        y10 = y10.rename(columns={'yield': 'yield_10y'})
+        y10_path = self.data_dir / 'yield_10y.parquet'
+        if not y10_path.exists():
+            y10_path = self.data_dir / 'tushare_yield_10y.parquet'
+        y10 = pd.read_parquet(y10_path)
+        if 'yield' in y10.columns:
+            y10 = y10.rename(columns={'yield': 'yield_10y'})
         y10['trade_date'] = y10['trade_date'].astype(str)
         
         # 2年国债收益率
@@ -47,7 +62,7 @@ class MacroSignal:
         
         return pmi, y10, y2
     
-    def calculate_pmi_turning_point(self, pmi, window=3):
+    def calculate_pmi_turning_point(self, pmi, window=3, confirm_window=2):
         """
         计算PMI拐点
         
@@ -64,10 +79,10 @@ class MacroSignal:
         
         # 拐点检测
         df['turning_point'] = 0
-        # 上升拐点：前一个月下降，本月开始连续上升
-        df.loc[(df['pmi_diff'].shift(1) < 0) & (df['pmi_diff'] > 0), 'turning_point'] = 1
-        # 下降拐点：前一个月上升，本月开始连续下降
-        df.loc[(df['pmi_diff'].shift(1) > 0) & (df['pmi_diff'] < 0), 'turning_point'] = -1
+        up_confirm = df['pmi_diff'].rolling(confirm_window).sum() > 0
+        down_confirm = df['pmi_diff'].rolling(confirm_window).sum() < 0
+        df.loc[(df['pmi_diff'].shift(1) < 0) & up_confirm, 'turning_point'] = 1
+        df.loc[(df['pmi_diff'].shift(1) > 0) & down_confirm, 'turning_point'] = -1
         
         return df
     
@@ -93,7 +108,7 @@ class MacroSignal:
         
         return df
     
-    def calculate_spread_signal(self, spread_df, threshold=0.5, window=20):
+    def calculate_spread_signal(self, spread_df, threshold=0.5, window=20, mode="threshold"):
         """
         计算利差突破信号
         
@@ -117,19 +132,26 @@ class MacroSignal:
             df['spread_signal'] = 0
             return df
         
-        df['spread_ma'] = df['spread'].rolling(window=window).mean()
-        df['spread_std'] = df['spread'].rolling(window=window).std()
-        df['upper_band'] = df['spread_ma'] + threshold * df['spread_std']
-        df['lower_band'] = df['spread_ma'] - threshold * df['spread_std']
-        
-        # 信号：利差突破上轨为1，突破下轨为-1
         df['spread_signal'] = 0
-        df.loc[df['spread'] > df['upper_band'], 'spread_signal'] = 1
-        df.loc[df['spread'] < df['lower_band'], 'spread_signal'] = -1
+
+        if mode == "bollinger":
+            df['spread_ma'] = df['spread'].rolling(window=window).mean()
+            df['spread_std'] = df['spread'].rolling(window=window).std()
+            df['upper_band'] = df['spread_ma'] + threshold * df['spread_std']
+            df['lower_band'] = df['spread_ma'] - threshold * df['spread_std']
+            df.loc[df['spread'] > df['upper_band'], 'spread_signal'] = 1
+            df.loc[df['spread'] < df['lower_band'], 'spread_signal'] = -1
+        else:
+            df['spread_ma'] = None
+            df['spread_std'] = None
+            df['upper_band'] = threshold
+            df['lower_band'] = -threshold
+            df.loc[df['spread'] > threshold, 'spread_signal'] = 1
+            df.loc[df['spread'] < -threshold, 'spread_signal'] = -1
         
         return df
     
-    def get_macro_signal(self):
+    def get_macro_signal(self, spread_threshold=0.5, spread_window=20, spread_mode="threshold"):
         """
         获取综合宏观信号
         
@@ -143,7 +165,12 @@ class MacroSignal:
         
         # 利差信号
         spread_df = self.calculate_yield_spread(y10, y2)
-        spread_signal = self.calculate_spread_signal(spread_df)
+        spread_signal = self.calculate_spread_signal(
+            spread_df,
+            threshold=spread_threshold,
+            window=spread_window,
+            mode=spread_mode
+        )
         
         return {
             'pmi_signal': pmi_signal,
@@ -273,6 +300,13 @@ class NorthboundFlow:
         """加载北向资金数据"""
         daily_flow = pd.read_parquet(self.data_dir / 'northbound_daily_flow.parquet')
         return daily_flow
+
+    def load_industry_data(self):
+        """加载北向资金行业数据"""
+        industry_path = self.data_dir / 'industry_northbound_flow.parquet'
+        if not industry_path.exists():
+            return None
+        return pd.read_parquet(industry_path)
     
     def calculate_bollinger_breakout(self, df, window=20, threshold=2.0):
         """
@@ -323,6 +357,47 @@ class NorthboundFlow:
         df = self.load_data()
         return self.calculate_bollinger_breakout(df, window, threshold)
 
+    def calculate_industry_ratio_bollinger(self, df, window=20, threshold=2.0):
+        """
+        行业配置比例布林带突破
+
+        Args:
+            df: 行业北向数据（industry_code/industry_name/trade_date/vol/ratio）
+        """
+        result = df.copy()
+        result['trade_date'] = pd.to_datetime(result['trade_date'])
+        result = result.sort_values(['industry_code', 'trade_date'])
+
+        if 'ratio' in result.columns and result['ratio'].notna().any():
+            result['industry_ratio'] = result['ratio']
+        else:
+            total_vol = result.groupby('trade_date')['vol'].transform('sum')
+            result['industry_ratio'] = result['vol'] / total_vol.replace(0, np.nan)
+
+        result['ratio_ma'] = result.groupby('industry_code')['industry_ratio'].transform(
+            lambda s: s.rolling(window=window).mean()
+        )
+        result['ratio_std'] = result.groupby('industry_code')['industry_ratio'].transform(
+            lambda s: s.rolling(window=window).std()
+        )
+        result['upper_band'] = result['ratio_ma'] + threshold * result['ratio_std']
+        result['lower_band'] = result['ratio_ma'] - threshold * result['ratio_std']
+
+        result['ratio_signal'] = 0
+        result.loc[result['industry_ratio'] > result['upper_band'], 'ratio_signal'] = 1
+        result.loc[result['industry_ratio'] < result['lower_band'], 'ratio_signal'] = -1
+
+        return result
+
+    def get_industry_flow_signal(self, window=20, threshold=2.0):
+        """
+        获取行业配置比例信号（若无行业数据则返回None）
+        """
+        df = self.load_industry_data()
+        if df is None or df.empty:
+            return None
+        return self.calculate_industry_ratio_bollinger(df, window, threshold)
+
 
 def calculate_all_signals():
     """计算所有信号并输出结果"""
@@ -333,7 +408,7 @@ def calculate_all_signals():
     # 1. 宏观信号
     print("\n1. 宏观指标：PMI拐点 + 利率曲线斜率")
     macro = MacroSignal()
-    macro_result = macro.get_macro_signal()
+    macro_result = macro.get_macro_signal(spread_threshold=0.5, spread_mode="threshold")
     
     print("\n  PMI拐点信号（最近12个月）:")
     pmi_sig = macro_result['pmi_signal'].tail(12)
@@ -367,6 +442,7 @@ def calculate_all_signals():
     print("\n3. 资金流：北向资金布林带突破")
     flow = NorthboundFlow()
     flow_df = flow.get_flow_signal()
+    industry_flow_df = flow.get_industry_flow_signal()
     
     print(f"\n  资金流信号分布:")
     signal_count = flow_df['flow_signal'].value_counts()
@@ -376,11 +452,16 @@ def calculate_all_signals():
     
     print("\n  最近资金流信号（最后10天）:")
     print(flow_df[['trade_date', 'north_money', 'flow_ma', 'upper_band', 'flow_signal']].tail(10))
+
+    if industry_flow_df is not None:
+        print("\n  行业配置比例信号（最近10条）:")
+        print(industry_flow_df[['industry_name', 'trade_date', 'industry_ratio', 'ratio_signal']].tail(10))
     
     return {
         'macro': macro_result,
         'prosperity': prosperity_df,
-        'flow': flow_df
+        'flow': flow_df,
+        'industry_flow': industry_flow_df
     }
 
 
