@@ -22,8 +22,11 @@ cat >"$plist_path" <<EOF
     <string>${label}</string>
     <key>ProgramArguments</key>
     <array>
+      <string>/bin/bash</string>
       <string>${repo_root}/scripts/backup/sync_data_to_volume.sh</string>
     </array>
+    <key>WorkingDirectory</key>
+    <string>${repo_root}</string>
     <key>WatchPaths</key>
     <array>
       <string>${repo_root}/data</string>
@@ -40,11 +43,12 @@ EOF
 
 mkdir -p "${repo_root}/logs/backup"
 
-launchctl unload "$plist_path" >/dev/null 2>&1 || true
-launchctl load "$plist_path"
+domain="gui/$(id -u)"
+launchctl bootout "$domain" "$plist_path" >/dev/null 2>&1 || true
+launchctl bootstrap "$domain" "$plist_path"
+launchctl enable "$domain/$label" >/dev/null 2>&1 || true
 
 echo "Installed launchd watcher:"
 echo "  $plist_path"
 echo "It triggers sync on changes under:"
 echo "  ${repo_root}/data"
-
