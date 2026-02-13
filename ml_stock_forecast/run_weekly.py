@@ -14,6 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.data_loader import DataLoader
 from utils.column_normalizer import normalize_security_columns
+from utils.logging_utils import setup_logging
 from data.universe import Universe
 from features.price_features import PriceFeatures
 from features.market_features import MarketFeatures
@@ -25,11 +26,9 @@ from portfolio.risk_control import RiskControl
 from backtest.walk_forward import WalkForwardBacktest
 
 # 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+log_path = setup_logging("weekly")
 logger = logging.getLogger(__name__)
+logger.info(f"日志文件: {log_path}")
 
 
 def load_config(config_dir: str = 'config') -> dict:

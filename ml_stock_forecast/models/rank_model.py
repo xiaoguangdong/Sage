@@ -137,8 +137,19 @@ class RankModelLGBM:
         # 准备特征
         df_features = self.prepare_features(df)
         
-        # 获取特征名称
-        feature_cols = [col for col in df_features.columns if col not in ['date', 'code', 'close', 'turnover']]
+        # 获取特征名称（防数据泄露：过滤label/future字段）
+        exclude_cols = {'date', 'trade_date', 'code', 'ts_code', 'stock', 'close', 'turnover'}
+        feature_cols = [col for col in df_features.columns if col not in exclude_cols]
+
+        leakage_cols = [col for col in feature_cols if 'label' in col.lower() or 'future' in col.lower()]
+        label_name = labels.name if labels is not None else None
+        if label_name and label_name in feature_cols:
+            leakage_cols.append(label_name)
+
+        if leakage_cols:
+            logger.warning(f"疑似数据泄露字段已剔除: {sorted(set(leakage_cols))}")
+            feature_cols = [col for col in feature_cols if col not in set(leakage_cols)]
+
         self.feature_names = feature_cols
         
         # 创建数据集
