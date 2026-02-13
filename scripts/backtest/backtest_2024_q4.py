@@ -20,7 +20,7 @@ from datetime import datetime
 project_root = os.path.abspath(os.path.dirname(__file__))
 sys.path.insert(0, project_root)
 
-from ml_stock_forecast.models.macro_predictor import MacroPredictor
+from sage_core.models.macro_predictor import MacroPredictor
 
 
 def load_real_data():

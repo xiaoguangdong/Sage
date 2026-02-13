@@ -289,11 +289,11 @@ labels = [map_hmm_to_label(s) for s in states]
 ### 3. 文件成果
 
 **核心脚本**：
-- `ml_stock_forecast/scripts/label_hs300_weekly.py` - 周线打标脚本
-- `ml_stock_forecast/scripts/label_hs300_daily_weekly.py` - 日线/周线对比脚本
-- `ml_stock_forecast/scripts/download_index_ohlc.py` - 指数数据下载
-- `ml_stock_forecast/scripts/review_labeling_rules.py` - 规则评审
-- `ml_stock_forecast/scripts/compare_labeling_methods.py` - 方法对比
+- `scripts/models/label_hs300_weekly.py` - 周线打标脚本
+- `scripts/models/label_hs300_daily_weekly.py` - 日线/周线对比脚本
+- `scripts/data/download_index_ohlc.py` - 指数数据下载
+- `scripts/models/review_labeling_rules.py` - 规则评审
+- `scripts/models/compare_labeling_methods.py` - 方法对比
 
 **数据文件**：
 - `data/tushare/index/index_000300_SH_ohlc.parquet` - 沪深300日线
@@ -481,7 +481,7 @@ labels = [map_hmm_to_label(s) for s in states]
 
 ```bash
 # 使用2018-2026数据训练HMM
-python ml_stock_forecast/scripts/label_hs300_weekly.py
+python scripts/models/label_hs300_weekly.py
 ```
 
 **输出**：
@@ -493,7 +493,7 @@ python ml_stock_forecast/scripts/label_hs300_weekly.py
 
 ```bash
 # 对比4种方法：原始标签、HMM、均线确认、多均线
-python ml_stock_forecast/scripts/label_hs300_daily_weekly.py
+python scripts/models/label_hs300_daily_weekly.py
 ```
 
 **输出**：
@@ -504,7 +504,7 @@ python ml_stock_forecast/scripts/label_hs300_daily_weekly.py
 
 ```bash
 # 下载2018-2026年指数数据
-python ml_stock_forecast/scripts/download_index_ohlc.py 2018-01-01 2026-02-09
+python scripts/data/download_index_ohlc.py 2018-01-01 2026-02-09
 ```
 
 ### 读取标签数据
@@ -641,9 +641,9 @@ for _, row in labels.iterrows():
 ### A. 文件清单
 
 **核心脚本**：
-- `ml_stock_forecast/scripts/label_hs300_weekly.py` - 周线打标（推荐）
-- `ml_stock_forecast/scripts/label_hs300_daily_weekly.py` - 日线对比
-- `ml_stock_forecast/scripts/download_index_ohlc.py` - 数据下载
+- `scripts/models/label_hs300_weekly.py` - 周线打标（推荐）
+- `scripts/models/label_hs300_daily_weekly.py` - 日线对比
+- `scripts/data/download_index_ohlc.py` - 数据下载
 
 **数据文件**：
 - `data/tushare/index/index_000300_SH_ohlc.parquet` - 沪深300日线

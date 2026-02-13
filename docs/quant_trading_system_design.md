@@ -627,10 +627,10 @@ trend_fallback_mode = 'empty_portfolio'
 **目标**：实现基础的树模型系统
 
 **关键文件**：
-- `ml_stock_forecast/models/lgbm_rank.py` - LightGBM排序模型
-- `ml_stock_forecast/features/rank_features.py` - 排序特征工程
+- `sage_core/models/lgbm_rank.py` - LightGBM排序模型
+- `sage_core/features/rank_features.py` - 排序特征工程
 - `ml_stock_forecast/training/rank_trainer.py` - 排序模型训练
-- `ml_stock_forecast/backtest/walk_forward.py` - 周频滚动回测
+- `sage_core/backtest/walk_forward.py` - 周频滚动回测
 
 **核心参数**：
 - max_depth=4, num_leaves=16

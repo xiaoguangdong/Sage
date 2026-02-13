@@ -46,7 +46,7 @@
 
 **矛盾点**：
 - 需求推荐：`ashare_quant/` 下包含 data/, features/, models/, portfolio/, backtest/, utils/
-- 现有结构：`lstm_stock_forecast/` 和 `ml_stock_forecast/` 分离
+- 现有结构：`lstm_stock_forecast/` 与 `sage_core/` + `sage_app/` 分离
 - 推荐结构强调"模型间只有数据依赖，没有控制依赖"，现有结构未体现这一点
 
 **影响**：如果保持现有结构，可能无法实现推荐的架构原则；如果重构，工作量大且需要迁移代码。
@@ -208,7 +208,7 @@
 - **问题**：是否按照需求文档推荐的`ashare_quant`结构重构？
 - **选项**：
   - A. 完全重构为推荐结构
-  - B. 在现有`lstm_stock_forecast` + `ml_stock_forecast`基础上优化
+  - B. 在现有`lstm_stock_forecast` + `sage_core/sage_app`基础上优化
   - C. 保持现有结构，但调整内部文件组织
 - **重要性**：⭐⭐⭐⭐⭐（影响后续所有开发）
 

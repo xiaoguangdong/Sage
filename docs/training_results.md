@@ -171,21 +171,19 @@ Attention机制
 
 ### 训练脚本
 
-- `main.py` - 主训练流程
-- `train_optimized.py` - 优化训练（30特征）
-- `train_simple.py` - 简化训练
+- `scripts/models/` - 训练/评估脚本（待补充）
 
 ### 测试脚本
 
-- `test_model.py` - 模型测试
-- `test_simple_model.py` - Simple模型测试
-- `test_trained_model.py` - 已训练模型测试
+- `scripts/legacy/test_simple_model.py` - Simple模型测试（历史脚本）
+- `scripts/legacy/test_trained_model.py` - 已训练模型测试（历史脚本）
+- `scripts/legacy/test_macro_prediction.py` - 宏观预测测试（历史脚本）
+- `scripts/legacy/test_nbs_monthly.py` - NBS月度数据测试（历史脚本）
 
 ### 回测脚本
 
-- `run_backtest.py` - 完整回测
-- `run_backtest_simple.py` - 简化回测
-- `run_backtest_best_model.py` - Best model回测
+- `scripts/backtest/run_backtest_best_model.py` - Best model回测
+- `scripts/backtest/run_backtest_with_checkpoint.py` - Checkpoint回测
 
 ### 分析脚本
 
@@ -196,8 +194,8 @@ Attention机制
 
 ### 数据下载
 
-- `download_baostock.py` - Baostock数据下载
-- `download_baostock_recent.py` - 最新数据下载
+- `scripts/data/download_baostock.py` - Baostock数据下载
+- `scripts/data/download_baostock_recent.py` - 最新数据下载
 
 ### 配置文件
 

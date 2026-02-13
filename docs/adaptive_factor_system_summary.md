@@ -12,7 +12,7 @@
 
 ### 1. 因子计算系统
 
-**文件**: `ml_stock_forecast/scripts/calculate_stock_factors.py`
+**文件**: `scripts/models/calculate_stock_factors.py`
 
 **计算因子**（8个，分4类）：
 
@@ -285,7 +285,7 @@ risk_weight /= total
 
 | 文件 | 说明 |
 |------|------|
-| `ml_stock_forecast/scripts/calculate_stock_factors.py` | 因子计算系统 |
+| `scripts/models/calculate_stock_factors.py` | 因子计算系统 |
 | `ml_stock_forecast/scripts/calculate_market_regime.py` | 市场风格状态机 |
 | `ml_stock_forecast/scripts/adaptive_factor_weights.py` | 自适应因子权重系统 |
 | `run_factor_calculation.sh` | 后台任务运行脚本 |

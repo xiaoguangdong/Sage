@@ -19,7 +19,7 @@
 - **回测验证**: 在更长时间周期上进行回测，验证模型稳定性
 
 ### 相关文件
-- `ml_stock_forecast/scripts/mainline_logic_system_optimized.py`
+- `scripts/strategy/mainline_logic_system_optimized.py`
 - `docs/市场状态打标系统总结.md`
 
 ---
@@ -58,7 +58,7 @@
 - [ ] 实现base概念 + n个周期增量概念的合并逻辑
 
 ### 相关文件
-- `ml_stock_forecast/scripts/update_concept_data.py`
+- `scripts/data/update_concept_data.py`
 - `ml_stock_forecast/scripts/update_concept_data_eastmoney.py`
 - `data/tushare/sectors/all_concept_details.csv` (100个概念)
 
