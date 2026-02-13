@@ -711,6 +711,1034 @@ def monitor_logic_validity(historical_logics, current_logic):
 
 ---
 
-*文档版本：v1.0*
-*创建日期：2026-02-10*
+## 五、深度建模：从观察到重构
+
+### 5.1 当前模型的三大问题
+
+#### 问题1：观察不够仔细敏感
+
+**当前做法**：
+```python
+# 只看涨幅Top 20%和Bottom 20%
+winners = date_data_sorted.head(top_20pct_count)
+losers = date_data_sorted.tail(top_20pct_count)
+```
+
+**问题**：
+- 只看表面的涨跌
+- 没有看资金流向的结构
+- 没有看筹码集中度的变化
+- 没有看不同市值段的资金偏好
+
+#### 问题2：指标重构没做
+
+**当前做法**：
+```python
+# 只是调整因子权重
+if logic_type == "momentum":
+    base_weights["momentum"] = 0.5  # 放大动量权重
+```
+
+**问题**：
+- 这只是"放大"，不是"重构"
+- 动量驱动≠提高动量权重
+- 不同逻辑需要完全不同的选股方法论
+
+#### 问题3：输出定义问题
+
+**当前输出**：
+```python
+{
+    "logic_type": "momentum",
+    "validity_score": 0.9,  # 强弱指标
+    "position": 0.6         # 仓位建议
+}
+```
+
+**问题**：
+- 这些都是"强弱指标"，不是"区分指标"
+- 无法回答"什么时候该用哪种选股逻辑"
+
+---
+
+### 5.2 重新思考：市场逻辑的本质是什么？
+
+#### 核心定义
+
+**市场逻辑 = 资金在玩什么游戏**
+
+不是"涨不涨"，而是：
+- 资金在聚集还是分散？
+- 资金在追涨还是抄底？
+- 资金在做长线还是短线？
+- 资金在博弈哪些板块？
+
+#### 四种底层逻辑（重新定义）
+
+| 逻辑类型 | 核心特征 | 资金行为 | 选股方法 |
+|---------|---------|---------|---------|
+| **资金聚集** | 筹码快速集中 | 机构加仓 | 跟踪机构动向 |
+| **板块轮动** | 热点快速切换 | 游资接力 | 抓龙头、追热点 |
+| **情绪反转** | 超跌/超涨 | 散户博弈 | 做情绪反人性 |
+| **结构分化** | 大小盘分化 | 风格切换 | 做风格配置 |
+
+---
+
+### 5.3 观察层的重构：更仔细、更敏感
+
+#### 第一层：资金流向观察（微观）
+
+**观察什么**：
+```python
+def observe_capital_flow(date_data):
+    """
+    观察资金流向结构
+    """
+    # 1. 按市值分层观察
+    cap_segments = {
+        "large_cap": date_data[date_data['total_mv'] > 500000000000],   # 大盘股
+        "mid_cap": date_data[(date_data['total_mv'] > 100000000000) & (date_data['total_mv'] <= 500000000000)],  # 中盘股
+        "small_cap": date_data[date_data['total_mv'] <= 100000000000]    # 小盘股
+    }
+
+    # 2. 计算各层级的资金净流入
+    for segment, data in cap_segments.items():
+        # 资金净流入 = (今日成交额 - 均值成交额) / 均值成交额
+        data['net_flow'] = (data['amount'] - data['amount'].rolling(20).mean()) / data['amount'].rolling(20).mean()
+
+    # 3. 观察资金偏好的变化
+    capital_preference = {
+        "large_cap_preference": cap_segments["large_cap"]['net_flow'].mean(),
+        "mid_cap_preference": cap_segments["mid_cap"]['net_flow'].mean(),
+        "small_cap_preference": cap_segments["small_cap"]['net_flow'].mean()
+    }
+
+    return capital_preference
+```
+
+#### 第二层：筹码结构观察（中观）
+
+**观察什么**：
+```python
+def observe_chip_structure(date_data):
+    """
+    观察筹码结构变化
+    """
+    # 1. 筹码集中度（使用成交额分布）
+    amount_distribution = date_data['amount'].values
+    gini_coefficient = calculate_gini(amount_distribution)
+
+    # 2. 筹码聚集度（前20%成交额占比）
+    top_20pct_amount = date_data.nlargest(int(len(date_data) * 0.2), 'amount')['amount'].sum()
+    total_amount = date_data['amount'].sum()
+    concentration_ratio = top_20pct_amount / total_amount
+
+    # 3. 换手率结构
+    turnover_segments = {
+        "high_turnover": date_data[date_data['turnover_rate'] > 0.1],  # 高换手
+        "medium_turnover": date_data[(date_data['turnover_rate'] > 0.05) & (date_data['turnover_rate'] <= 0.1)],
+        "low_turnover": date_data[date_data['turnover_rate'] <= 0.05]
+    }
+
+    return {
+        "gini_coefficient": gini_coefficient,
+        "concentration_ratio": concentration_ratio,
+        "turnover_structure": turnover_segments
+    }
+```
+
+#### 第三层：板块轮动观察（宏观）
+
+**观察什么**：
+```python
+def observe_sector_rotation(date_data, sector_map):
+    """
+    观察板块轮动节奏
+    """
+    # 1. 计算各板块的表现
+    sector_performance = {}
+    for sector, stocks in sector_map.items():
+        sector_data = date_data[date_data['ts_code'].isin(stocks)]
+        if len(sector_data) > 0:
+            sector_performance[sector] = {
+                "avg_return": sector_data['pct_chg'].mean(),
+                "amount": sector_data['amount'].sum(),
+                "stock_count": len(sector_data),
+                "up_ratio": (sector_data['pct_chg'] > 0).sum() / len(sector_data)
+            }
+
+    # 2. 识别热门板块（成交额Top 3）
+    hot_sectors = sorted(sector_performance.items(), key=lambda x: x[1]['amount'], reverse=True)[:3]
+
+    # 3. 识别轮动速度（热门板块的变化）
+    # （需要历史数据，这里省略）
+
+    return {
+        "sector_performance": sector_performance,
+        "hot_sectors": hot_sectors
+    }
+```
+
+---
+
+### 5.4 选股逻辑的重构：不是调整权重，是重新设计
+
+#### 逻辑1：资金聚集逻辑
+
+**核心思想**：跟踪主力资金动向
+
+**选股指标（重构版）**：
+```python
+def select_stocks_capital_aggregation(date_data, cap_flow_observation):
+    """
+    资金聚集逻辑选股
+    """
+    selected_stocks = []
+
+    # 指标1：机构持仓增加（需要数据）
+    # indicator1 = institution_holding_change > threshold
+
+    # 指标2：成交额持续放大
+    date_data['amount_trend'] = date_data['amount'].rolling(5).mean() / date_data['amount'].rolling(20).mean()
+    indicator2 = date_data['amount_trend'] > 1.2
+
+    # 指标3：换手率适中（2-8%）
+    indicator3 = (date_data['turnover_rate'] > 0.02) & (date_data['turnover_rate'] < 0.08)
+
+    # 指标4：价格稳步上涨（不是暴涨）
+    date_data['price_trend'] = date_data['close'].pct_change(20)
+    indicator4 = (date_data['price_trend'] > 0.05) & (date_data['price_trend'] < 0.2)
+
+    # 综合筛选
+    selected = date_data[indicator2 & indicator3 & indicator4].copy()
+
+    # 排序：按成交额趋势和价格趋势综合评分
+    selected['score'] = (
+        selected['amount_trend'] * 0.6 +
+        selected['price_trend'] * 0.4
+    )
+
+    return selected.sort_values('score', ascending=False)
+```
+
+#### 逻辑2：板块轮动逻辑
+
+**核心思想**：抓龙头、追热点
+
+**选股指标（重构版）**：
+```python
+def select_stocks_sector_rotation(date_data, sector_observation):
+    """
+    板块轮动逻辑选股
+    """
+    hot_sectors = sector_observation['hot_sectors']
+
+    selected_stocks = []
+
+    for sector, performance in hot_sectors:
+        # 获取该板块的股票
+        sector_stocks = sector_map[sector]
+        sector_data = date_data[date_data['ts_code'].isin(sector_stocks)].copy()
+
+        # 指标1：板块内涨幅Top 3
+        sector_data['sector_rank'] = sector_data['pct_chg'].rank(ascending=False)
+        indicator1 = sector_data['sector_rank'] <= 3
+
+        # 指标2：成交额大
+        indicator2 = sector_data['amount'] > sector_data['amount'].quantile(0.7)
+
+        # 指标3：换手率高（但不是异常高）
+        indicator3 = (sector_data['turnover_rate'] > 0.05) & (sector_data['turnover_rate'] < 0.2)
+
+        # 指标4：上涨日占比高
+        indicator4 = sector_data['up_ratio'] > 0.6
+
+        # 综合筛选
+        selected = sector_data[indicator1 & indicator2 & indicator3 & indicator4].copy()
+
+        # 排序：按涨幅和成交额综合评分
+        selected['score'] = (
+            selected['pct_chg'] * 0.5 +
+            selected['amount'] / selected['amount'].max() * 0.5
+        )
+
+        selected_stocks.append(selected)
+
+    # 合并所有板块的选股结果
+    final_selected = pd.concat(selected_stocks)
+
+    return final_selected.sort_values('score', ascending=False)
+```
+
+#### 逻辑3：情绪反转逻辑
+
+**核心思想**：做情绪反人性
+
+**选股指标（重构版）**：
+```python
+def select_stocks_sentiment_reversal(date_data, market_sentiment):
+    """
+    情绪反转逻辑选股
+    """
+    # 指标1：超跌（20日跌幅 > 20%）
+    date_data['drawdown_20d'] = (date_data['close'] - date_data['close'].rolling(20).max()) / date_data['close'].rolling(20).max()
+    indicator1 = date_data['drawdown_20d'] < -0.2
+
+    # 指标2：恐慌卖出（换手率异常高）
+    indicator2 = date_data['turnover_rate'] > 0.15
+
+    # 指标3：基本面不差（ROE > 0）
+    indicator3 = date_data['roe'] > 0
+
+    # 指标4：开始企稳（3日不创新低）
+    date_data['local_low'] = date_data['close'] == date_data['close'].rolling(3).min()
+    indicator4 = ~date_data['local_low']
+
+    # 综合筛选
+    selected = date_data[indicator1 & indicator2 & indicator3 & indicator4].copy()
+
+    # 排序：按跌幅和基本面综合评分
+    selected['score'] = (
+        abs(selected['drawdown_20d']) * 0.6 +
+        selected['roe'] * 0.4
+    )
+
+    return selected.sort_values('score', ascending=False)
+```
+
+#### 逻辑4：结构分化逻辑
+
+**核心思想**：做风格配置
+
+**选股指标（重构版）**：
+```python
+def select_stocks_structural_divergence(date_data, cap_flow_observation):
+    """
+    结构分化逻辑选股
+    """
+    # 判断当前风格偏好
+    if cap_flow_observation['large_cap_preference'] > 0.1:
+        # 大盘风格
+        target_segment = "large_cap"
+    elif cap_flow_observation['small_cap_preference'] > 0.1:
+        # 小盘风格
+        target_segment = "small_cap"
+    else:
+        # 中盘风格
+        target_segment = "mid_cap"
+
+    # 筛选对应市值段的股票
+    if target_segment == "large_cap":
+        selected = date_data[date_data['total_mv'] > 500000000000].copy()
+    elif target_segment == "small_cap":
+        selected = date_data[date_data['total_mv'] <= 100000000000].copy()
+    else:
+        selected = date_data[(date_data['total_mv'] > 100000000000) & (date_data['total_mv'] <= 500000000000)].copy()
+
+    # 指标1：流动性好
+    indicator1 = selected['turnover_rate'] > 0.02
+
+    # 指标2：波动率适中
+    selected['volatility_20d'] = selected['pct_chg'].rolling(20).std()
+    indicator2 = (selected['volatility_20d'] > 0.01) & (selected['volatility_20d'] < 0.05)
+
+    # 指标3：趋势向上
+    selected['trend_20d'] = (selected['close'] - selected['close'].shift(20)) / selected['close'].shift(20)
+    indicator3 = selected['trend_20d'] > 0
+
+    # 综合筛选
+    selected = selected[indicator1 & indicator2 & indicator3].copy()
+
+    # 排序：按趋势和波动率综合评分
+    selected['score'] = (
+        selected['trend_20d'] * 0.7 -
+        selected['volatility_20d'] * 0.3
+    )
+
+    return selected.sort_values('score', ascending=False)
+```
+
+---
+
+### 5.5 模型输出的重构：从强弱到区分
+
+#### 新的输出结构
+
+**不再是**：
+```python
+{
+    "logic_type": "momentum",
+    "validity_score": 0.9,  # 强弱指标
+    "position": 0.6
+}
+```
+
+**而是**：
+```python
+{
+    # 1. 市场状态（区分指标）
+    "market_state": {
+        "primary_logic": "capital_aggregation",  # 主导逻辑
+        "secondary_logic": "sector_rotation",    # 次要逻辑
+        "logic_mix_ratio": 0.7,                  # 逻辑混合比例
+        "clarity": 0.85                          # 逻辑清晰度（0-1）
+    },
+
+    # 2. 逻辑特征（区分特征）
+    "logic_features": {
+        "capital_aggregation": {
+            "signal_strength": 0.8,
+            "persistence": 0.9,
+            "risk_level": "MEDIUM"
+        },
+        "sector_rotation": {
+            "signal_strength": 0.6,
+            "persistence": 0.4,
+            "risk_level": "HIGH"
+        }
+    },
+
+    # 3. 选股结果（直接输出）
+    "selected_stocks": {
+        "capital_aggregation": ["600519.SH", "000858.SZ", ...],  # 资金聚集逻辑选出的股票
+        "sector_rotation": ["300750.SZ", "002594.SZ", ...],     # 板块轮动逻辑选出的股票
+        "mixed": [...]                                        # 混合逻辑选出的股票
+    },
+
+    # 4. 执行建议（区分性建议）
+    "execution": {
+        "strategy": "PRIMARY_LOGIC_DOMINANT",  # 策略类型
+        "position_allocation": {
+            "capital_aggregation": 0.7,
+            "sector_rotation": 0.3
+        },
+        "risk_control": {
+            "stop_loss": -0.05,
+            "take_profit": 0.15,
+            "max_drawdown": 0.1
+        }
+    }
+}
+```
+
+#### 策略类型的定义
+
+```python
+STRATEGY_TYPES = {
+    "PRIMARY_LOGIC_DOMINANT": "主导逻辑为主，逻辑清晰度高",
+    "LOGIC_MIXED": "多种逻辑并存，需要分散配置",
+    "LOGIC_TRANSITION": "逻辑切换期，降低仓位",
+    "LOGIC_FAILURE": "逻辑失效，清仓观望"
+}
+```
+
+---
+
+### 5.6 系统架构重构
+
+```
+┌─────────────────────────────────────────────────┐
+│  观察层（多维度、细粒度）                      │
+│  - 资金流向观察（微观）                         │
+│  - 筹码结构观察（中观）                         │
+│  - 板块轮动观察（宏观）                         │
+└─────────────────────────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────┐
+│  逻辑识别层（从观察到推断）                      │
+│  - 主导逻辑识别                                 │
+│  - 次要逻辑识别                                 │
+│  - 逻辑清晰度计算                               │
+│  - 逻辑混合比例                                 │
+└─────────────────────────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────┐
+│  选股逻辑层（根据逻辑重构）                      │
+│  - 资金聚集逻辑 → 机构追踪选股                  │
+│  - 板块轮动逻辑 → 龙头追涨选股                  │
+│  - 情绪反转逻辑 → 超跌反弹选股                  │
+│  - 结构分化逻辑 → 风格配置选股                  │
+└─────────────────────────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────┐
+│  逻辑监控层（有效性监控）                        │
+│  - 逻辑持续性监控                               │
+│  - 逻辑漂移检测                                 │
+│  - 逻辑失效预警                                 │
+└─────────────────────────────────────────────────┘
+                       ↓
+┌─────────────────────────────────────────────────┐
+│  决策输出层（区分性建议）                        │
+│  - 策略类型选择                                 │
+│  - 仓位分配建议                                 │
+│  - 风险控制参数                                 │
+└─────────────────────────────────────────────────┘
+```
+
+---
+
+## 六、实施路径
+
+### 阶段1：观察层升级（3天）
+- 实现资金流向观察
+- 实现筹码结构观察
+- 实现板块轮动观察
+
+### 阶段2：选股逻辑重构（5天）
+- 实现四种选股逻辑的选股函数
+- 每种逻辑有独立的选股指标
+- 每种逻辑有独立的评分系统
+
+### 阶段3：逻辑识别层（3天）
+- 实现主导逻辑识别
+- 实现次要逻辑识别
+- 实现逻辑清晰度计算
+
+### 阶段4：决策输出层（2天）
+- 实现策略类型判断
+- 实现仓位分配逻辑
+- 实现风险控制参数
+
+### 阶段5：回测验证（3天）
+- 对比新旧模型
+- 细分场景测试
+- 参数优化
+
+---
+
+## 七、关键改进点总结
+
+### 改进1：观察更细致
+- ❌ 之前：只看涨幅Top/Bottom
+- ✅ 现在：看资金流向、筹码结构、板块轮动
+
+### 改进2：选股重构
+- ❌ 之前：调整因子权重
+- ✅ 现在：根据逻辑重新设计选股指标
+
+### 改进3：输出区分
+- ❌ 之前：输出强弱指标（validity_score）
+- ✅ 现在：输出区分指标（策略类型、逻辑清晰度）
+
+### 改进4：逻辑混合
+- ❌ 之前：单一逻辑（momentum/fundamental）
+- ✅ 现在：多逻辑混合（主逻辑+次逻辑）
+
+### 改进5：风险控制
+- ❌ 之前：简单的仓位调整
+- ✅ 现在：完整的止损止盈系统
+
+---
+
+## 八、避免模型退化：从博弈到价值
+
+### 8.1 问题的本质
+
+你的质疑揭示了一个**致命风险**：
+
+> **模型可能退化成"选高波动率小股票"的博弈模型**
+
+#### 当前设计的潜在缺陷
+
+**缺陷1：板块轮动逻辑可能选出妖股**
+```python
+# 指标1：板块内涨幅Top 3
+sector_data['sector_rank'] = sector_data['pct_chg'].rank(ascending=False)
+indicator1 = sector_data['sector_rank'] <= 3
+```
+- 短期暴涨 = 可能是小盘股、妖股、被炒作
+- 缺少对公司质量的约束
+
+**缺陷2：资金聚集逻辑可能跟踪游资**
+```python
+# 指标2：成交额持续放大
+date_data['amount_trend'] = date_data['amount'].rolling(5).mean() / date_data['amount'].rolling(20).mean()
+indicator2 = date_data['amount_trend'] > 1.2
+```
+- 成交额放大可能是游资炒作，不一定是机构加仓
+- 缺少对资金性质的区分
+
+**缺陷3：情绪反转逻辑可能选出垃圾股**
+```python
+# 指标1：超跌（20日跌幅 > 20%）
+date_data['drawdown_20d'] = (date_data['close'] - date_data['close'].rolling(20).max()) / date_data['close'].rolling(20).max()
+indicator1 = date_data['drawdown_20d'] < -0.2
+```
+- 超跌可能是垃圾股，不是被错杀的好公司
+- 缺少对基本面的深度验证
+
+---
+
+### 8.2 解决方案：三层过滤体系
+
+#### 第一层：硬性约束（必须满足）
+
+**约束1：市值门槛**
+```python
+# 根据市场阶段调整市值门槛
+def get_market_cap_threshold(market_state):
+    if market_state == "HEALTHY_UP":
+        return 50000000000   # 50亿（牛市可以选小票）
+    elif market_state == "DISTRIBUTION":
+        return 100000000000  # 100亿（风险期只选大盘）
+    else:
+        return 100000000000  # 默认100亿
+```
+
+**约束2：流动性门槛**
+```python
+# 日均成交额必须 > 5000万
+def check_liquidity(stock_data):
+    avg_amount_20d = stock_data['amount'].rolling(20).mean()
+    return avg_amount_20d > 50000000  # 5000万
+```
+
+**约束3：基本面硬约束**
+```python
+def check_fundamental_hard(stock_data):
+    # ROE > 0
+    indicator1 = stock_data['roe'] > 0
+
+    # 净利润 > 0（近4个季度）
+    indicator2 = stock_data['net_profit_ttm'] > 0
+
+    # 经营性现金流 > 0（避免造假）
+    indicator3 = stock_data['operating_cash_flow'] > 0
+
+    # 负债率 < 70%（避免高杠杆）
+    indicator4 = stock_data['debt_ratio'] < 0.7
+
+    return indicator1 & indicator2 & indicator3 & indicator4
+```
+
+**约束4：风险门槛**
+```python
+def check_risk(stock_data):
+    # 过去60天最大回撤 < 40%（避免崩盘股）
+    drawdown_60d = calc_max_drawdown(stock_data, window=60)
+    indicator1 = drawdown_60d < 0.4
+
+    # 波动率 < 30%（避免妖股）
+    volatility_60d = stock_data['pct_chg'].rolling(60).std()
+    indicator2 = volatility_60d < 0.3
+
+    # 财报风险：最近一次审计意见 = 标准无保留
+    indicator3 = stock_data['audit_opinion'] == "标准无保留"
+
+    return indicator1 & indicator2 & indicator3
+```
+
+#### 第二层：价值评分（加权评分）
+
+**价值评分维度**
+```python
+def calc_value_score(stock_data):
+    """
+    计算价值评分（0-100）
+    """
+    # 1. 盈利能力（30分）
+    profit_score = (
+        min(stock_data['roe'] / 0.2, 1) * 15 +  # ROE满分20%
+        min(stock_data['gross_margin'] / 0.3, 1) * 15  # 毛利率满分30%
+    )
+
+    # 2. 成长性（25分）
+    growth_score = (
+        min(stock_data['revenue_growth_yoy'] / 0.3, 1) * 15 +  # 营收增长30%满分
+        min(stock_data['profit_growth_yoy'] / 0.3, 1) * 10    # 利润增长30%满分
+    )
+
+    # 3. 财务健康（20分）
+    health_score = (
+        min((1 - stock_data['debt_ratio']) / 0.7, 1) * 10 +  # 负债率
+        min(stock_data['current_ratio'] / 2, 1) * 10          # 流动比率2倍满分
+    )
+
+    # 4. 估值安全（25分）
+    valuation_score = (
+        min(1 / stock_data['pe_ttm'] / 50, 1) * 10 +  # PE 50倍以下
+        min(1 / stock_data['pb'] / 3, 1) * 15          # PB 3倍以下
+    )
+
+    total_score = profit_score + growth_score + health_score + valuation_score
+
+    return total_score
+```
+
+#### 第三层：机构认可度（加分项）
+
+**机构认可度维度**
+```python
+def calc_institution_score(stock_data):
+    """
+    计算机构认可度（0-20）
+    """
+    score = 0
+
+    # 1. 机构持仓比例（10分）
+    institution_holding = stock_data['institution_holding_ratio']
+    score += min(institution_holding / 0.5, 1) * 10
+
+    # 2. 北向资金流入（5分）
+    north_flow = stock_data['north_flow_20d']
+    if north_flow > 0:
+        score += min(north_flow / 1000000000, 1) * 5  # 10亿流入满分
+
+    # 3. 研报覆盖（5分）
+    report_count = stock_data['analyst_report_count_90d']
+    score += min(report_count / 10, 1) * 5  # 10篇研报满分
+
+    return score
+```
+
+---
+
+### 8.3 重构后的选股逻辑
+
+#### 逻辑1：资金聚集逻辑（重构版）
+
+```python
+def select_stocks_capital_aggregation_v2(date_data, cap_flow_observation, market_state):
+    """
+    资金聚集逻辑选股（价值增强版）
+    """
+    # 第一步：硬性约束过滤
+    cap_threshold = get_market_cap_threshold(market_state)
+    filtered = date_data[
+        (date_data['total_mv'] > cap_threshold) &
+        (date_data['amount'].rolling(20).mean() > 50000000)
+    ].copy()
+
+    # 第二步：基本面硬约束
+    filtered = filtered[check_fundamental_hard(filtered)].copy()
+
+    # 第三步：风险约束
+    filtered = filtered[check_risk(filtered)].copy()
+
+    # 第四步：资金聚集信号
+    filtered['amount_trend'] = filtered['amount'].rolling(5).mean() / filtered['amount'].rolling(20).mean()
+    filtered['price_trend'] = filtered['close'].pct_change(20)
+
+    # 机构资金特征（不只是成交额放大）
+    indicator1 = filtered['amount_trend'] > 1.2
+    indicator2 = filtered['price_trend'] > 0.05
+    indicator3 = (filtered['turnover_rate'] > 0.02) & (filtered['turnover_rate'] < 0.08)
+
+    # 第五步：价值评分
+    filtered['value_score'] = calc_value_score(filtered)
+    filtered['institution_score'] = calc_institution_score(filtered)
+
+    # 第六步：综合评分
+    filtered['final_score'] = (
+        filtered['amount_trend'] * 20 +      # 资金信号
+        filtered['price_trend'] * 100 +      # 价格趋势
+        filtered['value_score'] * 0.5 +      # 价值评分
+        filtered['institution_score'] * 1    # 机构认可
+    )
+
+    # 第七步：筛选Top 20
+    selected = filtered[
+        indicator1 & indicator2 & indicator3
+    ].nlargest(20, 'final_score')
+
+    return selected
+```
+
+#### 逻辑2：板块轮动逻辑（重构版）
+
+```python
+def select_stocks_sector_rotation_v2(date_data, sector_observation, market_state):
+    """
+    板块轮动逻辑选股（价值增强版）
+    """
+    hot_sectors = sector_observation['hot_sectors']
+    selected_stocks = []
+
+    for sector, performance in hot_sectors:
+        # 获取该板块的股票
+        sector_stocks = sector_map[sector]
+        sector_data = date_data[date_data['ts_code'].isin(sector_stocks)].copy()
+
+        # 第一步：硬性约束过滤
+        cap_threshold = get_market_cap_threshold(market_state)
+        sector_data = sector_data[sector_data['total_mv'] > cap_threshold].copy()
+
+        # 第二步：基本面硬约束
+        sector_data = sector_data[check_fundamental_hard(sector_data)].copy()
+
+        # 第三步：龙头识别（不只是涨幅）
+        sector_data['sector_rank_return'] = sector_data['pct_chg'].rank(ascending=False)
+        sector_data['sector_rank_amount'] = sector_data['amount'].rank(ascending=False)
+
+        # 龙头 = 涨幅Top 3 + 成交额Top 5
+        indicator1 = (sector_data['sector_rank_return'] <= 3) & (sector_data['sector_rank_amount'] <= 5)
+
+        # 第四步：价值评分
+        sector_data['value_score'] = calc_value_score(sector_data)
+
+        # 第五步：机构认可
+        sector_data['institution_score'] = calc_institution_score(sector_data)
+
+        # 第六步：综合评分
+        sector_data['final_score'] = (
+            sector_data['pct_chg'] * 50 +         # 涨幅
+            sector_data['amount'] / sector_data['amount'].max() * 20 +  # 成交额
+            sector_data['value_score'] * 0.5 +   # 价值评分
+            sector_data['institution_score'] * 1  # 机构认可
+        )
+
+        # 第七步：筛选该板块Top 5
+        selected = sector_data[indicator1].nlargest(5, 'final_score')
+        selected_stocks.append(selected)
+
+    # 合并所有板块的选股结果
+    final_selected = pd.concat(selected_stocks)
+
+    return final_selected.sort_values('final_score', ascending=False)
+```
+
+#### 逻辑3：情绪反转逻辑（重构版）
+
+```python
+def select_stocks_sentiment_reversal_v2(date_data, market_sentiment, market_state):
+    """
+    情绪反转逻辑选股（价值增强版）
+    """
+    # 第一步：硬性约束过滤
+    cap_threshold = get_market_cap_threshold(market_state)
+    filtered = date_data[date_data['total_mv'] > cap_threshold].copy()
+
+    # 第二步：基本面硬约束（反转逻辑中更严格）
+    filtered = filtered[
+        (filtered['roe'] > 0.1) &           # ROE > 10%
+        (filtered['debt_ratio'] < 0.6) &    # 负债率 < 60%
+        (filtered['net_profit_ttm'] > 0)    # 净利润 > 0
+    ].copy()
+
+    # 第三步：超跌识别
+    filtered['drawdown_20d'] = (
+        (filtered['close'] - filtered['close'].rolling(20).max()) /
+        filtered['close'].rolling(20).max()
+    )
+
+    # 第四步：价值评分（反转逻辑中权重更高）
+    filtered['value_score'] = calc_value_score(filtered)
+
+    # 第五步：超跌但有价值
+    indicator1 = filtered['drawdown_20d'] < -0.2  # 跌幅 > 20%
+    indicator2 = filtered['value_score'] > 60     # 价值评分 > 60
+
+    # 第六步：开始企稳
+    filtered['local_low'] = filtered['close'] == filtered['close'].rolling(3).min()
+    indicator3 = ~filtered['local_low']
+
+    # 第七步：机构认可（加分项）
+    filtered['institution_score'] = calc_institution_score(filtered)
+
+    # 第八步：综合评分
+    filtered['final_score'] = (
+        abs(filtered['drawdown_20d']) * 50 +  # 跌幅越大，分越高
+        filtered['value_score'] * 1 +         # 价值评分
+        filtered['institution_score'] * 1.5   # 机构认可（反转逻辑中权重更高）
+    )
+
+    # 第九步：筛选Top 15
+    selected = filtered[
+        indicator1 & indicator2 & indicator3
+    ].nlargest(15, 'final_score')
+
+    return selected
+```
+
+---
+
+### 8.4 行业价值识别：如何选出真正有价值的公司？
+
+#### 行业价值评分体系
+
+```python
+def calc_sector_value_score(sector_data):
+    """
+    计算行业价值评分（0-100）
+    """
+    # 1. 行业成长性（30分）
+    sector_growth = (
+        sector_data['revenue_growth_yoy'].mean() * 50  # 营收增长
+    )
+
+    # 2. 行业盈利能力（30分）
+    sector_profit = (
+        min(sector_data['roe'].mean() / 0.15, 1) * 20 +  # ROE
+        min(sector_data['gross_margin'].mean() / 0.25, 1) * 10  # 毛利率
+    )
+
+    # 3. 行业集中度（20分）
+    # 使用赫芬达尔指数（HHI）衡量集中度
+    hhi = sum((market_share ** 2) for market_share in sector_data['market_share'])
+    concentration_score = min(hhi / 0.25, 1) * 20  # HHI 0.25满分
+
+    # 4. 行业景气度（20分）
+   景气度评分 = (
+        min(sector_data['capacity_utilization'].mean() / 0.9, 1) * 10 +  # 产能利用率
+        min(sector_data['order_growth'].mean() / 0.3, 1) * 10          # 订单增长
+    )
+
+    total_score = sector_growth + sector_profit + concentration_score +景气度评分
+
+    return total_score
+```
+
+#### 公司价值相对评分
+
+```python
+def calc_relative_value_score(stock_data, sector_data):
+    """
+    计算公司相对行业的价值评分（0-100）
+    """
+    # 相对行业的ROE
+    roe_relative = stock_data['roe'] / sector_data['roe'].median()
+
+    # 相对行业的毛利率
+    margin_relative = stock_data['gross_margin'] / sector_data['gross_margin'].median()
+
+    # 相对行业的营收增长
+    growth_relative = stock_data['revenue_growth_yoy'] / sector_data['revenue_growth_yoy'].median()
+
+    # 相对行业的估值
+    valuation_relative = sector_data['pe_ttm'].median() / stock_data['pe_ttm']
+
+    # 综合评分
+    relative_score = (
+        min(roe_relative, 1.5) * 30 +
+        min(margin_relative, 1.5) * 25 +
+        min(growth_relative, 1.5) * 25 +
+        min(valuation_relative, 1.5) * 20
+    )
+
+    return relative_score
+```
+
+---
+
+### 8.5 风险控制：防止模型退化
+
+#### 风险指标监控
+
+```python
+def monitor_model_risk(selected_stocks, benchmark):
+    """
+    监控模型风险，防止退化
+    """
+    # 1. 市值分布检查
+    avg_mv = selected_stocks['total_mv'].mean()
+    if avg_mv < 50000000000:  # 平均市值 < 50亿
+        return {
+            "risk_level": "HIGH",
+            "risk_type": "SMALL_CAP_BIAS",
+            "message": "模型可能退化成选小股票"
+        }
+
+    # 2. 波动率检查
+    avg_volatility = selected_stocks['pct_chg'].rolling(60).std().mean()
+    if avg_volatility > 0.25:  # 平均波动率 > 25%
+        return {
+            "risk_level": "HIGH",
+            "risk_type": "HIGH_VOLATILITY_BIAS",
+            "message": "模型可能退化成选高波动股票"
+        }
+
+    # 3. 基本面检查
+    avg_roe = selected_stocks['roe'].mean()
+    if avg_roe < 0.05:  # 平均ROE < 5%
+        return {
+            "risk_level": "HIGH",
+            "risk_type": "POOR_QUALITY_BIAS",
+            "message": "模型可能选出低质量公司"
+        }
+
+    # 4. 与基准的相关性检查
+    selected_returns = selected_stocks['pct_chg'].mean()
+    benchmark_returns = benchmark['pct_chg']
+    correlation = selected_returns.rolling(20).corr(benchmark_returns).iloc[-1]
+
+    if correlation < 0.3:  # 相关性 < 0.3
+        return {
+            "risk_level": "MEDIUM",
+            "risk_type": "LOW_CORRELATION",
+            "message": "选股结果与市场脱节"
+        }
+
+    return {
+        "risk_level": "LOW",
+        "risk_type": "NONE",
+        "message": "模型运行正常"
+    }
+```
+
+#### 动态调整机制
+
+```python
+def dynamic_adjustment(risk_monitor_result):
+    """
+    根据风险监控结果动态调整
+    """
+    if risk_monitor_result["risk_level"] == "HIGH":
+        # 高风险：大幅提高市值门槛
+        return {
+            "action": "ADJUST_PARAMS",
+            "new_cap_threshold": 200000000000,  # 提高到200亿
+            "new_value_threshold": 70,            # 提高价值门槛到70分
+            "position_reduction": 0.5            # 降低仓位50%
+        }
+    elif risk_monitor_result["risk_level"] == "MEDIUM":
+        # 中等风险：适度提高门槛
+        return {
+            "action": "ADJUST_PARAMS",
+            "new_cap_threshold": 100000000000,  # 提高到100亿
+            "new_value_threshold": 60,            # 提高价值门槛到60分
+            "position_reduction": 0.3            # 降低仓位30%
+        }
+    else:
+        # 低风险：保持原参数
+        return {
+            "action": "KEEP_PARAMS",
+            "new_cap_threshold": None,
+            "new_value_threshold": None,
+            "position_reduction": 0
+        }
+```
+
+---
+
+### 8.6 总结：如何避免模型退化
+
+#### 核心原则
+
+1. **硬性约束必须满足**：市值、流动性、基本面、风险
+2. **价值评分作为基准**：不是只看价格，必须看价值
+3. **机构认可作为加分**：不是游资炒作，是机构认可
+4. **风险监控实时反馈**：一旦发现退化，立即调整
+
+#### 对比：退化前 vs 退化后
+
+| 维度 | 退化前（纯博弈） | 退化后（价值增强） |
+|------|----------------|------------------|
+| 选股标准 | 涨幅、成交额 | 价值、机构认可、涨幅 |
+| 市值偏好 | 小盘股（<50亿） | 中大盘股（>100亿） |
+| 基本面要求 | 低 | ROE>0，净利润>0 |
+| 风险控制 | 弱 | 强（回撤<40%，波动率<30%） |
+| 持仓周期 | 短（1-2周） | 中长（1-3个月） |
+
+#### 最终目标
+
+**不只是抓住行业逻辑，还要抓住行业里真正有价值的公司**：
+
+- 行业逻辑 = 抓住趋势
+- 公司价值 = 把握确定性
+- 两者结合 = 可持续的Alpha
+
+---
+
+*文档版本：v3.0*
+*更新日期：2026-02-10*
 *作者：iFlow GLM*
