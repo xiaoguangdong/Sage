@@ -14,8 +14,13 @@ NBS工业品数据对齐脚本
 import pandas as pd
 import json
 import os
+import sys
 from typing import Dict, List, Optional
 from datetime import datetime
+import argparse
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
+sys.path.insert(0, PROJECT_ROOT)
 
 from scripts.data.macro.paths import MACRO_DIR
 
@@ -79,6 +84,19 @@ class NBSIndustrialDataAligner:
             'A02090209': '家用电器',  # 房间空气调节器产量
             'A02090213': '家用电器',  # 家用洗衣机产量
         }
+
+        # 基于产品名称的行业关键词映射（用于 nbs_output_2020.csv 等）
+        self.product_keywords = [
+            (['钢', '铁矿', '生铁', '粗钢', '钢材', '钢筋', '线材', '钢带', '冷轧'], '钢铁'),
+            (['玻璃'], '建筑材料'),
+            (['汽车', '轿车', 'SUV', '载货汽车'], '汽车'),
+            (['动车组', '铁路机车'], '机械设备'),
+            (['船舶'], '国防军工'),
+            (['工业机器人', '拖拉机'], '机械设备'),
+            (['大气污染防治设备'], '环保'),
+            (['原盐', '磷矿石'], '基础化工'),
+            (['乳制品', '成品糖', '白酒', '植物油', '饲料', '鲜、冷藏肉'], '食品饮料'),
+        ]
     
     def parse_nbs_json(self, json_file: str) -> pd.DataFrame:
         """
@@ -165,11 +183,43 @@ class NBSIndustrialDataAligner:
         
         # 添加申万行业映射
         df['sw_industry'] = df['product_code'].map(self.product_to_sw_industry)
+
+        # 基于名称的回退映射
+        if 'product_name' in df.columns:
+            missing_mask = df['sw_industry'].isna()
+            if missing_mask.any():
+                df.loc[missing_mask, 'sw_industry'] = df.loc[missing_mask, 'product_name'].apply(
+                    self._infer_industry_by_name
+                )
         
         # 移除无法映射的数据
         df = df[df['sw_industry'].notna()]
         
         return df
+
+    def _infer_industry_by_name(self, name: str) -> Optional[str]:
+        if not isinstance(name, str) or not name:
+            return None
+        for keywords, industry in self.product_keywords:
+            if any(k in name for k in keywords):
+                return industry
+        return None
+
+    def load_output_csv(self) -> Optional[pd.DataFrame]:
+        """
+        加载工业品产量CSV（优先nbs_output_2020.csv，其次nbs_output_202512.csv）
+        """
+        candidates = [
+            os.path.join(self.data_dir, 'nbs_output_2020.csv'),
+            os.path.join(self.data_dir, 'nbs_output_202512.csv'),
+        ]
+        for path in candidates:
+            if os.path.exists(path):
+                df = pd.read_csv(path)
+                if 'product' in df.columns:
+                    df = df.rename(columns={'product': 'product_name'})
+                return df
+        return None
     
     def calculate_growth_rate(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -238,22 +288,32 @@ class NBSIndustrialDataAligner:
         
         # 1. 处理工业品产量数据
         print("\n1. 处理工业品产量数据...")
-        output_file = os.path.join(self.data_dir, 'A020901_工业品产量.json')
-        if os.path.exists(output_file):
-            output_df = self.parse_nbs_json(output_file)
+        output_df = self.load_output_csv()
+        if output_df is None:
+            output_file = os.path.join(self.data_dir, 'A020901_工业品产量.json')
+            if os.path.exists(output_file):
+                output_df = self.parse_nbs_json(output_file)
+        if output_df is not None and len(output_df) > 0:
             print(f"  原始数据: {len(output_df)}条记录")
-            
+
+            if 'date' in output_df.columns:
+                output_df['date'] = pd.to_datetime(output_df['date'])
+            else:
+                output_df['date'] = pd.to_datetime(output_df['time_code'].astype(str), format='%Y%m')
+
             # 计算增长率
+            if 'output_value' in output_df.columns:
+                output_df = output_df.rename(columns={'output_value': 'value'})
             output_df = self.calculate_growth_rate(output_df)
-            
+
             # 对齐到申万行业
             output_df = self.align_to_sw_industry(output_df)
             print(f"  对齐后: {len(output_df)}条记录")
-            
+
             # 聚合到行业级别
             industry_output_df = self.aggregate_to_industry_level(output_df)
             print(f"  行业级别: {len(industry_output_df)}条记录")
-            
+
             results['output'] = {
                 'raw': output_df,
                 'industry': industry_output_df
@@ -364,18 +424,23 @@ class NBSIndustrialDataAligner:
 
 def main():
     """主函数"""
-    aligner = NBSIndustrialDataAligner()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--data-dir", default=None, help="宏观数据目录")
+    parser.add_argument("--output-dir", default="data/processed")
+    args = parser.parse_args()
+
+    aligner = NBSIndustrialDataAligner(data_dir=args.data_dir)
     results = aligner.process_all()
-    
+
     # 保存结果
-    output_dir = 'data/processed'
+    output_dir = args.output_dir
     os.makedirs(output_dir, exist_ok=True)
-    
+
     if 'combined' in results:
         output_file = os.path.join(output_dir, 'nbs_industrial_aligned.parquet')
         results['combined'].to_parquet(output_file, index=False)
         print(f"\n对齐后的数据已保存到: {output_file}")
-        
+
         # 显示样例数据
         print("\n样例数据:")
         print(results['combined'].head(10))
