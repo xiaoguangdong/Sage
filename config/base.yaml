@@ -17,8 +17,8 @@ logging:
 
 data:
   roots:
-    primary: "/Volumes/SPEED/BizData/Stock/sage_primary"
-    secondary: "/Volumes/SPEED/BizData/Stock/sage_secondary"
+    primary: "/Users/dongxg/SourceCode/Sage/data"
+    secondary: "/Volumes/SPEED/BizData/Stock/Sage/data"
   layout:
     raw: "raw"
     processed: "processed"
