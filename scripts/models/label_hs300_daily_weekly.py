@@ -42,13 +42,8 @@ class HS300Labeler:
         # 加载数据
         self.load_data()
 
-        # 平滑参数（可按需调整）
-        self.smooth_window = 10
-        self.smooth_confirm_ratio = {
-            0: 0.8,  # 熊市确认阈值
-            1: 0.8,  # 震荡确认阈值
-            2: 0.9   # 牛市确认阈值（更严格）
-        }
+        # 平滑参数（短段填补）
+        self.short_segment_max = 5
     
     def load_data(self):
         """加载沪深300指数和成分股数据"""
@@ -250,34 +245,34 @@ class HS300Labeler:
 
     def smooth_labels(self, labels):
         """
-        标签平滑：基于最近窗口的状态占比进行确认，未达到阈值则保持上一状态
+        标签平滑：短段填补
+        - 如果某状态被短段(<=short_segment_max)的其他状态打断，
+          且左右两侧状态相同，则用左右状态填补该短段。
         """
-        window = self.smooth_window
-        confirm_ratio = self.smooth_confirm_ratio
-        smoothed = []
+        max_len = self.short_segment_max
+        labels = [int(v) for v in labels]
+        n = len(labels)
 
-        for i in range(len(labels)):
-            start = max(0, i - window + 1)
-            window_labels = labels[start:i + 1]
-            total = len(window_labels)
-            counts = {0: 0, 1: 0, 2: 0}
-            for v in window_labels:
-                counts[int(v)] += 1
+        segments = []
+        start = 0
+        for i in range(1, n):
+            if labels[i] != labels[i - 1]:
+                segments.append((start, i - 1, labels[i - 1]))
+                start = i
+        segments.append((start, n - 1, labels[-1]))
 
-            candidates = []
-            for state, ratio in confirm_ratio.items():
-                if counts[state] / total >= ratio:
-                    candidates.append(state)
+        filled = labels[:]
+        for idx in range(1, len(segments) - 1):
+            s, e, val = segments[idx]
+            prev_val = segments[idx - 1][2]
+            next_val = segments[idx + 1][2]
+            if prev_val == next_val and prev_val != val:
+                length = e - s + 1
+                if length <= max_len:
+                    for j in range(s, e + 1):
+                        filled[j] = prev_val
 
-            if candidates:
-                # 选择占比最高的候选状态
-                chosen = max(candidates, key=lambda s: counts[s])
-            else:
-                chosen = smoothed[-1] if smoothed else labels[i]
-
-            smoothed.append(chosen)
-
-        return smoothed
+        return filled
     
     def calculate_score(self, i):
         """
@@ -470,8 +465,7 @@ class HS300Labeler:
         smoothed = self.smooth_labels(labels)
         self.df['label_original_smooth'] = smoothed
 
-        print(f"✓ 原始标签平滑完成（window={self.smooth_window}, "
-              f"ratio={self.smooth_confirm_ratio})")
+        print(f"✓ 原始标签平滑完成（short_segment_max={self.short_segment_max})")
         print(f"  牛市: {smoothed.count(2)} 天/周")
         print(f"  震荡: {smoothed.count(1)} 天/周")
         print(f"  熊市: {smoothed.count(0)} 天/周")
