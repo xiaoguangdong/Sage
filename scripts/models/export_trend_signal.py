@@ -19,8 +19,8 @@ from scripts.models.label_hs300_daily_weekly import HS300Labeler
 
 
 def export_trend_main_signal(timeframe: str, output_dir: Path, data_dir: str | None = None) -> Path:
-    if timeframe != "daily":
-        raise ValueError("当前仅支持日级别导出，周线请后续启用")
+    if timeframe not in {"daily", "weekly"}:
+        raise ValueError("timeframe 仅支持 daily/weekly")
 
     labeler = HS300Labeler(timeframe=timeframe, data_dir=data_dir)
     labeler.calculate_indicators()
@@ -33,7 +33,7 @@ def export_trend_main_signal(timeframe: str, output_dir: Path, data_dir: str | N
 
     output_dir.mkdir(parents=True, exist_ok=True)
     as_of = df["date"].iloc[-1].strftime("%Y%m%d")
-    output_file = output_dir / f"trend_state_{as_of}.parquet"
+    output_file = output_dir / f"trend_state_{timeframe}_{as_of}.parquet"
 
     output_cols = [
         "trade_date",
@@ -69,7 +69,7 @@ def summarize(output_file: Path) -> None:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--timeframe", default="daily", choices=["daily"])
+    parser.add_argument("--timeframe", default="daily", choices=["daily", "weekly"])
     parser.add_argument("--output-dir", default="data/signals")
     parser.add_argument("--data-dir", default=None, help="数据根目录（tushare）")
     args = parser.parse_args()

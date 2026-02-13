@@ -646,8 +646,12 @@ class HS300Labeler:
         """
         df = self.df
 
-        ma20 = df['ma20']
-        ma60 = df['ma60']
+        if self.timeframe == 'daily':
+            ma20 = df['ma20']
+            ma60 = df['ma60']
+        else:
+            ma20 = df['ma4']
+            ma60 = df['ma12']
         ma_slope = df['ma_slope']
         close = df['close']
         ma_diff_norm = df['ma_diff_norm']
