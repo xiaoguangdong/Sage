@@ -52,6 +52,8 @@ class HS300Labeler:
 
         # 融合参数（原始/ HMM 标签 + 均线确认）
         self.fusion_confirm_days = 3
+        # 默认主信号列
+        self.main_label_col = "label_ma_confirmation"
     
     def load_data(self):
         """加载沪深300指数和成分股数据"""
@@ -604,6 +606,26 @@ class HS300Labeler:
         print(f"  熊市: {fused.count(0)} 天/周")
 
         return fused
+
+    def label_main(self):
+        """主信号：默认使用均线确认"""
+        print("\n" + "=" * 80)
+        print("主信号生成...")
+        print("=" * 80)
+
+        main_col = self.main_label_col
+        if main_col not in self.df.columns:
+            raise ValueError(f"主信号列不存在: {main_col}")
+
+        self.df['label_main'] = self.df[main_col].tolist()
+        labels = self.df['label_main'].tolist()
+
+        print(f"✓ 主信号完成（source={main_col})")
+        print(f"  牛市: {labels.count(2)} 天/周")
+        print(f"  震荡: {labels.count(1)} 天/周")
+        print(f"  熊市: {labels.count(0)} 天/周")
+
+        return labels
     
     def label_hmm(self, mapping_mode: str = "future_return"):
         """方法2：HMM模型（隐马尔可夫）"""
@@ -856,6 +878,7 @@ class HS300Labeler:
             ('HMM模型', 'label_hmm'),
             ('HMM+均线融合', 'label_hmm_fused'),
             ('均线确认', 'label_ma_confirmation'),
+            ('主信号(默认)', 'label_main'),
             ('多均线系统', 'label_multi_ma')
         ]
         
@@ -895,6 +918,7 @@ class HS300Labeler:
             ('HMM模型', 'label_hmm'),
             ('HMM+均线融合', 'label_hmm_fused'),
             ('均线确认', 'label_ma_confirmation'),
+            ('主信号(默认)', 'label_main'),
             ('多均线系统', 'label_multi_ma')
         ]
 
@@ -981,6 +1005,7 @@ class HS300Labeler:
         self.label_ma_confirmation()
         self.label_fused()
         self.label_hmm_fused()
+        self.label_main()
         self.label_multi_ma()
         
         # 5. 生成统计
