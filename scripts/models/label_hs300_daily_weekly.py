@@ -418,7 +418,7 @@ class HS300Labeler:
         
         return labels
     
-    def label_hmm(self):
+    def label_hmm(self, mapping_mode: str = "future_return"):
         """方法2：HMM模型（隐马尔可夫）"""
         print("\n" + "=" * 80)
         print("方法2：HMM模型（隐马尔可夫）...")
@@ -455,9 +455,10 @@ class HS300Labeler:
         features_scaled = scaler.fit_transform(features)
         
         # 训练HMM（4状态）
-        print("训练HMM模型（4状态）...")
+        n_components = 4
+        print(f"训练HMM模型（{n_components}状态）...")
         model = hmm.GaussianHMM(
-            n_components=4,
+            n_components=n_components,
             covariance_type="full",
             n_iter=100,
             random_state=42
@@ -467,28 +468,44 @@ class HS300Labeler:
         # 预测状态
         states = model.predict(features_scaled)
         
-        # 计算每个状态评分
-        state_scores = []
-        for state in range(4):
-            mask = (states == state)
-            if mask.sum() > 0:
-                ret_mean = features[mask, 0].mean()
-                ma_diff_mean = features[mask, 1].mean()
-                ma_slope_mean = features[mask, 4].mean()
-                
-                score = ma_diff_mean * 50 + ma_slope_mean * 30 + ret_mean * 20
-                state_scores.append(score)
-            else:
-                state_scores.append(0)
-        
         # 状态映射
-        sorted_states = sorted(range(4), key=lambda x: state_scores[x], reverse=True)
-        state_mapping = {
-            sorted_states[0]: 2,  # 牛市
-            sorted_states[1]: 2,  # 牛市
-            sorted_states[2]: 1,  # 震荡
-            sorted_states[3]: 0   # 熊市
-        }
+        if mapping_mode == "future_return":
+            horizon = 20 if self.timeframe == 'daily' else 4
+            fwd_ret = df['close'].shift(-horizon) / df['close'] - 1
+            fwd_ret = fwd_ret.loc[df_features.index]
+
+            state_scores = []
+            for state in range(n_components):
+                mask = (states == state)
+                score = fwd_ret[mask].mean() if mask.any() else 0
+                state_scores.append(score)
+
+            # 由未来收益从低到高映射：最差=熊市，最好=牛市，其余=震荡
+            sorted_states = sorted(range(n_components), key=lambda x: state_scores[x])
+            state_mapping = {s: 1 for s in range(n_components)}
+            state_mapping[sorted_states[0]] = 0
+            state_mapping[sorted_states[-1]] = 2
+        else:
+            # 旧规则：按特征评分排序
+            state_scores = []
+            for state in range(n_components):
+                mask = (states == state)
+                if mask.sum() > 0:
+                    ret_mean = features[mask, 0].mean()
+                    ma_diff_mean = features[mask, 1].mean()
+                    ma_slope_mean = features[mask, 4].mean()
+                    score = ma_diff_mean * 50 + ma_slope_mean * 30 + ret_mean * 20
+                else:
+                    score = 0
+                state_scores.append(score)
+
+            sorted_states = sorted(range(n_components), key=lambda x: state_scores[x], reverse=True)
+            state_mapping = {
+                sorted_states[0]: 2,  # 牛市
+                sorted_states[1]: 2,  # 牛市
+                sorted_states[2]: 1,  # 震荡
+                sorted_states[3]: 0   # 熊市
+            }
         
         labels_mapped = [state_mapping[s] for s in states]
         
