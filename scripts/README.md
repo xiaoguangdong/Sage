@@ -8,5 +8,4 @@
 - `scripts/backtest/` 回测运行
 - `scripts/monitoring/` 监控与报告
 
-历史脚本（如 `scripts/macro/`）先保留，后续逐步迁移。
-
+宏观相关脚本已归档至 `scripts/data/macro/`。

@@ -141,7 +141,7 @@ trade_date,ts_code,name,hold_amount,hold_ratio,exchange_code
 
 ### 4.1 检查脚本
 ```bash
-./scripts/macro/check_macro_data.sh
+./scripts/data/macro/check_macro_data.sh
 ```
 
 ### 4.2 检查项

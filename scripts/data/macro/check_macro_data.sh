@@ -1,6 +1,6 @@
 #!/bin/bash
 # 检查宏观数据更新情况
-# 使用方法: ./scripts/macro/check_macro_data.sh
+# 使用方法: ./scripts/data/macro/check_macro_data.sh
 
 echo "=== 宏观数据更新检查 ==="
 echo "检查时间: $(date '+%Y-%m-%d %H:%M:%S')"

@@ -9,8 +9,8 @@
 2. 设置数据源 token（不要写进代码/仓库）：
    - `export TUSHARE_TOKEN=...`
 3. 宏观数据脚本入口：
-   - `./scripts/macro/fetch_all_macro_data.sh`
-   - `./scripts/macro/check_macro_data.sh`
+   - `./scripts/data/macro/fetch_all_macro_data.sh`
+   - `./scripts/data/macro/check_macro_data.sh`
 
 ## 代码结构与职责
 

@@ -58,7 +58,7 @@ SW_Indicator_i = Σ(Weight_ij × NBS_Indicator_j)
 
 ### 2. 映射工具类
 
-**文件路径**：`scripts/macro/industry_mapper.py`
+**文件路径**：`scripts/data/macro/industry_mapper.py`
 
 **主要功能**：
 - 加载映射配置
@@ -84,7 +84,7 @@ sw_data = mapper.map_nbs_data_to_sw(
 
 ### 3. 批量处理脚本
 
-**文件路径**：`scripts/macro/map_nbs_to_sw.py`
+**文件路径**：`scripts/data/macro/map_nbs_to_sw.py`
 
 **功能**：
 - 读取NBS PPI数据
@@ -95,7 +95,7 @@ sw_data = mapper.map_nbs_data_to_sw(
 
 ```bash
 # 运行映射脚本
-python3 scripts/macro/map_nbs_to_sw.py
+python3 scripts/data/macro/map_nbs_to_sw.py
 ```
 
 **输出文件**：`data/tushare/macro/sw_ppi_yoy_YYYYMM.csv`
@@ -110,14 +110,14 @@ python3 scripts/macro/map_nbs_to_sw.py
 
 ### 4. 集成脚本
 
-**文件路径**：`scripts/macro/fetch_all_macro_data.sh`
+**文件路径**：`scripts/data/macro/fetch_all_macro_data.sh`
 
 **功能**：一键获取所有宏观数据并完成映射
 
 **使用方法**：
 
 ```bash
-./scripts/macro/fetch_all_macro_data.sh
+./scripts/data/macro/fetch_all_macro_data.sh
 ```
 
 **处理流程**：

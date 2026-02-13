@@ -3,17 +3,17 @@
 ## 一、已创建的文件
 
 ### 1. 数据获取脚本
-- `scripts/macro/fetch_nbs_data.py` - 国家统计局数据获取
-- `scripts/macro/fetch_tushare_macro.py` - Tushare宏观数据获取
-- `scripts/macro/fetch_northbound.py` - 北向资金数据获取
-- `scripts/macro/fetch_all_macro_data.sh` - 一键获取所有宏观数据
-- `scripts/macro/check_macro_data.sh` - 数据完整性检查
+- `scripts/data/macro/fetch_nbs_data.py` - 国家统计局数据获取
+- `scripts/data/macro/fetch_tushare_macro.py` - Tushare宏观数据获取
+- `scripts/data/macro/fetch_northbound.py` - 北向资金数据获取
+- `scripts/data/macro/fetch_all_macro_data.sh` - 一键获取所有宏观数据
+- `scripts/data/macro/check_macro_data.sh` - 数据完整性检查
 
 ### 2. 定时任务配置
-- `scripts/macro/cron_macro_schedule.conf` - Cron定时任务配置
+- `scripts/data/macro/cron_macro_schedule.conf` - Cron定时任务配置
 
 ### 3. 文档
-- `scripts/macro/README.md` - 宏观数据规范文档
+- `scripts/data/macro/README.md` - 宏观数据规范文档
 
 ## 二、数据目录结构
 
@@ -32,34 +32,34 @@ data/tushare/
 
 **获取NBS数据（上个月）**
 ```bash
-python3 scripts/macro/fetch_nbs_data.py
+python3 scripts/data/macro/fetch_nbs_data.py
 ```
 
 **获取Tushare宏观数据（最近3个月）**
 ```bash
-python3 scripts/macro/fetch_tushare_macro.py
+python3 scripts/data/macro/fetch_tushare_macro.py
 ```
 
 **获取北向资金数据（最近1个月）**
 ```bash
-python3 scripts/macro/fetch_northbound.py
+python3 scripts/data/macro/fetch_northbound.py
 ```
 
 **一键获取所有数据**
 ```bash
-./scripts/macro/fetch_all_macro_data.sh
+./scripts/data/macro/fetch_all_macro_data.sh
 ```
 
 ### 3.2 设置定时任务
 
 **查看配置**
 ```bash
-cat scripts/macro/cron_macro_schedule.conf
+cat scripts/data/macro/cron_macro_schedule.conf
 ```
 
 **添加到crontab**
 ```bash
-crontab scripts/macro/cron_macro_schedule.conf
+crontab scripts/data/macro/cron_macro_schedule.conf
 ```
 
 **编辑crontab**
@@ -69,30 +69,30 @@ crontab -e
 
 ### 3.3 检查数据完整性
 ```bash
-./scripts/macro/check_macro_data.sh
+./scripts/data/macro/check_macro_data.sh
 ```
 
 ## 四、定时任务说明
 
 ### 4.1 每月1日凌晨2点
 - 更新国家统计局数据（PMI等）
-- 命令：`python3 scripts/macro/fetch_nbs_data.py`
+- 命令：`python3 scripts/data/macro/fetch_nbs_data.py`
 
 ### 4.2 每月10日凌晨2点
 - 更新Tushare月度数据（CPI、PPI等）
-- 命令：`python3 scripts/macro/fetch_tushare_macro.py`
+- 命令：`python3 scripts/data/macro/fetch_tushare_macro.py`
 
 ### 4.3 每月16日凌晨2点
 - 更新国家统计局行业数据（固定资产投资、分行业PPI等）
-- 命令：`python3 scripts/macro/fetch_nbs_data.py`
+- 命令：`python3 scripts/data/macro/fetch_nbs_data.py`
 
 ### 4.4 每周五凌晨2点
 - 更新北向资金持仓数据
-- 命令：`python3 scripts/macro/fetch_northbound.py`
+- 命令：`python3 scripts/data/macro/fetch_northbound.py`
 
 ### 4.5 每日凌晨2点15分
 - 更新日度数据（10Y收益率、北向资金流向）
-- 命令：`python3 scripts/macro/fetch_tushare_macro.py`
+- 命令：`python3 scripts/data/macro/fetch_tushare_macro.py`
 
 ## 五、当前状态
 
@@ -139,5 +139,5 @@ crontab -e
 ---
 
 **创建时间**: 2026-02-11
-**脚本位置**: `scripts/macro/`
+**脚本位置**: `scripts/data/macro/`
 **数据目录**: `data/tushare/macro/`
