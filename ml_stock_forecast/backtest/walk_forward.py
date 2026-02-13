@@ -244,7 +244,7 @@ class WalkForwardBacktest:
             # 计算组合收益
             if len(portfolio) > 0:
                 # 计算当日收益率
-                portfolio_return = self._calculate_daily_return(portfolio, df_day)
+                portfolio_return = self._calculate_daily_return(portfolio, df_test, date)
                 returns.append(portfolio_return)
                 
                 # 记录交易
@@ -270,22 +270,41 @@ class WalkForwardBacktest:
         
         return returns, trades
     
-    def _calculate_daily_return(self, portfolio: pd.DataFrame, df_day: pd.DataFrame) -> float:
+    def _calculate_daily_return(self, portfolio: pd.DataFrame, df_test: pd.DataFrame, date) -> float:
         """
         计算当日组合收益
         
         Args:
             portfolio: 组合数据
-            df_day: 当日数据
+            df_test: 测试期数据（包含历史）
+            date: 当前日期
             
         Returns:
             组合收益率
         """
-        # 简化计算：使用前一日收盘价计算收益率
-        # 实际实现需要更复杂的逻辑
-        
-        # 这里简化处理：随机生成收益率
-        return np.random.normal(0.001, 0.02)
+        if 'code' not in df_test.columns and 'stock' in df_test.columns:
+            df_test = df_test.rename(columns={'stock': 'code'})
+
+        df_hist = df_test[df_test['date'] <= date]
+        portfolio_return = 0.0
+        total_weight = portfolio['weight'].sum()
+
+        for _, row in portfolio.iterrows():
+            code = row['code']
+            weight = row['weight']
+            hist = df_hist[df_hist['code'] == code].sort_values('date')
+            if len(hist) < 2:
+                continue
+            prev_close = hist.iloc[-2]['close']
+            curr_close = hist.iloc[-1]['close']
+            if prev_close and prev_close != 0:
+                ret = (curr_close - prev_close) / prev_close
+                portfolio_return += weight * ret
+
+        if total_weight > 0:
+            portfolio_return = portfolio_return / total_weight
+
+        return portfolio_return
     
     def _calculate_metrics(self, returns: List[float], values: List[float]) -> Dict[str, float]:
         """
