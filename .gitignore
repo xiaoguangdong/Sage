@@ -17,6 +17,10 @@ venv*/
 data/
 !scripts/data/
 !scripts/data/**
+!scripts/legacy/
+!scripts/legacy/**
+!scripts/legacy/data/
+!scripts/legacy/data/**
 scripts/data/.DS_Store
 !sage_core/data/
 !sage_core/data/**
