@@ -1,0 +1,37 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+venv/
+venv*/
+.venv/
+
+# Data / outputs
+data/
+logs/
+session/
+checkpoints/
+images/
+*.csv
+*.parquet
+*.log
+*.pdf
+
+# Tooling / local agent state
+.iflow/
+refs_docs/
+
+# Local secrets / accounts
+config/*.json
+!config/*.example.json
+
+# Local backups
+.git.bak_*/
+.git.broken_*/

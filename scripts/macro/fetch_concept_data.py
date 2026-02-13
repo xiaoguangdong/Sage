@@ -1,0 +1,289 @@
+#!/usr/bin/env python3
+# -u
+# -*- coding: utf-8 -*-
+
+"""
+获取东方财富概念板块数据
+包括：概念指数、成分股、日线行情
+"""
+
+import pandas as pd
+import tushare as ts
+import time
+from pathlib import Path
+from datetime import datetime, timedelta
+
+from tushare_auth import get_tushare_token
+
+def get_with_retry(pro, api_name, params, max_retries=3, sleep_time=40):
+    """带重试机制的API请求"""
+    for attempt in range(max_retries):
+        try:
+            api_func = getattr(pro, api_name)
+            df = api_func(**params)
+            time.sleep(sleep_time)
+            return df
+        except Exception as e:
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 30
+                print(f"  请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
+                print(f"  等待 {wait_time} 秒后重试...")
+                time.sleep(wait_time)
+            else:
+                print(f"  请求失败，已达到最大重试次数: {e}")
+                return None
+
+
+def fetch_concept_index(pro, output_dir, start_date='20200101'):
+    """获取概念指数历史数据"""
+    print("\n" + "=" * 80)
+    print("步骤1: 获取概念指数历史数据")
+    print("=" * 80)
+
+    output_file = output_dir / 'dc_index.parquet'
+    progress_file = output_dir / 'dc_index_progress.txt'
+
+    # 加载进度
+    if progress_file.exists():
+        with open(progress_file, 'r') as f:
+            last_date = f.read().strip()
+        print(f"找到进度文件，上次获取到: {last_date}")
+        start_date = str(int(last_date) + 1)
+    else:
+        print(f"无进度文件，从 {start_date} 开始")
+
+    # 加载已有数据
+    if output_file.exists():
+        existing_data = pd.read_parquet(output_file)
+        print(f"已有数据: {len(existing_data)} 条记录")
+        if len(existing_data) > 0:
+            existing_dates = set(existing_data['trade_date'].unique())
+        else:
+            existing_dates = set()
+    else:
+        existing_data = pd.DataFrame()
+        existing_dates = set()
+
+    # 生成日期列表
+    from datetime import datetime, timedelta
+    start_dt = datetime.strptime(start_date, '%Y%m%d')
+    end_dt = datetime.now() - timedelta(days=1)  # 昨天为止
+    date_list = []
+    current_dt = start_dt
+    while current_dt <= end_dt:
+        date_str = current_dt.strftime('%Y%m%d')
+        if date_str not in existing_dates:
+            date_list.append(date_str)
+        current_dt += timedelta(days=1)
+
+    print(f"需要获取 {len(date_list)} 个交易日的概念指数数据")
+
+    all_index = []
+    total_dates = len(date_list)
+
+    for i, trade_date in enumerate(date_list):
+        print(f"\n[{i+1}/{total_dates}] 获取 {trade_date} 的概念指数数据...")
+
+        offset = 0
+        page = 1
+        page_data = []
+
+        while True:
+            print(f"  第{page}页获取 (offset={offset})...", end=' ')
+            df = get_with_retry(
+                pro, 'dc_index',
+                {'trade_date': trade_date, 'offset': offset},
+                max_retries=3,
+                sleep_time=40
+            )
+
+            if df is not None and not df.empty:
+                print(f"成功获取 {len(df)} 条记录")
+                page_data.append(df)
+                offset += len(df)
+                page += 1
+
+                # dc_index单次最大5000条
+                if len(df) < 5000:
+                    print(f"  {trade_date} 数据获取完成")
+                    break
+            else:
+                print(f"失败")
+                break
+
+        if page_data:
+            date_df = pd.concat(page_data, ignore_index=True)
+            all_index.append(date_df)
+            existing_dates.add(trade_date)
+
+            # 定期保存
+            if len(all_index) >= 10:
+                new_data = pd.concat(all_index, ignore_index=True)
+                combined = pd.concat([existing_data, new_data], ignore_index=True)
+                combined.to_parquet(output_file, index=False)
+                print(f"  已保存到 {output_file}")
+                existing_data = combined
+                all_index = []
+
+            # 更新进度
+            with open(progress_file, 'w') as f:
+                f.write(trade_date)
+        else:
+            print(f"  {trade_date} 未获取到数据")
+
+    # 保存剩余数据
+    if all_index:
+        new_data = pd.concat(all_index, ignore_index=True)
+        combined = pd.concat([existing_data, new_data], ignore_index=True)
+        combined.to_parquet(output_file, index=False)
+        print(f"\n已保存到 {output_file}")
+
+    # 最终统计
+    final_df = pd.read_parquet(output_file)
+    print(f"\n总记录数: {len(final_df)}")
+    print(f"日期范围: {final_df['trade_date'].min()} ~ {final_df['trade_date'].max()}")
+    print(f"概念数量: {final_df['ts_code'].nunique()}")
+
+    return final_df
+
+
+def fetch_concept_members(pro, output_dir, start_date='20200101'):
+    """获取概念成分股历史数据"""
+    print("\n" + "=" * 80)
+    print("步骤2: 获取概念成分股历史数据")
+    print("=" * 80)
+
+    output_file = output_dir / 'dc_member.parquet'
+    progress_file = output_dir / 'dc_member_progress.txt'
+
+    # 加载进度
+    if progress_file.exists():
+        with open(progress_file, 'r') as f:
+            lines = f.read().strip().split(',')
+            if len(lines) >= 2:
+                last_concept = lines[0]
+                last_date = lines[1]
+                print(f"找到进度文件，上次获取到: 概念={last_concept}, 日期={last_date}")
+                start_date = last_date
+                start_concept = last_concept
+            else:
+                start_date = '20200101'
+                start_concept = None
+    else:
+        print(f"无进度文件，从 {start_date} 开始")
+        start_concept = None
+
+    # 加载已有数据
+    if output_file.exists():
+        existing_data = pd.read_parquet(output_file)
+        print(f"已有数据: {len(existing_data)} 条记录")
+    else:
+        existing_data = pd.DataFrame()
+        print(f"无已有数据")
+
+    # 先获取所有概念列表（从dc_index中）
+    index_file = output_dir / 'dc_index.parquet'
+    if not index_file.exists():
+        print("请先获取概念指数数据")
+        return
+
+    index_df = pd.read_parquet(index_file)
+    concept_list = sorted(index_df['ts_code'].unique())
+    print(f"概念总数: {len(concept_list)}")
+
+    # 如果有进度，找到起始概念
+    if start_concept:
+        try:
+            start_idx = concept_list.index(start_concept)
+        except ValueError:
+            start_idx = 0
+    else:
+        start_idx = 0
+
+    # 生成日期列表
+    from datetime import datetime, timedelta
+    start_dt = datetime.strptime(start_date, '%Y%m%d')
+    end_dt = datetime.now() - timedelta(days=1)
+    date_list = []
+    current_dt = start_dt
+    while current_dt <= end_dt:
+        date_str = current_dt.strftime('%Y%m%d')
+        date_list.append(date_str)
+        current_dt += timedelta(days=1)
+
+    print(f"需要获取 {len(date_list)} 个交易日的成分股数据")
+
+    all_members = []
+    total_concepts = len(concept_list)
+
+    for i in range(start_idx, total_concepts):
+        concept_code = concept_list[i]
+
+        for j, trade_date in enumerate(date_list):
+            print(f"\n[{i+1}/{total_concepts}] 概念 {concept_code} [{j+1}/{len(date_list)}] {trade_date}...", end=' ')
+
+            df = get_with_retry(
+                pro, 'dc_member',
+                {'ts_code': concept_code, 'trade_date': trade_date},
+                max_retries=3,
+                sleep_time=40
+            )
+
+            if df is not None and not df.empty:
+                print(f"成功获取 {len(df)} 条记录")
+                all_members.append(df)
+
+                # 定期保存
+                if len(all_members) >= 100:
+                    new_data = pd.concat(all_members, ignore_index=True)
+                    combined = pd.concat([existing_data, new_data], ignore_index=True)
+                    combined.to_parquet(output_file, index=False)
+                    print(f"  已保存到 {output_file}")
+                    existing_data = combined
+                    all_members = []
+            else:
+                print(f"无数据")
+
+            # 更新进度
+            with open(progress_file, 'w') as f:
+                f.write(f"{concept_code},{trade_date}")
+
+    # 保存剩余数据
+    if all_members:
+        new_data = pd.concat(all_members, ignore_index=True)
+        combined = pd.concat([existing_data, new_data], ignore_index=True)
+        combined.to_parquet(output_file, index=False)
+        print(f"\n已保存到 {output_file}")
+
+    # 最终统计
+    final_df = pd.read_parquet(output_file)
+    print(f"\n总记录数: {len(final_df)}")
+    print(f"日期范围: {final_df['trade_date'].min()} ~ {final_df['trade_date'].max()}")
+    print(f"概念数量: {final_df['ts_code'].nunique()}")
+    print(f"成分股数量: {final_df['con_code'].nunique()}")
+
+
+def main():
+    print("=" * 80)
+    print("获取东方财富概念板块数据")
+    print("=" * 80)
+
+    pro = ts.pro_api(get_tushare_token())
+
+    # 输出目录
+    output_dir = Path('data/tushare/concepts')
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # 步骤1: 获取概念指数历史数据
+    fetch_concept_index(pro, output_dir, start_date='20200101')
+
+    # 步骤2: 获取概念成分股历史数据
+    fetch_concept_members(pro, output_dir, start_date='20200101')
+
+    print("\n" + "=" * 80)
+    print("所有数据获取完成")
+    print("=" * 80)
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,844 @@
+# 申万SW2021二级行业与国家统计局(NBS)行业分类映射配置
+# 
+# 说明：
+# 1. 此映射表用于将国家统计局宏观数据映射到申万二级行业
+# 2. 权重表示该NBS行业对申万二级行业的贡献度
+# 3. weights和为1.0
+#
+# 数据来源：
+# - 申万SW2021二级行业：134个
+# - 国家统计局行业分类：GB/T 4754-2017
+
+# 申万二级行业 -> NBS行业映射
+sw_l2_to_nbs:
+  # 农林牧渔（一级）
+  "种植业":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.40
+    - nbs_industry: "食品制造业"
+      weight: 0.30
+    - nbs_industry: "其他制造业"
+      weight: 0.30
+  
+  "渔业":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.50
+    - nbs_industry: "食品制造业"
+      weight: 0.50
+  
+  "林业Ⅱ":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.30
+    - nbs_industry: "木材加工和木、竹、藤、棕、草制品业"
+      weight: 0.40
+    - nbs_industry: "造纸和纸制品业"
+      weight: 0.30
+  
+  "饲料":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.60
+    - nbs_industry: "食品制造业"
+      weight: 0.40
+  
+  "农产品加工":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.70
+    - nbs_industry: "食品制造业"
+      weight: 0.30
+  
+  "养殖业":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.50
+    - nbs_industry: "食品制造业"
+      weight: 0.30
+    - nbs_industry: "医药制造业"
+      weight: 0.20
+  
+  "动物保健Ⅱ":
+    - nbs_industry: "医药制造业"
+      weight: 0.80
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.20
+  
+  "农业综合Ⅱ":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.40
+    - nbs_industry: "食品制造业"
+      weight: 0.30
+    - nbs_industry: "其他制造业"
+      weight: 0.30
+  
+  # 基础化工（一级）
+  "化学原料":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.90
+    - nbs_industry: "石油、煤炭及其他燃料加工业"
+      weight: 0.10
+  
+  "化学制品":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.85
+    - nbs_industry: "化学纤维制造业"
+      weight: 0.15
+  
+  "化学纤维":
+    - nbs_industry: "化学纤维制造业"
+      weight: 0.80
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.20
+  
+  "塑料":
+    - nbs_industry: "橡胶和塑料制品业"
+      weight: 0.85
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.15
+  
+  "橡胶":
+    - nbs_industry: "橡胶和塑料制品业"
+      weight: 0.85
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.15
+  
+  "农化制品":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.80
+    - nbs_industry: "医药制造业"
+      weight: 0.20
+  
+  "非金属材料Ⅱ":
+    - nbs_industry: "非金属矿物制品业"
+      weight: 0.70
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.30
+  
+  # 钢铁（一级）
+  "冶钢原料":
+    - nbs_industry: "黑色金属矿采选业"
+      weight: 0.60
+    - nbs_industry: "黑色金属冶炼和压延加工业"
+      weight: 0.40
+  
+  "普钢":
+    - nbs_industry: "黑色金属冶炼和压延加工业"
+      weight: 0.90
+    - nbs_industry: "黑色金属矿采选业"
+      weight: 0.10
+  
+  "特钢Ⅱ":
+    - nbs_industry: "黑色金属冶炼和压延加工业"
+      weight: 0.85
+    - nbs_industry: "金属制品业"
+      weight: 0.15
+  
+  # 有色金属（一级）
+  "金属新材料":
+    - nbs_industry: "有色金属冶炼和压延加工业"
+      weight: 0.60
+    - nbs_industry: "金属制品业"
+      weight: 0.40
+  
+  "工业金属":
+    - nbs_industry: "有色金属冶炼和压延加工业"
+      weight: 0.85
+    - nbs_industry: "有色金属矿采选业"
+      weight: 0.15
+  
+  "贵金属":
+    - nbs_industry: "有色金属矿采选业"
+      weight: 0.70
+    - nbs_industry: "有色金属冶炼和压延加工业"
+      weight: 0.30
+  
+  "小金属":
+    - nbs_industry: "有色金属冶炼和压延加工业"
+      weight: 0.80
+    - nbs_industry: "有色金属矿采选业"
+      weight: 0.20
+  
+  "能源金属":
+    - nbs_industry: "有色金属矿采选业"
+      weight: 0.60
+    - nbs_industry: "有色金属冶炼和压延加工业"
+      weight: 0.40
+  
+  # 电子（一级）
+  "半导体":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.85
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.15
+  
+  "元件":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.80
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.20
+  
+  "光学光电子":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.75
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.25
+  
+  "其他电子Ⅱ":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.70
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.30
+  
+  "消费电子":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.80
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.20
+  
+  "电子化学品Ⅱ":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.70
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.30
+  
+  # 汽车（一级）
+  "汽车零部件":
+    - nbs_industry: "汽车制造业"
+      weight: 0.50
+    - nbs_industry: "金属制品业"
+      weight: 0.30
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.20
+  
+  "汽车服务":
+    - nbs_industry: "汽车制造业"
+      weight: 0.30
+    - nbs_industry: "批发和零售业"
+      weight: 0.70
+  
+  "摩托车及其他":
+    - nbs_industry: "汽车制造业"
+      weight: 0.80
+    - nbs_industry: "金属制品业"
+      weight: 0.20
+  
+  "乘用车":
+    - nbs_industry: "汽车制造业"
+      weight: 0.90
+    - nbs_industry: "金属制品业"
+      weight: 0.10
+  
+  "商用车":
+    - nbs_industry: "汽车制造业"
+      weight: 0.90
+    - nbs_industry: "金属制品业"
+      weight: 0.10
+  
+  # 家用电器（一级）
+  "白色家电":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.90
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.10
+  
+  "黑色家电":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.85
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.15
+  
+  "小家电":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.80
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.20
+  
+  "厨卫电器":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.85
+    - nbs_industry: "金属制品业"
+      weight: 0.15
+  
+  "照明设备Ⅱ":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.70
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.30
+  
+  "家电零部件Ⅱ":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.60
+    - nbs_industry: "金属制品业"
+      weight: 0.40
+  
+  "其他家电Ⅱ":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.60
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.40
+  
+  # 食品饮料（一级）
+  "食品加工":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.60
+    - nbs_industry: "食品制造业"
+      weight: 0.40
+  
+  "白酒Ⅱ":
+    - nbs_industry: "酒、饮料和精制茶制造业"
+      weight: 0.95
+    - nbs_industry: "农副食品加工业"
+      weight: 0.05
+  
+  "非白酒":
+    - nbs_industry: "酒、饮料和精制茶制造业"
+      weight: 0.80
+    - nbs_industry: "食品制造业"
+      weight: 0.20
+  
+  "饮料乳品":
+    - nbs_industry: "酒、饮料和精制茶制造业"
+      weight: 0.70
+    - nbs_industry: "食品制造业"
+      weight: 0.30
+  
+  "休闲食品":
+    - nbs_industry: "食品制造业"
+      weight: 0.80
+    - nbs_industry: "农副食品加工业"
+      weight: 0.20
+  
+  "调味发酵品Ⅱ":
+    - nbs_industry: "食品制造业"
+      weight: 0.85
+    - nbs_industry: "农副食品加工业"
+      weight: 0.15
+  
+  # 纺织服饰（一级）
+  "纺织制造":
+    - nbs_industry: "纺织业"
+      weight: 0.70
+    - nbs_industry: "化学纤维制造业"
+      weight: 0.30
+  
+  "服装家纺":
+    - nbs_industry: "纺织服装、服饰业"
+      weight: 0.80
+    - nbs_industry: "纺织业"
+      weight: 0.20
+  
+  "饰品":
+    - nbs_industry: "文教、工美、体育和娱乐用品制造业"
+      weight: 0.60
+    - nbs_industry: "金属制品业"
+      weight: 0.40
+  
+  # 轻工制造（一级）
+  "造纸":
+    - nbs_industry: "造纸和纸制品业"
+      weight: 0.90
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.10
+  
+  "包装印刷":
+    - nbs_industry: "印刷和记录媒介复制业"
+      weight: 0.70
+    - nbs_industry: "造纸和纸制品业"
+      weight: 0.30
+  
+  "家居用品":
+    - nbs_industry: "家具制造业"
+      weight: 0.50
+    - nbs_industry: "木材加工和木、竹、藤、棕、草制品业"
+      weight: 0.30
+    - nbs_industry: "金属制品业"
+      weight: 0.20
+  
+  "文娱用品":
+    - nbs_industry: "文教、工美、体育和娱乐用品制造业"
+      weight: 0.70
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.30
+  
+  # 医药生物（一级）
+  "化学制药":
+    - nbs_industry: "医药制造业"
+      weight: 0.90
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.10
+  
+  "中药Ⅱ":
+    - nbs_industry: "医药制造业"
+      weight: 0.85
+    - nbs_industry: "农副食品加工业"
+      weight: 0.15
+  
+  "生物制品":
+    - nbs_industry: "医药制造业"
+      weight: 0.95
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.05
+  
+  "医药商业":
+    - nbs_industry: "医药制造业"
+      weight: 0.30
+    - nbs_industry: "批发业"
+      weight: 0.70
+  
+  "医疗器械":
+    - nbs_industry: "医药制造业"
+      weight: 0.60
+    - nbs_industry: "专用设备制造业"
+      weight: 0.40
+  
+  "医疗服务":
+    - nbs_industry: "卫生"
+      weight: 0.70
+    - nbs_industry: "医药制造业"
+      weight: 0.30
+  
+  # 公用事业（一级）
+  "电力":
+    - nbs_industry: "电力、热力生产和供应业"
+      weight: 1.0
+  
+  "燃气Ⅱ":
+    - nbs_industry: "燃气生产和供应业"
+      weight: 1.0
+  
+  # 交通运输（一级）
+  "物流":
+    - nbs_industry: "装卸搬运和仓储业"
+      weight: 0.60
+    - nbs_industry: "道路运输业"
+      weight: 0.40
+  
+  "铁路公路":
+    - nbs_industry: "铁路运输业"
+      weight: 0.50
+    - nbs_industry: "道路运输业"
+      weight: 0.50
+  
+  "航空机场":
+    - nbs_industry: "航空运输业"
+      weight: 0.70
+    - nbs_industry: "装卸搬运和仓储业"
+      weight: 0.30
+  
+  "航运港口":
+    - nbs_industry: "水上运输业"
+      weight: 0.70
+    - nbs_industry: "装卸搬运和仓储业"
+      weight: 0.30
+  
+  # 房地产（一级）
+  "房地产开发":
+    - nbs_industry: "非金属矿物制品业"
+      weight: 0.40
+    - nbs_industry: "金属制品业"
+      weight: 0.20
+    - nbs_industry: "土木工程建筑业"
+      weight: 0.40
+  
+  "房地产服务":
+    - nbs_industry: "建筑装饰、装修和其他建筑业"
+      weight: 0.60
+    - nbs_industry: "房地产业"
+      weight: 0.40
+  
+  # 商贸零售（一级）
+  "贸易Ⅱ":
+    - nbs_industry: "批发业"
+      weight: 0.80
+    - nbs_industry: "零售业"
+      weight: 0.20
+  
+  "一般零售":
+    - nbs_industry: "零售业"
+      weight: 0.90
+    - nbs_industry: "批发业"
+      weight: 0.10
+  
+  "专业连锁Ⅱ":
+    - nbs_industry: "零售业"
+      weight: 0.80
+    - nbs_industry: "批发业"
+      weight: 0.20
+  
+  "互联网电商":
+    - nbs_industry: "批发业"
+      weight: 0.60
+    - nbs_industry: "零售业"
+      weight: 0.40
+  
+  # 社会服务（一级）
+  "专业服务":
+    - nbs_industry: "商务服务业"
+      weight: 0.70
+    - nbs_industry: "专业技术服务业"
+      weight: 0.30
+  
+  "酒店餐饮":
+    - nbs_industry: "住宿业"
+      weight: 0.50
+    - nbs_industry: "餐饮业"
+      weight: 0.50
+  
+  "旅游及景区":
+    - nbs_industry: "住宿业"
+      weight: 0.40
+    - nbs_industry: "餐饮业"
+      weight: 0.30
+    - nbs_industry: "文化艺术业"
+      weight: 0.30
+  
+  "教育":
+    - nbs_industry: "教育"
+      weight: 1.0
+  
+  # 银行（一级）
+  "国有大型银行Ⅱ":
+    - nbs_industry: "货币金融服务"
+      weight: 0.80
+    - nbs_industry: "资本市场服务"
+      weight: 0.20
+  
+  "股份制银行Ⅱ":
+    - nbs_industry: "货币金融服务"
+      weight: 0.80
+    - nbs_industry: "资本市场服务"
+      weight: 0.20
+  
+  "城商行Ⅱ":
+    - nbs_industry: "货币金融服务"
+      weight: 0.85
+    - nbs_industry: "资本市场服务"
+      weight: 0.15
+  
+  "农商行Ⅱ":
+    - nbs_industry: "货币金融服务"
+      weight: 0.90
+    - nbs_industry: "资本市场服务"
+      weight: 0.10
+  
+  # 非银金融（一级）
+  "证券Ⅱ":
+    - nbs_industry: "资本市场服务"
+      weight: 0.90
+    - nbs_industry: "其他金融业"
+      weight: 0.10
+  
+  "保险Ⅱ":
+    - nbs_industry: "保险业"
+      weight: 0.95
+    - nbs_industry: "其他金融业"
+      weight: 0.05
+  
+  "多元金融":
+    - nbs_industry: "其他金融业"
+      weight: 0.60
+    - nbs_industry: "资本市场服务"
+      weight: 0.40
+  
+  # 综合（一级）
+  "综合Ⅱ":
+    - nbs_industry: "其他制造业"
+      weight: 0.40
+    - nbs_industry: "废弃资源综合利用业"
+      weight: 0.30
+    - nbs_industry: "金属制品、机械和设备修理业"
+      weight: 0.30
+  
+  # 建筑材料（一级）
+  "水泥":
+    - nbs_industry: "非金属矿物制品业"
+      weight: 0.90
+    - nbs_industry: "非金属矿采选业"
+      weight: 0.10
+  
+  "玻璃玻纤":
+    - nbs_industry: "非金属矿物制品业"
+      weight: 0.80
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.20
+  
+  "装修建材":
+    - nbs_industry: "非金属矿物制品业"
+      weight: 0.60
+    - nbs_industry: "金属制品业"
+      weight: 0.40
+  
+  # 建筑装饰（一级）
+  "房屋建设Ⅱ":
+    - nbs_industry: "房屋建筑业"
+      weight: 0.90
+    - nbs_industry: "土木工程建筑业"
+      weight: 0.10
+  
+  "装修装饰Ⅱ":
+    - nbs_industry: "建筑装饰、装修和其他建筑业"
+      weight: 0.85
+    - nbs_industry: "建筑安装业"
+      weight: 0.15
+  
+  "基础建设":
+    - nbs_industry: "土木工程建筑业"
+      weight: 0.80
+    - nbs_industry: "建筑装饰、装修和其他建筑业"
+      weight: 0.20
+  
+  "专业工程":
+    - nbs_industry: "专业工程"
+      weight: 0.70
+    - nbs_industry: "土木工程建筑业"
+      weight: 0.30
+  
+  "工程咨询服务Ⅱ":
+    - nbs_industry: "专业技术服务业"
+      weight: 0.70
+    - nbs_industry: "商务服务业"
+      weight: 0.30
+  
+  # 电力设备（一级）
+  "电机Ⅱ":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.90
+    - nbs_industry: "通用设备制造业"
+      weight: 0.10
+  
+  "其他电源设备Ⅱ":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.80
+    - nbs_industry: "通用设备制造业"
+      weight: 0.20
+  
+  "光伏设备":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.70
+    - nbs_industry: "专用设备制造业"
+      weight: 0.30
+  
+  "风电设备":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.70
+    - nbs_industry: "专用设备制造业"
+      weight: 0.30
+  
+  "电池":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.75
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.25
+  
+  "电网设备":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.85
+    - nbs_industry: "专用设备制造业"
+      weight: 0.15
+  
+  # 机械设备（一级）
+  "通用设备":
+    - nbs_industry: "通用设备制造业"
+      weight: 0.90
+    - nbs_industry: "金属制品业"
+      weight: 0.10
+  
+  "专用设备":
+    - nbs_industry: "专用设备制造业"
+      weight: 0.90
+    - nbs_industry: "通用设备制造业"
+      weight: 0.10
+  
+  "轨交设备Ⅱ":
+    - nbs_industry: "铁路、船舶、航空航天和其他运输设备制造业"
+      weight: 0.80
+    - nbs_industry: "专用设备制造业"
+      weight: 0.20
+  
+  "工程机械":
+    - nbs_industry: "专用设备制造业"
+      weight: 0.80
+    - nbs_industry: "通用设备制造业"
+      weight: 0.20
+  
+  "自动化设备":
+    - nbs_industry: "专用设备制造业"
+      weight: 0.75
+    - nbs_industry: "通用设备制造业"
+      weight: 0.25
+  
+  # 国防军工（一级）
+  "航天装备Ⅱ":
+    - nbs_industry: "铁路、船舶、航空航天和其他运输设备制造业"
+      weight: 0.85
+    - nbs_industry: "专用设备制造业"
+      weight: 0.15
+  
+  "航空装备Ⅱ":
+    - nbs_industry: "铁路、船舶、航空航天和其他运输设备制造业"
+      weight: 0.85
+    - nbs_industry: "专用设备制造业"
+      weight: 0.15
+  
+  "地面兵装Ⅱ":
+    - nbs_industry: "专用设备制造业"
+      weight: 0.70
+    - nbs_industry: "金属制品业"
+      weight: 0.30
+  
+  "航海装备Ⅱ":
+    - nbs_industry: "铁路、船舶、航空航天和其他运输设备制造业"
+      weight: 0.80
+    - nbs_industry: "专用设备制造业"
+      weight: 0.20
+  
+  "军工电子Ⅱ":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.70
+    - nbs_industry: "专用设备制造业"
+      weight: 0.30
+  
+  # 计算机（一级）
+  "计算机设备":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.90
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.10
+  
+  "IT服务Ⅱ":
+    - nbs_industry: "软件和信息技术服务业"
+      weight: 0.80
+    - nbs_industry: "互联网和相关服务"
+      weight: 0.20
+  
+  "软件开发":
+    - nbs_industry: "软件和信息技术服务业"
+      weight: 0.90
+    - nbs_industry: "互联网和相关服务"
+      weight: 0.10
+  
+  # 传媒（一级）
+  "游戏Ⅱ":
+    - nbs_industry: "软件和信息技术服务业"
+      weight: 0.60
+    - nbs_industry: "互联网和相关服务"
+      weight: 0.40
+  
+  "广告营销":
+    - nbs_industry: "商务服务业"
+      weight: 0.60
+    - nbs_industry: "互联网和相关服务"
+      weight: 0.40
+  
+  "影视院线":
+    - nbs_industry: "广播、电视、电影和录音制作业"
+      weight: 0.70
+    - nbs_industry: "文化艺术业"
+      weight: 0.30
+  
+  "数字媒体":
+    - nbs_industry: "互联网和相关服务"
+      weight: 0.60
+    - nbs_industry: "软件和信息技术服务业"
+      weight: 0.40
+  
+  "出版":
+    - nbs_industry: "新闻和出版业"
+      weight: 0.90
+    - nbs_industry: "文化艺术业"
+      weight: 0.10
+  
+  "电视广播Ⅱ":
+    - nbs_industry: "广播、电视、电影和录音制作业"
+      weight: 0.85
+    - nbs_industry: "新闻和出版业"
+      weight: 0.15
+  
+  # 通信（一级）
+  "通信服务":
+    - nbs_industry: "电信、广播电视和卫星传输服务"
+      weight: 0.80
+    - nbs_industry: "互联网和相关服务"
+      weight: 0.20
+  
+  "通信设备":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.85
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.15
+  
+  # 煤炭（一级）
+  "煤炭开采":
+    - nbs_industry: "煤炭开采和洗选业"
+      weight: 0.90
+    - nbs_industry: "石油、煤炭及其他燃料加工业"
+      weight: 0.10
+  
+  "焦炭Ⅱ":
+    - nbs_industry: "石油、煤炭及其他燃料加工业"
+      weight: 0.80
+    - nbs_industry: "煤炭开采和洗选业"
+      weight: 0.20
+  
+  # 石油石化（一级）
+  "油气开采Ⅱ":
+    - nbs_industry: "石油和天然气开采业"
+      weight: 0.90
+    - nbs_industry: "其他采矿业"
+      weight: 0.10
+  
+  "油服工程":
+    - nbs_industry: "石油和天然气开采业"
+      weight: 0.60
+    - nbs_industry: "专用设备制造业"
+      weight: 0.40
+  
+  "炼化及贸易":
+    - nbs_industry: "石油、煤炭及其他燃料加工业"
+      weight: 0.80
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.20
+  
+  # 环保（一级）
+  "环境治理":
+    - nbs_industry: "生态保护和环境治理业"
+      weight: 0.70
+    - nbs_industry: "水的生产和供应业"
+      weight: 0.30
+  
+  "环保设备Ⅱ":
+    - nbs_industry: "专用设备制造业"
+      weight: 0.70
+    - nbs_industry: "通用设备制造业"
+      weight: 0.30
+  
+  # 美容护理（一级）
+  "个护用品":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.60
+    - nbs_industry: "文教、工美、体育和娱乐用品制造业"
+      weight: 0.40
+  
+  "化妆品":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.70
+    - nbs_industry: "医药制造业"
+      weight: 0.30
+  
+  "医疗美容":
+    - nbs_industry: "卫生"
+      weight: 0.60
+    - nbs_industry: "医药制造业"
+      weight: 0.40
+
+# 配置元数据
+metadata:
+  version: "1.0"
+  level: "L2"
+  created_date: "2026-02-11"
+  description: "申万SW2021二级行业与国家统计局GB/T 4754-2017行业分类映射配置"
+  notes:
+    - 此映射表基于行业知识构建，权重为经验值
+    - 共映射了134个申万二级行业
+    - 部分二级行业可能没有对应的NBS数据
+    - 建议每季度根据最新财报数据更新权重
+  source:
+    - 申万SW2021二级行业分类
+    - 国家统计局GB/T 4754-2017行业分类

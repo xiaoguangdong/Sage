@@ -1,0 +1,411 @@
+# 申万SW2021一级行业与国家统计局(NBS)行业分类映射配置
+# 
+# 说明：
+# 1. 此映射表用于将国家统计局宏观数据映射到申万行业
+# 2. 权重表示该NBS行业对申万行业的贡献度
+# 3. weights和为1.0
+# 4. 未来如果有主营业务分部数据，可以升级为动态权重矩阵
+#
+# 数据来源：
+# - 申万SW2021一级行业：31个
+# - 国家统计局行业分类：GB/T 4754-2017
+
+# 申万行业 -> NBS行业映射
+sw_to_nbs:
+  # 农林牧渔
+  "农林牧渔":
+    - nbs_industry: "农副食品加工业"
+      weight: 0.40
+      nbs_code: "C06"
+    - nbs_industry: "食品制造业"
+      weight: 0.20
+      nbs_code: "C07"
+    - nbs_industry: "酒、饮料和精制茶制造业"
+      weight: 0.15
+      nbs_code: "C08"
+    - nbs_industry: "纺织业"
+      weight: 0.10
+      nbs_code: "C09"
+    - nbs_industry: "其他制造业"
+      weight: 0.15
+      nbs_code: "C27"
+
+  # 基础化工
+  "基础化工":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.60
+      nbs_code: "C13"
+    - nbs_industry: "化学纤维制造业"
+      weight: 0.25
+      nbs_code: "C15"
+    - nbs_industry: "石油、煤炭及其他燃料加工业"
+      weight: 0.10
+      nbs_code: "C12"
+    - nbs_industry: "橡胶和塑料制品业"
+      weight: 0.05
+      nbs_code: "C19"
+
+  # 钢铁
+  "钢铁":
+    - nbs_industry: "黑色金属冶炼和压延加工业"
+      weight: 0.70
+      nbs_code: "C17"
+    - nbs_industry: "黑色金属矿采选业"
+      weight: 0.30
+      nbs_code: "C03"
+
+  # 有色金属
+  "有色金属":
+    - nbs_industry: "有色金属冶炼和压延加工业"
+      weight: 0.65
+      nbs_code: "C18"
+    - nbs_industry: "有色金属矿采选业"
+      weight: 0.35
+      nbs_code: "C04"
+
+  # 电子
+  "电子":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.70
+      nbs_code: "C25"
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.20
+      nbs_code: "C24"
+    - nbs_industry: "仪器仪表制造业"
+      weight: 0.10
+      nbs_code: "C26"
+
+  # 汽车
+  "汽车":
+    - nbs_industry: "汽车制造业"
+      weight: 0.80
+      nbs_code: "C22"
+    - nbs_industry: "金属制品业"
+      weight: 0.10
+      nbs_code: "C19"
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.10
+      nbs_code: "C24"
+
+  # 家用电器
+  "家用电器":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.85
+      nbs_code: "C24"
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.15
+      nbs_code: "C25"
+
+  # 食品饮料
+  "食品饮料":
+    - nbs_industry: "食品制造业"
+      weight: 0.35
+      nbs_code: "C07"
+    - nbs_industry: "酒、饮料和精制茶制造业"
+      weight: 0.35
+      nbs_code: "C08"
+    - nbs_industry: "农副食品加工业"
+      weight: 0.30
+      nbs_code: "C06"
+
+  # 纺织服饰
+  "纺织服饰":
+    - nbs_industry: "纺织业"
+      weight: 0.50
+      nbs_code: "C09"
+    - nbs_industry: "纺织服装、服饰业"
+      weight: 0.40
+      nbs_code: "C10"
+    - nbs_industry: "化学纤维制造业"
+      weight: 0.10
+      nbs_code: "C15"
+
+  # 轻工制造
+  "轻工制造":
+    - nbs_industry: "造纸和纸制品业"
+      weight: 0.30
+      nbs_code: "C11"
+    - nbs_industry: "家具制造业"
+      weight: 0.20
+      nbs_code: "C21"
+    - nbs_industry: "印刷和记录媒介复制业"
+      weight: 0.15
+      nbs_code: "C23"
+    - nbs_industry: "文教、工美、体育和娱乐用品制造业"
+      weight: 0.15
+      nbs_code: "C24"
+    - nbs_industry: "橡胶和塑料制品业"
+      weight: 0.20
+      nbs_code: "C19"
+
+  # 医药生物
+  "医药生物":
+    - nbs_industry: "医药制造业"
+      weight: 0.90
+      nbs_code: "C14"
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.10
+      nbs_code: "C13"
+
+  # 公用事业
+  "公用事业":
+    - nbs_industry: "电力、热力生产和供应业"
+      weight: 0.60
+      nbs_code: "D44"
+    - nbs_industry: "水的生产和供应业"
+      weight: 0.20
+      nbs_code: "D46"
+    - nbs_industry: "燃气生产和供应业"
+      weight: 0.20
+      nbs_code: "D45"
+
+  # 交通运输
+  "交通运输":
+    - nbs_industry: "铁路、船舶、航空航天和其他运输设备制造业"
+      weight: 0.30
+      nbs_code: "C37"
+    - nbs_industry: "道路运输业"
+      weight: 0.25
+      nbs_code: "G53"
+    - nbs_industry: "水上运输业"
+      weight: 0.20
+      nbs_code: "G55"
+    - nbs_industry: "航空运输业"
+      weight: 0.15
+      nbs_code: "G56"
+    - nbs_industry: "装卸搬运和仓储业"
+      weight: 0.10
+      nbs_code: "G59"
+
+  # 房地产
+  "房地产":
+    - nbs_industry: "非金属矿物制品业"
+      weight: 0.40
+      nbs_code: "C30"
+    - nbs_industry: "金属制品业"
+      weight: 0.20
+      nbs_code: "C33"
+    - nbs_industry: "土木工程建筑业"
+      weight: 0.25
+      nbs_code: "E48"
+    - nbs_industry: "建筑装饰、装修和其他建筑业"
+      weight: 0.15
+      nbs_code: "E50"
+
+  # 商贸零售
+  "商贸零售":
+    - nbs_industry: "批发业"
+      weight: 0.50
+      nbs_code: "F51"
+    - nbs_industry: "零售业"
+      weight: 0.50
+      nbs_code: "F52"
+
+  # 社会服务
+  "社会服务":
+    - nbs_industry: "住宿业"
+      weight: 0.30
+      nbs_code: "H61"
+    - nbs_industry: "餐饮业"
+      weight: 0.30
+      nbs_code: "H62"
+    - nbs_industry: "居民服务、修理和其他服务业"
+      weight: 0.40
+      nbs_code: "O80"
+
+  # 银行
+  "银行":
+    - nbs_industry: "货币金融服务"
+      weight: 0.60
+      nbs_code: "J66"
+    - nbs_industry: "资本市场服务"
+      weight: 0.20
+      nbs_code: "J67"
+    - nbs_industry: "其他金融业"
+      weight: 0.20
+      nbs_code: "J69"
+
+  # 非银金融
+  "非银金融":
+    - nbs_industry: "资本市场服务"
+      weight: 0.50
+      nbs_code: "J67"
+    - nbs_industry: "保险业"
+      weight: 0.30
+      nbs_code: "J68"
+    - nbs_industry: "其他金融业"
+      weight: 0.20
+      nbs_code: "J69"
+
+  # 综合
+  "综合":
+    - nbs_industry: "其他制造业"
+      weight: 0.40
+      nbs_code: "C41"
+    - nbs_industry: "废弃资源综合利用业"
+      weight: 0.30
+      nbs_code: "C42"
+    - nbs_industry: "金属制品、机械和设备修理业"
+      weight: 0.30
+      nbs_code: "C43"
+
+  # 建筑材料
+  "建筑材料":
+    - nbs_industry: "非金属矿物制品业"
+      weight: 0.70
+      nbs_code: "C30"
+    - nbs_industry: "非金属矿采选业"
+      weight: 0.30
+      nbs_code: "B10"
+
+  # 建筑装饰
+  "建筑装饰":
+    - nbs_industry: "建筑装饰、装修和其他建筑业"
+      weight: 0.60
+      nbs_code: "E50"
+    - nbs_industry: "土木工程建筑业"
+      weight: 0.25
+      nbs_code: "E48"
+    - nbs_industry: "建筑安装业"
+      weight: 0.15
+      nbs_code: "E49"
+
+  # 电力设备
+  "电力设备":
+    - nbs_industry: "电气机械和器材制造业"
+      weight: 0.75
+      nbs_code: "C38"
+    - nbs_industry: "通用设备制造业"
+      weight: 0.15
+      nbs_code: "C34"
+    - nbs_industry: "专用设备制造业"
+      weight: 0.10
+      nbs_code: "C35"
+
+  # 机械设备
+  "机械设备":
+    - nbs_industry: "通用设备制造业"
+      weight: 0.35
+      nbs_code: "C34"
+    - nbs_industry: "专用设备制造业"
+      weight: 0.35
+      nbs_code: "C35"
+    - nbs_industry: "铁路、船舶、航空航天和其他运输设备制造业"
+      weight: 0.15
+      nbs_code: "C37"
+    - nbs_industry: "仪器仪表制造业"
+      weight: 0.15
+      nbs_code: "C40"
+
+  # 国防军工
+  "国防军工":
+    - nbs_industry: "铁路、船舶、航空航天和其他运输设备制造业"
+      weight: 0.60
+      nbs_code: "C37"
+    - nbs_industry: "专用设备制造业"
+      weight: 0.30
+      nbs_code: "C35"
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.10
+      nbs_code: "C39"
+
+  # 计算机
+  "计算机":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.80
+      nbs_code: "C39"
+    - nbs_industry: "软件和信息技术服务业"
+      weight: 0.20
+      nbs_code: "I65"
+
+  # 传媒
+  "传媒":
+    - nbs_industry: "印刷和记录媒介复制业"
+      weight: 0.20
+      nbs_code: "C23"
+    - nbs_industry: "文教、工美、体育和娱乐用品制造业"
+      weight: 0.15
+      nbs_code: "C24"
+    - nbs_industry: "广播、电视、电影和录音制作业"
+      weight: 0.30
+      nbs_code: "R86"
+    - nbs_industry: "新闻和出版业"
+      weight: 0.15
+      nbs_code: "R85"
+    - nbs_industry: "文化艺术业"
+      weight: 0.20
+      nbs_code: "R88"
+
+  # 通信
+  "通信":
+    - nbs_industry: "计算机、通信和其他电子设备制造业"
+      weight: 0.60
+      nbs_code: "C39"
+    - nbs_industry: "电信、广播电视和卫星传输服务"
+      weight: 0.40
+      nbs_code: "I63"
+
+  # 煤炭
+  "煤炭":
+    - nbs_industry: "煤炭开采和洗选业"
+      weight: 0.85
+      nbs_code: "B06"
+    - nbs_industry: "石油、煤炭及其他燃料加工业"
+      weight: 0.15
+      nbs_code: "C25"
+
+  # 石油石化
+  "石油石化":
+    - nbs_industry: "石油和天然气开采业"
+      weight: 0.50
+      nbs_code: "B07"
+    - nbs_industry: "石油、煤炭及其他燃料加工业"
+      weight: 0.40
+      nbs_code: "C25"
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.10
+      nbs_code: "C26"
+
+  # 环保
+  "环保":
+    - nbs_industry: "废弃资源综合利用业"
+      weight: 0.40
+      nbs_code: "C42"
+    - nbs_industry: "生态保护和环境治理业"
+      weight: 0.40
+      nbs_code: "N77"
+    - nbs_industry: "水的生产和供应业"
+      weight: 0.20
+      nbs_code: "D46"
+
+  # 美容护理
+  "美容护理":
+    - nbs_industry: "化学原料和化学制品制造业"
+      weight: 0.30
+      nbs_code: "C26"
+    - nbs_industry: "医药制造业"
+      weight: 0.20
+      nbs_code: "C27"
+    - nbs_industry: "文教、工美、体育和娱乐用品制造业"
+      weight: 0.20
+      nbs_code: "C24"
+    - nbs_industry: "其他服务业"
+      weight: 0.30
+      nbs_code: "O82"
+
+# NBS行业代码映射表（用于模糊匹配）
+# 注意：此部分已删除，因为我们主要使用行业名称进行匹配
+# 实际NBS数据中的代码格式如 C01, C02, ..., C42
+
+# 配置元数据
+metadata:
+  version: "1.0"
+  created_date: "2026-02-11"
+  description: "申万SW2021一级行业与国家统计局GB/T 4754-2017行业分类映射配置"
+  notes:
+    - 此映射表基于行业知识构建，权重为经验值
+    - 未来可通过主营业务分部数据升级为动态权重矩阵
+    - 建议每季度根据最新财报数据更新权重
+  source:
+    - 申万SW2021一级行业分类
+    - 国家统计局GB/T 4754-2017行业分类
