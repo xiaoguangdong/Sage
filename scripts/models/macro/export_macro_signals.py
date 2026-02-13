@@ -26,14 +26,21 @@ def apply_delay(df: pd.DataFrame, date_col: str, delay_days: int) -> pd.DataFram
     return result
 
 
-def export_macro_signals(output_dir: Path, delay_days: int, spread_threshold: float, spread_mode: str):
+def export_macro_signals(
+    output_dir: Path,
+    delay_days: int,
+    spread_threshold: float,
+    spread_mode: str,
+    tushare_root: Path | None = None
+):
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1) 宏观信号
     pmi_out = None
     spread_out = None
     try:
-        macro = MacroSignal()
+        macro_dir = (tushare_root / "macro") if tushare_root else None
+        macro = MacroSignal(data_dir=macro_dir)
         macro_result = macro.get_macro_signal(spread_threshold=spread_threshold, spread_mode=spread_mode)
 
         pmi_sig = macro_result['pmi_signal'].copy()
@@ -52,7 +59,8 @@ def export_macro_signals(output_dir: Path, delay_days: int, spread_threshold: fl
     # 2) 行业景气度（个股层）
     prosperity_out = None
     try:
-        prosperity = IndustryProsperity()
+        fundamental_dir = (tushare_root / "fundamental") if tushare_root else None
+        prosperity = IndustryProsperity(data_dir=fundamental_dir)
         prosperity_df = prosperity.get_prosperity_signal()
         if prosperity_df is not None and len(prosperity_df) > 0:
             prosperity_df['end_date'] = pd.to_datetime(prosperity_df['end_date'])
@@ -68,7 +76,8 @@ def export_macro_signals(output_dir: Path, delay_days: int, spread_threshold: fl
     flow_out = None
     industry_out = None
     try:
-        flow = NorthboundFlow()
+        northbound_dir = (tushare_root / "northbound") if tushare_root else None
+        flow = NorthboundFlow(data_dir=northbound_dir)
         flow_df = flow.get_flow_signal()
         flow_df = apply_delay(flow_df, 'trade_date', delay_days)
         flow_out = output_dir / f"northbound_flow_{flow_df['trade_date'].iloc[-1].strftime('%Y%m%d')}.parquet"
@@ -99,13 +108,16 @@ def main():
     parser.add_argument("--delay-days", type=int, default=2)
     parser.add_argument("--spread-threshold", type=float, default=0.5)
     parser.add_argument("--spread-mode", type=str, default="threshold", choices=["threshold", "bollinger"])
+    parser.add_argument("--tushare-root", type=str, default=None, help="Tushare数据根目录（包含macro/fundamental/northbound）")
     args = parser.parse_args()
 
+    tushare_root = Path(args.tushare_root) if args.tushare_root else None
     outputs = export_macro_signals(
         output_dir=Path(args.output_dir),
         delay_days=args.delay_days,
         spread_threshold=args.spread_threshold,
-        spread_mode=args.spread_mode
+        spread_mode=args.spread_mode,
+        tushare_root=tushare_root
     )
 
     print("宏观信号导出完成:")
