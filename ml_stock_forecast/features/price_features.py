@@ -3,7 +3,7 @@
 """
 import pandas as pd
 import numpy as np
-from typing import Optional
+from typing import Optional, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,13 +32,12 @@ class PriceFeatures:
             包含动量特征的DataFrame
         """
         df = df.copy()
-        
-        # 按股票分组计算动量
-        df_sorted = df.sort_values(['stock', 'date'])
+        df = df.sort_values(['stock', 'date'])
+        close_group = df.groupby('stock')['close']
         
         for period in periods:
             # 价格动量
-            df[f'mom_{period}w'] = df_sorted.groupby('stock')['close'].pct_change(period)
+            df[f'mom_{period}w'] = close_group.pct_change(period)
             
             # 相对强度vs指数（如果有指数数据）
             # 这里暂时用简单版本，后续需要传入指数数据
@@ -48,7 +47,7 @@ class PriceFeatures:
         df['mom_acceleration'] = df['mom_4w'] - df['mom_8w'] if 'mom_8w' in df.columns else np.nan
         
         # 相对强度
-        df['relative_strength'] = df_sorted.groupby('stock')['close'].rolling(60).mean() / df_sorted.groupby('stock')['close'].shift(1) - 1
+        df['relative_strength'] = close_group.transform(lambda s: s.rolling(60).mean()) / close_group.shift(1) - 1
         
         logger.info(f"动量特征计算完成，特征数: {len(periods) * 2 + 2}")
         
@@ -70,22 +69,24 @@ class PriceFeatures:
             包含流动性特征的DataFrame
         """
         df = df.copy()
-        
-        # 按股票分组计算
-        df_sorted = df.sort_values(['stock', 'date'])
+        df = df.sort_values(['stock', 'date'])
+        close_group = df.groupby('stock')['close']
+        volume_group = df.groupby('stock')['volume'] if 'volume' in df.columns else None
+        amount_group = df.groupby('stock')['amount'] if 'amount' in df.columns else None
+        float_group = df.groupby('stock')['float_shares'] if 'float_shares' in df.columns else None
         
         for period in periods:
             # 换手率
-            if 'volume' in df.columns and 'float_shares' in df.columns:
-                df[f'turnover_{period}w'] = df_sorted.groupby('stock')['volume'].rolling(period).mean() / df_sorted.groupby('stock')['float_shares']
+            if volume_group is not None and float_group is not None:
+                df[f'turnover_{period}w'] = volume_group.transform(lambda s: s.rolling(period).mean()) / float_group.transform(lambda s: s.rolling(period).mean())
             
             # 成交额变化
-            if 'amount' in df.columns:
-                df[f'amt_chg_{period}w'] = df_sorted.groupby('stock')['amount'].pct_change(period)
+            if amount_group is not None:
+                df[f'amt_chg_{period}w'] = amount_group.pct_change(period)
         
         # 成交量趋势
-        if 'volume' in df.columns:
-            df['volume_trend'] = df_sorted.groupby('stock')['volume'].rolling(5).mean() / df_sorted.groupby('stock')['volume'].rolling(20).mean()
+        if volume_group is not None:
+            df['volume_trend'] = volume_group.transform(lambda s: s.rolling(5).mean()) / volume_group.transform(lambda s: s.rolling(20).mean())
         
         # 流动性比率
         if 'amount' in df.columns and 'market_cap' in df.columns:
@@ -111,21 +112,20 @@ class PriceFeatures:
             包含稳定性特征的DataFrame
         """
         df = df.copy()
-        
-        # 按股票分组计算
-        df_sorted = df.sort_values(['stock', 'date'])
+        df = df.sort_values(['stock', 'date'])
+        close_group = df.groupby('stock')['close']
         
         for period in periods:
             # 波动率
-            df[f'vol_{period}w'] = df_sorted.groupby('stock')['close'].pct_change().rolling(period).std()
+            df[f'vol_{period}w'] = close_group.transform(lambda s: s.pct_change().rolling(period).std())
             
             # 最大回撤
-            rolling_max = df_sorted.groupby('stock')['close'].rolling(period).max()
-            df[f'max_dd_{period}w'] = (rolling_max - df_sorted['close']) / rolling_max
+            rolling_max = close_group.transform(lambda s: s.rolling(period).max())
+            df[f'max_dd_{period}w'] = (rolling_max - df['close']) / rolling_max
         
         # 价格稳定性
         if 'vol_4w' in df.columns:
-            df['price_stability'] = df['vol_4w'] / df_sorted.groupby('stock')['close'].rolling(4).mean()
+            df['price_stability'] = df['vol_4w'] / close_group.transform(lambda s: s.rolling(4).mean())
         
         logger.info(f"稳定性特征计算完成，特征数: {len(periods) * 2 + 1}")
         
@@ -145,15 +145,16 @@ class PriceFeatures:
             包含技术指标的DataFrame
         """
         df = df.copy()
-        df_sorted = df.sort_values(['stock', 'date'])
+        df = df.sort_values(['stock', 'date'])
+        close_group = df.groupby('stock')['close']
         
         # 均线斜率
-        ma_20 = df_sorted.groupby('stock')['close'].rolling(20).mean()
-        ma_60 = df_sorted.groupby('stock')['close'].rolling(60).mean()
+        ma_20 = close_group.transform(lambda s: s.rolling(20).mean())
+        ma_60 = close_group.transform(lambda s: s.rolling(60).mean())
         df['ma_slope'] = (ma_20 - ma_60) / 40
         
         # RSI
-        df['rsi'] = self._calculate_rsi(df_sorted['close'], period=14)
+        df['rsi'] = close_group.transform(lambda s: self._calculate_rsi(s, period=14))
         
         logger.info("技术指标特征计算完成，特征数: 2")
         
@@ -228,8 +229,8 @@ if __name__ == "__main__":
                 'date': date,
                 'stock': stock,
                 'open': close[i] * (1 + np.random.randn() * 0.01),
-                'high': close[i] * (1 + abs(np.random.randn() * 0.02))),
-                'low': close[i] * (1 - abs(np.random.randn() * 0.02))),
+                'high': close[i] * (1 + abs(np.random.randn() * 0.02)),
+                'low': close[i] * (1 - abs(np.random.randn() * 0.02)),
                 'close': close[i],
                 'volume': np.random.randint(1000000, 10000000),
                 'amount': close[i] * np.random.randint(1000000, 10000000),

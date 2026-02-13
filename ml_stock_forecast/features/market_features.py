@@ -3,7 +3,7 @@
 """
 import pandas as pd
 import numpy as np
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,7 +45,10 @@ class MarketFeatures:
         df['vol_12w'] = df['close'].pct_change().rolling(12).std()
         
         # 成交额变化
-        df['amt_chg'] = df['amount'].pct_change(4)
+        if 'amount' in df.columns:
+            df['amt_chg'] = df['amount'].pct_change(4)
+        else:
+            df['amt_chg'] = np.nan
         
         # 均线指标
         df['ma_20'] = df['close'].rolling(20).mean()
@@ -74,7 +77,10 @@ class MarketFeatures:
         df = df.copy()
         
         for window in windows:
-            df[f'price_rank_{window}d'] = df['close'].rank(pct=True, window=window, method='min')
+            df[f'price_rank_{window}d'] = df['close'].rolling(window).apply(
+                lambda x: pd.Series(x).rank(pct=True).iloc[-1],
+                raw=False
+            )
         
         logger.info(f"价格排名特征计算完成，特征数: {len(windows)}")
         
@@ -150,7 +156,10 @@ class MarketFeatures:
         """
         df = df.copy()
         
-        df['amt_trend_20d'] = df['amount'].rolling(20).mean() / df['amount'].rolling(60).mean()
+        if 'amount' in df.columns:
+            df['amt_trend_20d'] = df['amount'].rolling(20).mean() / df['amount'].rolling(60).mean()
+        else:
+            df['amt_trend_20d'] = np.nan
         
         logger.info("成交额趋势计算完成")
         
@@ -169,9 +178,12 @@ class MarketFeatures:
         """
         df = df.copy()
         
-        df['price_volume_corr'] = df['close'].pct_change(period).rolling(period).corr(
-            df['amount'].pct_change(period)
-        )
+        if 'amount' in df.columns:
+            df['price_volume_corr'] = df['close'].pct_change(period).rolling(period).corr(
+                df['amount'].pct_change(period)
+            )
+        else:
+            df['price_volume_corr'] = np.nan
         
         logger.info("量价相关性计算完成")
         
@@ -293,13 +305,14 @@ if __name__ == "__main__":
     dates = pd.date_range('2020-01-01', '2020-03-31', freq='D')
     
     data = []
+    close_series = 3000 + np.cumsum(np.random.randn(len(dates)) * 10)
     for i, date in enumerate(dates):
-        close = 3000 + np.cumsum(np.random.randn(i+1) * 10)
+        close = close_series[i]
         data.append({
             'date': date,
             'close': close,
-            'high': close * (1 + abs(np.random.randn() * 0.01))),
-            'low': close * (1 - abs(np.random.randn() * 0.01))),
+            'high': close * (1 + abs(np.random.randn() * 0.01)),
+            'low': close * (1 - abs(np.random.randn() * 0.01)),
             'amount': close * 1e8 * np.random.uniform(0.8, 1.2)
         })
     
