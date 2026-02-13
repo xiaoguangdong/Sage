@@ -42,8 +42,11 @@ class HS300Labeler:
         # 加载数据
         self.load_data()
 
-        # 平滑参数（短段填补）
+        # 平滑参数
+        self.smooth_method = "hmm"  # hmm / short_segment
         self.short_segment_max = 5
+        self.smooth_stay_prob = 0.90
+        self.smooth_obs_acc = 0.85
     
     def load_data(self):
         """加载沪深300指数和成分股数据"""
@@ -245,10 +248,13 @@ class HS300Labeler:
 
     def smooth_labels(self, labels):
         """
-        标签平滑：短段填补
-        - 如果某状态被短段(<=short_segment_max)的其他状态打断，
-          且左右两侧状态相同，则用左右状态填补该短段。
+        标签平滑
+        - hmm: 基于HMM(Viterbi)对原始标签进行平滑
+        - short_segment: 短段填补
         """
+        if self.smooth_method == "hmm":
+            return self._smooth_labels_hmm(labels)
+
         max_len = self.short_segment_max
         labels = [int(v) for v in labels]
         n = len(labels)
@@ -273,6 +279,43 @@ class HS300Labeler:
                         filled[j] = prev_val
 
         return filled
+
+    def _smooth_labels_hmm(self, labels):
+        labels = [int(v) for v in labels]
+        n = len(labels)
+        states = [0, 1, 2]
+        k = len(states)
+
+        stay = float(self.smooth_stay_prob)
+        obs_acc = float(self.smooth_obs_acc)
+        trans = np.full((k, k), (1 - stay) / (k - 1))
+        np.fill_diagonal(trans, stay)
+
+        emit = np.full((k, k), (1 - obs_acc) / (k - 1))
+        np.fill_diagonal(emit, obs_acc)
+
+        log_trans = np.log(trans + 1e-12)
+        log_emit = np.log(emit + 1e-12)
+        log_init = np.log(np.full(k, 1.0 / k))
+
+        dp = np.zeros((n, k))
+        back = np.zeros((n, k), dtype=int)
+
+        dp[0] = log_init + log_emit[:, labels[0]]
+
+        for t in range(1, n):
+            obs = labels[t]
+            for s in range(k):
+                scores = dp[t - 1] + log_trans[:, s]
+                back[t, s] = int(np.argmax(scores))
+                dp[t, s] = scores[back[t, s]] + log_emit[s, obs]
+
+        states_seq = [0] * n
+        states_seq[-1] = int(np.argmax(dp[-1]))
+        for t in range(n - 2, -1, -1):
+            states_seq[t] = back[t + 1, states_seq[t + 1]]
+
+        return states_seq
     
     def calculate_score(self, i):
         """
@@ -465,7 +508,9 @@ class HS300Labeler:
         smoothed = self.smooth_labels(labels)
         self.df['label_original_smooth'] = smoothed
 
-        print(f"✓ 原始标签平滑完成（short_segment_max={self.short_segment_max})")
+        print(f"✓ 原始标签平滑完成（method={self.smooth_method}, "
+              f"short_segment_max={self.short_segment_max}, "
+              f"stay={self.smooth_stay_prob}, obs_acc={self.smooth_obs_acc})")
         print(f"  牛市: {smoothed.count(2)} 天/周")
         print(f"  震荡: {smoothed.count(1)} 天/周")
         print(f"  熊市: {smoothed.count(0)} 天/周")
