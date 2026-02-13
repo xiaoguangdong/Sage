@@ -20,7 +20,7 @@ class SelectionConfig:
     risk_adjusted: bool = True
     vol_window: int = 20
     industry_rank: bool = True
-    industry_col: Optional[str] = None
+    industry_col: Optional[str] = "industry_l1"
 
     # 列名配置
     date_col: str = "trade_date"
