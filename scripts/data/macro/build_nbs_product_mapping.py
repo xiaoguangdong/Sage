@@ -93,6 +93,24 @@ def load_sw_mapping(path: Path) -> Dict[str, str]:
     return mapping
 
 
+def load_gb_keyword_rules(path: Path) -> List[Tuple[List[str], str]]:
+    if not path.exists():
+        return []
+    try:
+        import yaml  # type: ignore
+    except Exception:
+        return []
+    data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    rules = []
+    for item in data.get("rules", []) or []:
+        industry = (item or {}).get("gb_industry")
+        keywords = (item or {}).get("keywords") or []
+        keywords = [str(k).strip() for k in keywords if str(k).strip()]
+        if industry and keywords:
+            rules.append((keywords, str(industry).strip()))
+    return rules
+
+
 def normalize_text(text: str) -> str:
     return (
         text.replace("（", "(")
@@ -121,6 +139,16 @@ def match_gb_industry(text: str, gb_names: List[str]) -> Optional[str]:
     return None
 
 
+def match_gb_by_keywords(text: str, rules: List[Tuple[List[str], str]]) -> Optional[str]:
+    if not text:
+        return None
+    raw = normalize_text(text)
+    for keywords, industry in rules:
+        if any(normalize_text(k) in raw for k in keywords):
+            return industry
+    return None
+
+
 def convert_doc_to_txt(path: Path) -> Path:
     if path.suffix.lower() == ".txt":
         return path
@@ -135,8 +163,16 @@ def convert_doc_to_txt(path: Path) -> Path:
 
 def parse_product_txt(path: Path) -> pd.DataFrame:
     content = path.read_text(encoding="utf-8", errors="ignore").splitlines()
-    lines = [line.strip() for line in content if line.strip()]
-    code_pattern = re.compile(r"^\d{6,}$")
+    raw_lines = [line.strip() for line in content if line.strip()]
+    lines: List[str] = []
+    for line in raw_lines:
+        tokens = [t for t in re.split(r"\s+", line) if t]
+        if len(tokens) >= 2 and all(t.isdigit() and len(t) >= 5 for t in tokens):
+            lines.extend(tokens)
+        else:
+            lines.append(line)
+
+    code_pattern = re.compile(r"^\d{5,}$")
     records = []
     i = 0
     while i < len(lines):
@@ -213,6 +249,7 @@ def main():
     parser.add_argument("--sw-map", default="config/sw_nbs_mapping.yaml", help="申万-国统局映射")
     parser.add_argument("--output", default="config/nbs_product_sw_mapping.yaml")
     parser.add_argument("--unmatched-output", default="data/processed/nbs_product_sw_unmatched.csv")
+    parser.add_argument("--gb-keywords", default="config/nbs_product_gb_keywords.yaml")
     args = parser.parse_args()
 
     refs_dir = PROJECT_ROOT / "refs_docs"
@@ -239,6 +276,7 @@ def main():
         raise SystemExit(f"产品目录缺少产品名称列，当前列={list(product_df.columns)}")
 
     sw_map = load_sw_mapping(PROJECT_ROOT / args.sw_map)
+    gb_keyword_rules = load_gb_keyword_rules(PROJECT_ROOT / args.gb_keywords)
 
     results = []
     for _, row in product_df.iterrows():
@@ -261,6 +299,10 @@ def main():
         if not gb_name:
             gb_name = match_gb_industry(product_name, gb_names)
             source = "name_match" if gb_name else None
+        if not gb_name:
+            combined = " ".join([s for s in [product_name, desc_text] if isinstance(s, str)])
+            gb_name = match_gb_by_keywords(combined, gb_keyword_rules)
+            source = "keyword_rule" if gb_name else None
 
         gb_code = None
         if gb_name:
