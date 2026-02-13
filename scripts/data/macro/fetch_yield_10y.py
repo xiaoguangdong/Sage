@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from tushare_auth import get_tushare_token
 from scripts.data.macro.paths import MACRO_DIR
 
-def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='20251231'):
+def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='20251231', output_dir=None):
     """
     获取国债收益率（支持不同期限）
 
@@ -37,7 +37,7 @@ def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='2025
     api_delay = 40  # 每次请求间隔40秒
     max_retries = 3  # 最大重试次数
 
-    output_dir = str(MACRO_DIR)
+    output_dir = output_dir or str(MACRO_DIR)
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, f'yield_{curve_term}y.parquet')
 
@@ -145,19 +145,30 @@ def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='2025
         return None
 
 
-def fetch_yield_10y(token=None, start_date='20200101', end_date='20251231'):
+def fetch_yield_10y(token=None, start_date='20200101', end_date='20251231', output_dir=None):
     """获取10年期国债收益率"""
-    return fetch_yield(token=token, curve_term=10, start_date=start_date, end_date=end_date)
+    return fetch_yield(token=token, curve_term=10, start_date=start_date, end_date=end_date, output_dir=output_dir)
 
 
-def fetch_yield_2y(token=None, start_date='20200101', end_date='20251231'):
+def fetch_yield_2y(token=None, start_date='20200101', end_date='20251231', output_dir=None):
     """获取2年期国债收益率"""
-    return fetch_yield(token=token, curve_term=2, start_date=start_date, end_date=end_date)
+    return fetch_yield(token=token, curve_term=2, start_date=start_date, end_date=end_date, output_dir=output_dir)
 
 
 if __name__ == '__main__':
-    # 获取10年期和2年期国债收益率
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--curve-term", type=int, choices=[2, 10], default=None)
+    parser.add_argument("--start-date", default="20200101")
+    parser.add_argument("--end-date", default="20251231")
+    parser.add_argument("--output-dir", default=None)
+    args = parser.parse_args()
+
     print("=" * 60)
-    fetch_yield_10y(start_date='20200101', end_date='20251231')
-    print("\n" + "=" * 60)
-    fetch_yield_2y(start_date='20200101', end_date='20251231')
+    if args.curve_term in (2, 10):
+        fetch_yield(token=None, curve_term=args.curve_term, start_date=args.start_date, end_date=args.end_date, output_dir=args.output_dir)
+    else:
+        fetch_yield_10y(start_date=args.start_date, end_date=args.end_date, output_dir=args.output_dir)
+        print("\n" + "=" * 60)
+        fetch_yield_2y(start_date=args.start_date, end_date=args.end_date, output_dir=args.output_dir)
