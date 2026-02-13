@@ -12,6 +12,13 @@
    - `./scripts/macro/fetch_all_macro_data.sh`
    - `./scripts/macro/check_macro_data.sh`
 
+## 代码结构与职责
+
+- `sage_core/`：核心算法库（趋势/宏观/选股/风控/回测等）
+- `ml_stock_forecast/non_core/`：非核心管线（数据接入/调度/入口脚本）
+- `sage/`：平台骨架与可替换注册器（逐步对齐到 `sage_core`）
+- `scripts/`：脚本入口（data/models/strategy/backtest/monitoring/legacy）
+
 ## 数据不丢失机制（推荐启用）
 
 本仓库默认不把 `data/` 提交到 Git（见 `.gitignore`），建议使用外置盘进行镜像备份：
@@ -22,4 +29,3 @@
    - `./scripts/backup/install_git_hooks.sh`
 2. **数据变更触发（macOS）**：监控 `./data` 有变化就同步：
    - `./scripts/backup/install_launchd_watch.sh`
-
