@@ -26,6 +26,15 @@ def apply_delay(df: pd.DataFrame, date_col: str, delay_days: int) -> pd.DataFram
     return result
 
 
+def _last_date_str(df: pd.DataFrame, col: str) -> str | None:
+    if df is None or df.empty or col not in df.columns:
+        return None
+    series = pd.to_datetime(df[col], errors="coerce").dropna()
+    if series.empty:
+        return None
+    return series.iloc[-1].strftime("%Y%m%d")
+
+
 def export_macro_signals(
     output_dir: Path,
     delay_days: int,
@@ -44,15 +53,21 @@ def export_macro_signals(
         macro_result = macro.get_macro_signal(spread_threshold=spread_threshold, spread_mode=spread_mode)
 
         pmi_sig = macro_result['pmi_signal'].copy()
-        pmi_sig['date'] = pd.to_datetime(pmi_sig['month'], format='%Y%m')
-        pmi_sig = apply_delay(pmi_sig, 'date', delay_days)
-        pmi_out = output_dir / f"macro_pmi_signal_{pmi_sig['date'].iloc[-1].strftime('%Y%m%d')}.parquet"
-        pmi_sig[['date', 'pmi', 'pmi_diff', 'turning_point']].to_parquet(pmi_out, index=False)
+        if not pmi_sig.empty:
+            pmi_sig['date'] = pd.to_datetime(pmi_sig['month'], format='%Y%m')
+            pmi_sig = apply_delay(pmi_sig, 'date', delay_days)
+            pmi_last = _last_date_str(pmi_sig, 'date')
+            if pmi_last:
+                pmi_out = output_dir / f"macro_pmi_signal_{pmi_last}.parquet"
+                pmi_sig[['date', 'pmi', 'pmi_diff', 'turning_point']].to_parquet(pmi_out, index=False)
 
         spread_sig = macro_result['spread_signal'].copy()
-        spread_sig = apply_delay(spread_sig, 'trade_date', delay_days)
-        spread_out = output_dir / f"macro_yield_spread_{spread_sig['trade_date'].iloc[-1].strftime('%Y%m%d')}.parquet"
-        spread_sig[['trade_date', 'yield_10y', 'yield_2y', 'spread', 'spread_signal']].to_parquet(spread_out, index=False)
+        if not spread_sig.empty:
+            spread_sig = apply_delay(spread_sig, 'trade_date', delay_days)
+            spread_last = _last_date_str(spread_sig, 'trade_date')
+            if spread_last:
+                spread_out = output_dir / f"macro_yield_spread_{spread_last}.parquet"
+                spread_sig[['trade_date', 'yield_10y', 'yield_2y', 'spread', 'spread_signal']].to_parquet(spread_out, index=False)
     except FileNotFoundError:
         pass
 
@@ -65,10 +80,12 @@ def export_macro_signals(
         if prosperity_df is not None and len(prosperity_df) > 0:
             prosperity_df['end_date'] = pd.to_datetime(prosperity_df['end_date'])
             prosperity_df = apply_delay(prosperity_df, 'end_date', delay_days)
-            prosperity_out = output_dir / f"industry_prosperity_{prosperity_df['end_date'].iloc[-1].strftime('%Y%m%d')}.parquet"
-            prosperity_df[['ts_code', 'end_date', 'tr_yoy', 'gross_margin', 'revenue_acceleration', 'prosperity_signal']].to_parquet(
-                prosperity_out, index=False
-            )
+            prosperity_last = _last_date_str(prosperity_df, 'end_date')
+            if prosperity_last:
+                prosperity_out = output_dir / f"industry_prosperity_{prosperity_last}.parquet"
+                prosperity_df[['ts_code', 'end_date', 'tr_yoy', 'gross_margin', 'revenue_acceleration', 'prosperity_signal']].to_parquet(
+                    prosperity_out, index=False
+                )
     except FileNotFoundError:
         pass
 
@@ -79,17 +96,22 @@ def export_macro_signals(
         northbound_dir = (tushare_root / "northbound") if tushare_root else None
         flow = NorthboundFlow(data_dir=northbound_dir)
         flow_df = flow.get_flow_signal()
-        flow_df = apply_delay(flow_df, 'trade_date', delay_days)
-        flow_out = output_dir / f"northbound_flow_{flow_df['trade_date'].iloc[-1].strftime('%Y%m%d')}.parquet"
-        flow_df[['trade_date', 'north_money', 'flow_ma', 'upper_band', 'flow_signal']].to_parquet(flow_out, index=False)
+        if flow_df is not None and not flow_df.empty:
+            flow_df = apply_delay(flow_df, 'trade_date', delay_days)
+            flow_last = _last_date_str(flow_df, 'trade_date')
+            if flow_last:
+                flow_out = output_dir / f"northbound_flow_{flow_last}.parquet"
+                flow_df[['trade_date', 'north_money', 'flow_ma', 'upper_band', 'flow_signal']].to_parquet(flow_out, index=False)
 
         industry_flow_df = flow.get_industry_flow_signal()
         if industry_flow_df is not None and len(industry_flow_df) > 0:
             industry_flow_df = apply_delay(industry_flow_df, 'trade_date', delay_days)
-            industry_out = output_dir / f"northbound_industry_ratio_{industry_flow_df['trade_date'].iloc[-1].strftime('%Y%m%d')}.parquet"
-            industry_flow_df[
-                ['industry_code', 'industry_name', 'trade_date', 'industry_ratio', 'ratio_signal']
-            ].to_parquet(industry_out, index=False)
+            industry_last = _last_date_str(industry_flow_df, 'trade_date')
+            if industry_last:
+                industry_out = output_dir / f"northbound_industry_ratio_{industry_last}.parquet"
+                industry_flow_df[
+                    ['industry_code', 'industry_name', 'trade_date', 'industry_ratio', 'ratio_signal']
+                ].to_parquet(industry_out, index=False)
     except FileNotFoundError:
         pass
 
