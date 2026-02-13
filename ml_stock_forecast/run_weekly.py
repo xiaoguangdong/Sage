@@ -13,6 +13,7 @@ from datetime import datetime
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.data_loader import DataLoader
+from utils.column_normalizer import normalize_security_columns
 from data.universe import Universe
 from features.price_features import PriceFeatures
 from features.market_features import MarketFeatures
@@ -88,6 +89,8 @@ def load_data(data_dir: str = 'data') -> pd.DataFrame:
     if df is None or len(df) == 0:
         logger.error("无法加载数据")
         return None
+
+    df = normalize_security_columns(df, inplace=False)
     
     logger.info(f"加载数据完成，共{len(df)}条记录")
     

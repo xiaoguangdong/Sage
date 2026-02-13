@@ -7,6 +7,8 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
 
+from utils.column_normalizer import normalize_security_columns
+
 logger = logging.getLogger(__name__)
 
 
@@ -46,6 +48,8 @@ class DataLoader:
             
         try:
             df = pd.read_parquet(file_path)
+            df['stock'] = stock_code
+            df = normalize_security_columns(df, inplace=False)
             logger.info(f"成功加载Baostock数据: {stock_code}, 行数: {len(df)}")
             return df
         except Exception as e:
@@ -74,7 +78,6 @@ class DataLoader:
         for code in stock_codes:
             df = self.load_baostock_data(code)
             if df is not None:
-                df['stock'] = code
                 dfs.append(df)
         
         if not dfs:
@@ -146,12 +149,13 @@ class DataLoader:
         }
         
         # 检查日期范围
-        if 'date' in df.columns:
-            df['date'] = pd.to_datetime(df['date'])
+        date_col = 'trade_date' if 'trade_date' in df.columns else 'date' if 'date' in df.columns else None
+        if date_col:
+            dates = pd.to_datetime(df[date_col], errors='coerce')
             report['date_range'] = {
-                'start': df['date'].min(),
-                'end': df['date'].max(),
-                'days': (df['date'].max() - df['date'].min()).days
+                'start': dates.min(),
+                'end': dates.max(),
+                'days': (dates.max() - dates.min()).days if dates.notna().any() else None
             }
         
         # 检查数值型数据的统计信息
