@@ -58,8 +58,8 @@
 - [ ] 实现base概念 + n个周期增量概念的合并逻辑
 
 ### 相关文件
-- `scripts/data/update_concept_data.py`
-- `scripts/data/update_concept_data_eastmoney.py`
+- `scripts/data/tushare_suite.py`（`--action concept_update_tushare`）
+- `scripts/data/tushare_suite.py`（`--action concept_update_eastmoney`）
 - `data/tushare/sectors/all_concept_details.csv` (100个概念)
 
 ---

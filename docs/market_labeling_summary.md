@@ -291,7 +291,7 @@ labels = [map_hmm_to_label(s) for s in states]
 **核心脚本**：
 - `scripts/models/label_hs300_weekly.py` - 周线打标脚本
 - `scripts/models/label_hs300_daily_weekly.py` - 日线/周线对比脚本
-- `scripts/data/download_index_ohlc.py` - 指数数据下载
+- `scripts/data/tushare_suite.py` - 指数数据下载（`--action index_ohlc`）
 - `scripts/models/review_labeling_rules.py` - 规则评审
 - `scripts/models/compare_labeling_methods.py` - 方法对比
 
@@ -504,7 +504,7 @@ python scripts/models/label_hs300_daily_weekly.py
 
 ```bash
 # 下载2018-2026年指数数据
-python scripts/data/download_index_ohlc.py 2018-01-01 2026-02-09
+python scripts/data/tushare_suite.py --action index_ohlc --start-date 20180101 --end-date 20260209
 ```
 
 ### 读取标签数据
@@ -643,7 +643,7 @@ for _, row in labels.iterrows():
 **核心脚本**：
 - `scripts/models/label_hs300_weekly.py` - 周线打标（推荐）
 - `scripts/models/label_hs300_daily_weekly.py` - 日线对比
-- `scripts/data/download_index_ohlc.py` - 数据下载
+- `scripts/data/tushare_suite.py` - 数据下载（`--action index_ohlc`）
 
 **数据文件**：
 - `data/tushare/index/index_000300_SH_ohlc.parquet` - 沪深300日线

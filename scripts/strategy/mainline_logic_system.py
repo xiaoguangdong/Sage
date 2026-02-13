@@ -110,7 +110,7 @@ class MainlineLogicSystem:
             self.industry_members = pd.read_csv(industry_members_file)
             print(f"  ✓ 行业成分股: {len(self.industry_members)} 条记录")
         else:
-            print("  ! 行业成分股数据不存在，请先运行 fetch_tushare_sectors.py")
+            print("  ! 行业成分股数据不存在，请先运行 tushare_suite.py --action tushare_sectors")
             self.industry_members = None
         
         # 加载概念成分股
@@ -119,7 +119,7 @@ class MainlineLogicSystem:
             self.concept_details = pd.read_csv(concept_details_file)
             print(f"  ✓ 概念成分股: {len(self.concept_details)} 条记录")
         else:
-            print("  ! 概念成分股数据不存在，请先运行 fetch_tushare_sectors.py")
+            print("  ! 概念成分股数据不存在，请先运行 tushare_suite.py --action tushare_sectors")
             self.concept_details = None
     
     def calculate_sector_leadership(self, sector_stocks, date):
