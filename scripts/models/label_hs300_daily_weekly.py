@@ -1,10 +1,12 @@
 """
 沪深300指数市场状态打标 - 支持日线和周线
-对比4种方法：
+对比多种方法：
 1. 原始标签（基于综合评分）
 2. HMM模型（隐马尔可夫）
 3. 均线确认（MA20/MA60+价格+斜率+持续确认）
 4. 多均线系统（MA20/60/120/250组合）
+5. 原始+均线融合
+6. HMM+均线融合
 """
 import os
 import numpy as np
@@ -48,7 +50,7 @@ class HS300Labeler:
         self.smooth_stay_prob = 0.90
         self.smooth_obs_acc = 0.85
 
-        # 融合参数（原始标签 + 均线确认）
+        # 融合参数（原始/ HMM 标签 + 均线确认）
         self.fusion_confirm_days = 3
     
     def load_data(self):
@@ -520,6 +522,39 @@ class HS300Labeler:
 
         return smoothed
 
+    def _fuse_with_confirmation(self, base_labels, confirm_labels, confirm_days):
+        fused = []
+        last_confirm = None
+        confirm_streak = 0
+
+        for i in range(len(base_labels)):
+            base = int(base_labels[i])
+            confirm = int(confirm_labels[i])
+
+            if not fused:
+                fused.append(base)
+                last_confirm = confirm
+                confirm_streak = 1
+                continue
+
+            if confirm == last_confirm:
+                confirm_streak += 1
+            else:
+                last_confirm = confirm
+                confirm_streak = 1
+
+            if base == confirm:
+                fused.append(base)
+                continue
+
+            # 不一致时：等待均线连续确认
+            if confirm_streak >= confirm_days:
+                fused.append(confirm)
+            else:
+                fused.append(fused[-1])
+
+        return fused
+
     def label_fused(self):
         """方法1c：原始标签与均线确认融合"""
         print("\n" + "=" * 80)
@@ -533,39 +568,35 @@ class HS300Labeler:
 
         orig = self.df['label_original'].tolist()
         ma = self.df['label_ma_confirmation'].tolist()
-
-        fused = []
         confirm_days = self.fusion_confirm_days
-        last_ma = None
-        ma_streak = 0
-
-        for i in range(len(orig)):
-            o = int(orig[i])
-            m = int(ma[i])
-
-            if not fused:
-                fused.append(o)
-                last_ma = m
-                ma_streak = 1
-                continue
-
-            if m == last_ma:
-                ma_streak += 1
-            else:
-                last_ma = m
-                ma_streak = 1
-
-            if o == m:
-                fused.append(o)
-                continue
-
-            # 原始与均线不一致：等待均线连续确认
-            if ma_streak >= confirm_days:
-                fused.append(m)
-            else:
-                fused.append(fused[-1])
+        fused = self._fuse_with_confirmation(orig, ma, confirm_days)
 
         self.df['label_fused'] = fused
+
+        print(f"✓ 融合完成（confirm_days={confirm_days})")
+        print(f"  牛市: {fused.count(2)} 天/周")
+        print(f"  震荡: {fused.count(1)} 天/周")
+        print(f"  熊市: {fused.count(0)} 天/周")
+
+        return fused
+
+    def label_hmm_fused(self):
+        """方法2b：HMM标签与均线确认融合"""
+        print("\n" + "=" * 80)
+        print("方法2b：HMM标签与均线确认融合...")
+        print("=" * 80)
+
+        if 'label_hmm' not in self.df.columns:
+            raise ValueError("请先生成HMM标签 label_hmm")
+        if 'label_ma_confirmation' not in self.df.columns:
+            raise ValueError("请先生成均线确认标签 label_ma_confirmation")
+
+        hmm_labels = self.df['label_hmm'].tolist()
+        ma = self.df['label_ma_confirmation'].tolist()
+        confirm_days = self.fusion_confirm_days
+
+        fused = self._fuse_with_confirmation(hmm_labels, ma, confirm_days)
+        self.df['label_hmm_fused'] = fused
 
         print(f"✓ 融合完成（confirm_days={confirm_days})")
         print(f"  牛市: {fused.count(2)} 天/周")
@@ -813,7 +844,7 @@ class HS300Labeler:
     def generate_statistics(self):
         """生成统计信息"""
         print("\n" + "=" * 80)
-        print("4种方法统计对比")
+        print("多种方法统计对比")
         print("=" * 80)
         
         df = self.df
@@ -823,6 +854,7 @@ class HS300Labeler:
             ('原始标签(平滑)', 'label_original_smooth'),
             ('原始+均线融合', 'label_fused'),
             ('HMM模型', 'label_hmm'),
+            ('HMM+均线融合', 'label_hmm_fused'),
             ('均线确认', 'label_ma_confirmation'),
             ('多均线系统', 'label_multi_ma')
         ]
@@ -861,6 +893,7 @@ class HS300Labeler:
             ('原始标签(平滑)', 'label_original_smooth'),
             ('原始+均线融合', 'label_fused'),
             ('HMM模型', 'label_hmm'),
+            ('HMM+均线融合', 'label_hmm_fused'),
             ('均线确认', 'label_ma_confirmation'),
             ('多均线系统', 'label_multi_ma')
         ]
@@ -902,7 +935,7 @@ class HS300Labeler:
         axes[-1].xaxis.set_major_locator(mdates.MonthLocator(interval=12 if self.timeframe == 'weekly' else 6))
         plt.xticks(rotation=45)
         
-        plt.suptitle(f'沪深300指数 - {self.timeframe}对比（4种方法）', fontsize=16, fontweight='bold')
+        plt.suptitle(f'沪深300指数 - {self.timeframe}对比（多种方法）', fontsize=16, fontweight='bold')
         plt.tight_layout()
         
         # 保存图表
@@ -929,7 +962,7 @@ class HS300Labeler:
         """运行完整流程"""
         print("=" * 80)
         print(f"沪深300指数市场状态打标（{self.timeframe}）")
-        print("对比4种方法：原始标签、HMM、均线确认、多均线")
+        print("对比多种方法：原始、HMM、均线确认、多均线与融合")
         print("=" * 80)
         
         # 1. 加载数据
@@ -941,12 +974,13 @@ class HS300Labeler:
         # 3. 计算广度
         self.calculate_breadth()
         
-        # 4. 生成4种标签
+        # 4. 生成多种标签
         self.label_original()
         self.label_original_smooth()
         self.label_hmm()
         self.label_ma_confirmation()
         self.label_fused()
+        self.label_hmm_fused()
         self.label_multi_ma()
         
         # 5. 生成统计
