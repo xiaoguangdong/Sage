@@ -10,15 +10,16 @@
 ## 系统架构
 
 ```
-ml_stock_forecast/
-├── core/                # 核心算法模块
-│   ├── backtest/
-│   ├── data/
-│   ├── features/
-│   ├── models/
-│   ├── portfolio/
-│   └── utils/
-├── non_core/            # 非核心模块（数据接入/调度）
+sage_core/               # 核心算法模块
+├── backtest/
+├── data/
+├── features/
+├── models/
+├── portfolio/
+└── utils/
+
+ml_stock_forecast/       # 非核心模块（数据接入/调度）
+├── non_core/
 │   ├── config/
 │   ├── data/
 │   └── pipelines/

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 import logging
 
-from core.utils.column_normalizer import normalize_security_columns
+from sage_core.utils.column_normalizer import normalize_security_columns
 
 logger = logging.getLogger(__name__)
 

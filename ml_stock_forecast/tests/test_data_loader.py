@@ -8,10 +8,10 @@ from pathlib import Path
 
 # 导入被测试的模块
 import sys
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from non_core.data.data_loader import DataLoader
-from core.data.universe import Universe
+from ml_stock_forecast.non_core.data.data_loader import DataLoader
+from sage_core.data.universe import Universe
 
 
 class TestDataLoader(unittest.TestCase):

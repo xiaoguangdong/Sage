@@ -10,20 +10,20 @@ from pathlib import Path
 from datetime import datetime
 
 # 导入项目模块
-sys.path.append(str(Path(__file__).resolve().parents[2]))
+sys.path.append(str(Path(__file__).resolve().parents[3]))
 
-from non_core.data.data_loader import DataLoader
-from core.utils.column_normalizer import normalize_security_columns
-from core.utils.logging_utils import setup_logging
-from core.data.universe import Universe
-from core.features.price_features import PriceFeatures
-from core.features.market_features import MarketFeatures
-from core.models.trend_model import create_trend_model
-from core.models.rank_model import RankModelLGBM
-from core.models.entry_model import EntryModelLR
-from core.portfolio.construction import PortfolioConstruction
-from core.portfolio.risk_control import RiskControl
-from core.backtest.walk_forward import WalkForwardBacktest
+from ml_stock_forecast.non_core.data.data_loader import DataLoader
+from sage_core.utils.column_normalizer import normalize_security_columns
+from sage_core.utils.logging_utils import setup_logging
+from sage_core.data.universe import Universe
+from sage_core.features.price_features import PriceFeatures
+from sage_core.features.market_features import MarketFeatures
+from sage_core.models.trend_model import create_trend_model
+from sage_core.models.rank_model import RankModelLGBM
+from sage_core.models.entry_model import EntryModelLR
+from sage_core.portfolio.construction import PortfolioConstruction
+from sage_core.portfolio.risk_control import RiskControl
+from sage_core.backtest.walk_forward import WalkForwardBacktest
 
 # 配置日志
 log_path = setup_logging("weekly")

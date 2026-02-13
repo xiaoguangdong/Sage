@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 # 导入被测试的模块
-sys.path.append(str(Path(__file__).resolve().parents[1]))
+sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from core.models.entry_model import EntryModelLR
+from sage_core.models.entry_model import EntryModelLR
 
 
 class TestEntryModel(unittest.TestCase):

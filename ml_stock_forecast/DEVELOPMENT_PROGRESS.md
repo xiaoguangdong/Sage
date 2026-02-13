@@ -5,14 +5,15 @@
 ### 1. 项目结构搭建 ✅
 
 ```
+sage_core/
+├── backtest/
+├── data/
+├── features/
+├── models/
+├── portfolio/
+└── utils/
+
 ml_stock_forecast/
-├── core/                # 核心算法模块
-│   ├── backtest/
-│   ├── data/
-│   ├── features/
-│   ├── models/
-│   ├── portfolio/
-│   └── utils/
 ├── non_core/            # 非核心模块（数据接入/调度）
 │   ├── config/
 │   ├── data/
@@ -27,7 +28,7 @@ ml_stock_forecast/
 
 ### 2. 核心模块开发 ✅
 
-#### 2.1 数据模块 (core/data/ + non_core/data/)
+#### 2.1 数据模块 (sage_core/data/ + non_core/data/)
 
 **data_loader.py**
 - `DataLoader` 类：负责加载Baostock数据
@@ -39,7 +40,7 @@ ml_stock_forecast/
 - 支持ST股票排除、停牌股票排除
 - 支持换手率、市值过滤
 
-#### 2.2 特征工程模块 (core/features/)
+#### 2.2 特征工程模块 (sage_core/features/)
 
 **price_features.py**
 - `PriceFeatures` 类：价格特征提取器
@@ -53,7 +54,7 @@ ml_stock_forecast/
 - 8个基础特征：MA20/60/120、4周波动率、12周波动率、MACD指标、价格位置
 - 10个硬核特征：均线多头排列、波动率分位、MACD金叉、价格创新高、量价背离等
 
-#### 2.3 模型模块 (core/models/)
+#### 2.3 模型模块 (sage_core/models/)
 
 **trend_model.py**
 - `TrendModelRule` 类：规则版趋势模型
@@ -83,7 +84,7 @@ ml_stock_forecast/
 - `predict()` 方法：预测买卖点
 - `get_model_params()` 方法：获取模型参数
 
-#### 2.4 组合管理模块 (core/portfolio/)
+#### 2.4 组合管理模块 (sage_core/portfolio/)
 
 **construction.py**
 - `PortfolioConstruction` 类：组合构建器
