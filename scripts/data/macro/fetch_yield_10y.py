@@ -11,6 +11,7 @@ import tushare as ts
 import pandas as pd
 import os
 import time
+import sys
 from datetime import datetime, timedelta
 
 from tushare_auth import get_tushare_token
