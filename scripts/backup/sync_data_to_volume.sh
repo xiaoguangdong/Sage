@@ -80,6 +80,25 @@ if ! mkdir -p "$dst" 2>/dev/null; then
   exit 0
 fi
 
+# If nothing needs to be transferred (common for delete-only events), exit quickly.
+preview="$(
+  rsync -ani \
+    --exclude ".DS_Store" \
+    "$src/" "$dst/" 2>/dev/null \
+    | grep -E '^(>f|>d|cd|cS|cL|cD|c\.)' \
+    || true
+)"
+if [[ -z "$preview" ]]; then
+  # No updates to sync.
+  exit 0
+fi
+
+# Avoid huge output when running from hooks/launchd (no TTY).
+rsync_progress_args=()
+if [[ -t 1 ]]; then
+  rsync_progress_args+=(--progress)
+fi
+
 {
   echo "== Sage data sync =="
   echo "time: $(date -Is)"
@@ -87,8 +106,9 @@ fi
   echo "dst:  $dst/"
   rsync -a \
     --human-readable \
-    --info=stats2,progress2 \
+    --stats \
     --exclude ".DS_Store" \
+    "${rsync_progress_args[@]}" \
     "$src/" "$dst/"
   echo
 } | tee -a "$log_file"
