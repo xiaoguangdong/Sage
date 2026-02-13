@@ -21,6 +21,7 @@ class SelectionConfig:
     vol_window: int = 20
     industry_rank: bool = True
     industry_col: Optional[str] = "industry_l1"
+    rank_mode: str = "industry"  # industry / market / auto
 
     # 列名配置
     date_col: str = "trade_date"
@@ -191,10 +192,21 @@ class StockSelector:
             else:
                 label = future_ret
 
-            if cfg.industry_rank and cfg.industry_col and cfg.industry_col in df.columns:
-                label = label.groupby([df[date_col], df[cfg.industry_col]]).rank(pct=True)
-            elif cfg.industry_rank:
-                label = label.groupby(df[date_col]).rank(pct=True)
+            if cfg.industry_rank:
+                mode = (cfg.rank_mode or "auto").lower()
+                if mode == "industry":
+                    if cfg.industry_col and cfg.industry_col in df.columns:
+                        label = label.groupby([df[date_col], df[cfg.industry_col]]).rank(pct=True)
+                    else:
+                        logger.warning("industry_col 未配置或缺失，已回退到全市场排名")
+                        label = label.groupby(df[date_col]).rank(pct=True)
+                elif mode == "market":
+                    label = label.groupby(df[date_col]).rank(pct=True)
+                else:  # auto
+                    if cfg.industry_col and cfg.industry_col in df.columns:
+                        label = label.groupby([df[date_col], df[cfg.industry_col]]).rank(pct=True)
+                    else:
+                        label = label.groupby(df[date_col]).rank(pct=True)
             if label.notna().any():
                 future_returns.append((label, weight))
 
