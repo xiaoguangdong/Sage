@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import json
 import time
+import sys
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,10 @@ from typing import Callable, Optional
 
 import pandas as pd
 import tushare as ts
+
+# 添加项目根目录
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import get_project_root, get_tushare_token, setup_logger
 
