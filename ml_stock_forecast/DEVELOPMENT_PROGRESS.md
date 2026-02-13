@@ -13,11 +13,12 @@ sage_core/
 ├── portfolio/
 └── utils/
 
+sage_app/
+├── config/
+├── data/
+└── pipelines/
+
 ml_stock_forecast/
-├── non_core/            # 非核心模块（数据接入/调度）
-│   ├── config/
-│   ├── data/
-│   └── pipelines/
 ├── tests/               # 测试目录
 │   ├── __init__.py
 │   ├── test_data_loader.py  # 数据加载器测试
@@ -28,7 +29,7 @@ ml_stock_forecast/
 
 ### 2. 核心模块开发 ✅
 
-#### 2.1 数据模块 (sage_core/data/ + non_core/data/)
+#### 2.1 数据模块 (sage_core/data/ + sage_app/data/)
 
 **data_loader.py**
 - `DataLoader` 类：负责加载Baostock数据

@@ -18,11 +18,12 @@ sage_core/               # 核心算法模块
 ├── portfolio/
 └── utils/
 
-ml_stock_forecast/       # 非核心模块（数据接入/调度）
-├── non_core/
-│   ├── config/
-│   ├── data/
-│   └── pipelines/
+sage_app/                # 非核心模块（数据接入/调度）
+├── config/
+├── data/
+└── pipelines/
+
+ml_stock_forecast/
 ├── tests/               # 测试
 └── README.md
 ```
@@ -45,15 +46,13 @@ python -m unittest discover tests -v
 ### 每周运行
 
 ```bash
-cd ml_stock_forecast
-python non_core/pipelines/run_weekly.py weekly
+python sage_app/pipelines/run_weekly.py weekly
 ```
 
 ### 运行回测
 
 ```bash
-cd ml_stock_forecast
-python non_core/pipelines/run_weekly.py backtest
+python sage_app/pipelines/run_weekly.py backtest
 ```
 
 ## 数据准备

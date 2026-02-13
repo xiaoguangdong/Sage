@@ -15,13 +15,13 @@ venv*/
 
 # Data / outputs
 data/
-!ml_stock_forecast/non_core/data/
-!ml_stock_forecast/non_core/data/**
 !sage_core/data/
 !sage_core/data/**
-ml_stock_forecast/non_core/data/raw/
-ml_stock_forecast/non_core/data/__pycache__/
-ml_stock_forecast/non_core/data/.DS_Store
+!sage_app/data/
+!sage_app/data/**
+sage_app/data/raw/
+sage_app/data/__pycache__/
+sage_app/data/.DS_Store
 sage_core/data/__pycache__/
 sage_core/data/.DS_Store
 logs/

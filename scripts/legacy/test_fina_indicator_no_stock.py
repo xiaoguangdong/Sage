@@ -12,7 +12,7 @@ import logging
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from ml_stock_forecast.non_core.data.data_provider import DataProvider
+from sage_app.data.data_provider import DataProvider
 
 # 配置日志
 logging.basicConfig(

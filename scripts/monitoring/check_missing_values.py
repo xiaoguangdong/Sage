@@ -11,7 +11,7 @@ import sys
 # 添加项目路径
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from ml_stock_forecast.non_core.data.data_loader import DataLoader
+from sage_app.data.data_loader import DataLoader
 
 # 配置日志
 logging.basicConfig(
