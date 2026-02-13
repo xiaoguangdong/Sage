@@ -11,6 +11,8 @@ import os
 from datetime import datetime
 import time
 
+from scripts.data._shared.runtime import get_tushare_token
+
 class TushareSectorFetcher:
     def __init__(self, token):
         """初始化Tushare连接"""
@@ -168,7 +170,7 @@ class TushareSectorFetcher:
 
 if __name__ == '__main__':
     # 你需要替换成自己的Tushare token
-    TOKEN = 'YOUR_TUSHARE_TOKEN_HERE'
+    TOKEN = get_tushare_token()
     
     fetcher = TushareSectorFetcher(TOKEN)
     fetcher.fetch_all()

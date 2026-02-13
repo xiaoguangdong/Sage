@@ -17,6 +17,7 @@ from datetime import datetime, timedelta
 import os
 import time
 
+from tushare_auth import get_tushare_token
 class NorthboundDataFetcher:
     """北向资金数据获取器"""
     
@@ -117,7 +118,7 @@ def main():
         end_date = args.end_date
     
     # Tushare token
-    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    token = get_tushare_token()
     
     fetcher = NorthboundDataFetcher(token)
     data = fetcher.fetch_all(start_date, end_date)

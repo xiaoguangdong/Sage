@@ -18,13 +18,10 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.data._shared.runtime import get_tushare_token, setup_logger, get_data_dir
 from sage_app.data.data_provider import DataProvider
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger(Path(__file__).stem)
 
 
 def download_moneyflow_hsgt(
@@ -297,11 +294,11 @@ def download_moneyflow_data(
 def main():
     """主函数"""
     # 配置
-    TUSHARE_TOKEN = "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"  # 用户提供
+    TUSHARE_TOKEN = get_tushare_token()
     
     START_DATE = "2020-01-01"
     END_DATE = "2025-12-31"
-    OUTPUT_DIR = "/Users/dongxg/SourceCode/deep_final_kp/data/tushare"
+    OUTPUT_DIR = str(get_data_dir("tushare"))
     
     logger.info("="*70)
     logger.info("Tushare数据下载工具")

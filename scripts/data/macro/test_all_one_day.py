@@ -10,6 +10,7 @@ import pandas as pd
 import tushare as ts
 import time
 
+from tushare_auth import get_tushare_token
 
 def test_all_industries_one_day():
     """测试所有行业1个交易日的数据"""
@@ -18,7 +19,7 @@ def test_all_industries_one_day():
     print("=" * 80)
     
     # 设置Tushare token
-    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    token = get_tushare_token()
     pro = ts.pro_api(token)
     
     # 获取所有申万行业指数列表

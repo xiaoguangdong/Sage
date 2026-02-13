@@ -14,6 +14,7 @@ import os
 from datetime import datetime
 import logging
 
+from tushare_auth import get_tushare_token
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -39,7 +40,7 @@ class FinaMainbzFetcher:
         self.quarter_delay = 60  # 季度间延迟60秒
 
         # 输出目录
-        self.output_dir = "/Users/dongxg/SourceCode/deep_final_kp/data/tushare/macro/segments"
+        self.output_dir = "data/tushare/macro/segments"
         os.makedirs(self.output_dir, exist_ok=True)
 
     def get_all_quarters(self, start_year=2020, end_year=2026):
@@ -168,7 +169,7 @@ class FinaMainbzFetcher:
 def main():
     """主函数"""
     # Tushare token（项目中已有的token）
-    token = "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"
+    token = get_tushare_token()
 
     logger.info(f"使用Tushare Token: {token}")
 

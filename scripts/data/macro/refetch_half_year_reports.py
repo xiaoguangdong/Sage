@@ -12,6 +12,7 @@ import time
 import os
 import logging
 
+from tushare_auth import get_tushare_token
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -37,7 +38,7 @@ class HalfYearReportFetcher:
         self.api_delay = api_delay
         self.max_retries = 3  # 最大重试次数
         self.retry_delay = 60  # 重试延迟60秒
-        self.output_dir = "/Users/dongxg/SourceCode/deep_final_kp/data/tushare/macro/segments"
+        self.output_dir = "data/tushare/macro/segments"
         os.makedirs(self.output_dir, exist_ok=True)
 
     def get_half_year_quarters(self, start_year=2020, end_year=2026):
@@ -184,9 +185,7 @@ class HalfYearReportFetcher:
 def main():
     """主函数"""
     # Tushare token
-    TUSHARE_TOKEN = "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"
-    
-    logger.info(f"使用Tushare Token: {TUSHARE_TOKEN}")
+    TUSHARE_TOKEN = get_tushare_token()
 
     # 创建获取器（batch_limit=8000, api_delay=45）
     fetcher = HalfYearReportFetcher(token=TUSHARE_TOKEN, batch_limit=8000, api_delay=45)

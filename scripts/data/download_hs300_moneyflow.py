@@ -9,8 +9,10 @@ import pandas as pd
 import tushare as ts
 from datetime import datetime
 
+from scripts.data._shared.runtime import get_tushare_token
+
 # 配置
-TUSHARE_TOKEN = "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"
+TUSHARE_TOKEN = get_tushare_token()
 DATA_DIR = "data/tushare"
 OUTPUT_DIR = os.path.join(DATA_DIR, "moneyflow")
 START_YEAR = 2020

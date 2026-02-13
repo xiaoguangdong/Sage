@@ -17,20 +17,14 @@ import time
 import os
 from datetime import datetime, timedelta
 import logging
+from pathlib import Path
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/concept_update.log'),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+from scripts.data._shared.runtime import get_tushare_token, setup_logger
+
+logger = setup_logger(Path(__file__).stem)
 
 # 配置参数
-TS_TOKEN = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+TS_TOKEN = get_tushare_token()
 TIMEOUT = 30  # 超时时间（秒）
 DATA_DIR = 'data/tushare/sectors'
 BASE_DATE = '20240930'  # 基准日期（2024年9月底）

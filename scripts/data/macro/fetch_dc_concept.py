@@ -12,6 +12,8 @@ import tushare as ts
 import time
 from pathlib import Path
 
+from tushare_auth import get_tushare_token
+
 
 def get_data_with_retry(pro, func_name, max_retries=3, **kwargs):
     """获取数据，带重试机制"""
@@ -45,7 +47,7 @@ def fetch_concept_data_new():
     print("=" * 80)
 
     # 设置Tushare token
-    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    token = get_tushare_token()
     pro = ts.pro_api(token)
 
     # 创建输出目录

@@ -14,19 +14,13 @@ import sys
 import pandas as pd
 import logging
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import tushare as ts
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('data/tushare/daily_basic_optimized.log', encoding='utf-8')
-    ]
-)
-logger = logging.getLogger(__name__)
+from scripts.data._shared.runtime import get_tushare_token, setup_logger
+
+logger = setup_logger(Path(__file__).stem)
 
 
 class DailyBasicOptimizedDownloader:
@@ -423,7 +417,7 @@ class DailyBasicOptimizedDownloader:
 def main():
     """主函数"""
     # 配置
-    TUSHARE_TOKEN = "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"
+    TUSHARE_TOKEN = get_tushare_token()
     START_DATE = "2020-01-01"
     END_DATE = "2026-02-09"
     

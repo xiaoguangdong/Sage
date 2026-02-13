@@ -12,8 +12,10 @@ import time
 from typing import Optional, Dict, List
 import os
 
+from scripts.data._shared.runtime import get_tushare_token
+
 # Tushare token
-TUSHARE_TOKEN = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+TUSHARE_TOKEN = get_tushare_token()
 
 def get_tushare_concept_list() -> pd.DataFrame:
     """从Tushare获取完整的概念列表"""

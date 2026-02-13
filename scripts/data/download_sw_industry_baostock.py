@@ -13,19 +13,13 @@ import sys
 import pandas as pd
 import logging
 from datetime import datetime
+from pathlib import Path
 
 import baostock as bs
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('data/tushare/sw_industry_baostock.log', encoding='utf-8')
-    ]
-)
-logger = logging.getLogger(__name__)
+from scripts.data._shared.runtime import setup_logger
+
+logger = setup_logger(Path(__file__).stem)
 
 
 class BaostockIndustryDownloader:

@@ -15,6 +15,8 @@ import time
 from pathlib import Path
 from datetime import datetime
 
+from tushare_auth import get_tushare_token
+
 
 def get_sw_industry_constituents(pro):
     """获取申万行业成分股列表"""
@@ -108,7 +110,7 @@ def main():
     print("=" * 80)
     
     # 设置Tushare token
-    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    token = get_tushare_token()
     pro = ts.pro_api(token)
     
     # 创建输出目录

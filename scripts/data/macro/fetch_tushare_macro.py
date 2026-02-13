@@ -19,6 +19,8 @@ import os
 import time
 from datetime import datetime
 
+from tushare_auth import get_tushare_token
+
 
 class TushareMacroDataFetcher:
     def __init__(self, token):
@@ -332,7 +334,7 @@ def main():
         args.end_date = datetime.now().strftime('%Y-%m-%d')
     
     # 使用token
-    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    token = get_tushare_token()
     
     # 创建fetcher
     fetcher = TushareMacroDataFetcher(token)

@@ -8,7 +8,9 @@
 import tushare as ts
 import time
 
-token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+from tushare_auth import get_tushare_token
+
+token = get_tushare_token()
 pro = ts.pro_api(token)
 
 print("=" * 80)

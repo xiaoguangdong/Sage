@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 from datetime import datetime, timedelta
 
+from tushare_auth import get_tushare_token
+
 
 def get_with_retry(pro, api_name, params, max_retries=3, sleep_time=40):
     """带重试机制的API请求"""
@@ -268,7 +270,7 @@ def main():
     print("=" * 80)
 
     # 设置Tushare token
-    token = '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+    token = get_tushare_token()
     pro = ts.pro_api(token)
 
     # 输出目录

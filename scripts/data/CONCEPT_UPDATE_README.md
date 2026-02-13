@@ -111,11 +111,11 @@ python scripts/data/update_concept_data.py --calculate \
 - `data/tushare/sectors/all_concept_details_YYYYMMDD.csv` - 带时间戳的概念成分股数据
 - `data/tushare/sectors/all_concept_details.csv` - 最新概念成分股数据
 - `data/tushare/sectors/concept_performance_YYYYMMDD.csv` - 概念表现和评分
-- `logs/concept_update.log` - 更新日志
+- `logs/data/YYYYMMDD_NNN_update_concept_data.log` - 更新日志
 
 ## 日志记录
 
-所有操作都会记录到 `logs/concept_update.log` 文件中，包括：
+所有操作都会记录到 `logs/data/YYYYMMDD_NNN_update_concept_data.log` 文件中，包括：
 
 - 获取的概念数量
 - 成功/失败/超时的概念列表

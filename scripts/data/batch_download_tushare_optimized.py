@@ -21,18 +21,10 @@ from typing import Dict, List, Tuple
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.data._shared.runtime import get_tushare_token, setup_logger
 from sage_app.data.data_provider import DataProvider
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler('data/tushare/download_optimized.log', encoding='utf-8')
-    ]
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger(Path(__file__).stem)
 
 
 class OptimizedBatchDownloader:
@@ -270,7 +262,7 @@ class OptimizedBatchDownloader:
 def main():
     """主函数"""
     # 配置
-    TUSHARE_TOKEN = "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"
+    TUSHARE_TOKEN = get_tushare_token()
     START_DATE = "2020-01-01"
     END_DATE = "2026-02-09"
 

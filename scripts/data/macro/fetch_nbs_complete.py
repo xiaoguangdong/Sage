@@ -24,6 +24,7 @@ import time
 import os
 from datetime import datetime, timedelta
 
+from tushare_auth import get_tushare_token
 
 class CompleteNBSDataFetcher:
     def __init__(self, tushare_token=None):
@@ -32,7 +33,7 @@ class CompleteNBSDataFetcher:
         os.makedirs(self.output_dir, exist_ok=True)
         
         # Tushare用于获取PMI数据
-        self.tushare_token = tushare_token or '2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e'
+        self.tushare_token = get_tushare_token(tushare_token)
         self.pro = ts.pro_api(self.tushare_token)
         
         self.headers = {
