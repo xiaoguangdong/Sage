@@ -93,8 +93,40 @@ python scripts/data/tushare_suite.py --action concept_update_eastmoney \
   --output-dir /tmp/sage_data
 ```
 
-## Baostock 下载器
+## Akshare 统一脚本
 
-`scripts/data/baostock_downloader.py`
+脚本：`scripts/data/akshare_suite.py`
+
+```bash
+# 概念列表
+python scripts/data/akshare_suite.py --action concept_list \
+  --output-dir /tmp/sage_data
+
+# 概念成分（支持断点续传）
+python scripts/data/akshare_suite.py --action concept_components \
+  --output-dir /tmp/sage_data --resume --max-items 50
+
+# 个股历史（日线，YYYYMMDD）
+python scripts/data/akshare_suite.py --action stock_hist \
+  --start-date 20240101 --end-date 20240201 \
+  --stock-list-csv data/raw/tushare/filtered_stocks_list.csv \
+  --output-dir /tmp/sage_data --resume
+```
+
+输出目录：
+- `/tmp/sage_data/akshare/concepts/`
+- `/tmp/sage_data/akshare/concepts/components/`
+- `/tmp/sage_data/akshare/stock_hist/`
+
+默认输出目录（不传 `--output-dir`）：`data/raw/akshare/`
+
+## Legacy 脚本
+
+历史脚本已移动至 `scripts/legacy/data/`，仅保留参考：
+- `baostock_downloader.py`
+- `fetch_akshare_concepts.py`
+- `fetch_efinance_concepts.py`
+
+如需恢复为主流程，请先按新的统一脚本结构改造。
 
 示例调用在 `main()` 中已注释（按需打开）。

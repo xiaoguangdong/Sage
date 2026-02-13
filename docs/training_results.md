@@ -194,7 +194,7 @@ Attention机制
 
 ### 数据下载
 
-- `scripts/data/baostock_downloader.py` - Baostock数据下载（历史/近期/行业）
+- `scripts/legacy/data/baostock_downloader.py` - Baostock数据下载（历史/近期/行业，legacy）
 
 ### 配置文件
 
