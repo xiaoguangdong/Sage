@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_ENV_LOADED = False
 
 
 def add_project_root() -> Path:
@@ -67,9 +68,31 @@ def setup_logger(name: str, module: str = "data", level: int = logging.INFO) -> 
 
 
 def get_tushare_token(explicit: Optional[str] = None) -> str:
+    load_env_file()
     token = (explicit or os.getenv("TUSHARE_TOKEN") or os.getenv("TS_TOKEN") or "").strip()
     if token:
         return token
     raise RuntimeError(
         "Missing Tushare token. Set env var TUSHARE_TOKEN (recommended) or TS_TOKEN."
     )
+
+
+def load_env_file(path: Optional[Path] = None) -> None:
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+    env_path = path or (PROJECT_ROOT / ".env")
+    if env_path.exists():
+        try:
+            for raw in env_path.read_text(encoding="utf-8").splitlines():
+                line = raw.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, value = line.split("=", 1)
+                key = key.strip()
+                value = value.strip().strip("'").strip('"')
+                if key and key not in os.environ:
+                    os.environ[key] = value
+        except Exception:
+            pass
+    _ENV_LOADED = True

@@ -42,6 +42,9 @@ refs_docs/
 # Local secrets / accounts
 config/*.json
 !config/*.example.json
+.env
+.env.*
+!.env.example
 
 # Local backups
 .git.bak_*/
