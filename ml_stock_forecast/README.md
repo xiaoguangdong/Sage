@@ -39,8 +39,8 @@ pip install -r requirements.txt
 ### 运行测试
 
 ```bash
-cd ml_stock_forecast
-python -m unittest discover tests -v
+python -m unittest discover sage_core/tests -v
+python -m unittest discover sage_app/tests -v
 ```
 
 ### 每周运行

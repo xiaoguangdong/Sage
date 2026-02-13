@@ -18,12 +18,16 @@ sage_app/
 ├── data/
 └── pipelines/
 
+sage_core/
+├── tests/               # 核心模型测试
+│   ├── test_trend_model.py
+│   └── test_models.py
+
+sage_app/
+├── tests/               # 非核心数据接入测试
+│   └── test_data_loader.py
+
 ml_stock_forecast/
-├── tests/               # 测试目录
-│   ├── __init__.py
-│   ├── test_data_loader.py  # 数据加载器测试
-│   ├── test_trend_model.py  # 趋势模型测试
-│   └── test_models.py       # 排序和买卖点模型测试
 └── README.md            # 项目说明文档
 ```
 
