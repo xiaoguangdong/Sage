@@ -82,7 +82,7 @@ def load_data(data_dir: str = 'data') -> pd.DataFrame:
     # 使用数据加载器
     loader = DataLoader(data_dir)
     
-    # 加载所有Baostock数据
+    # 加载所有Baostock数据（默认读取raw目录全部parquet）
     df = loader.load_all_baostock_data()
     
     if df is None or len(df) == 0:
@@ -186,7 +186,15 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     
     # 4. 预测趋势状态
     logger.info("预测趋势状态...")
-    df_index = df_features[df_features['code'] == '000300.SH'] if '000300.SH' in df_features['code'].values else None
+    # 统一股票代码字段
+    if 'code' not in df_features.columns and 'stock' in df_features.columns:
+        df_features['code'] = df_features['stock']
+    if 'stock' not in df_features.columns and 'code' in df_features.columns:
+        df_features['stock'] = df_features['code']
+
+    index_candidates = {'000300.SH', 'sh.000300', '000300.SZ'}
+    index_code = next((c for c in index_candidates if c in set(df_features['code'].values)), None)
+    df_index = df_features[df_features['code'] == index_code] if index_code else None
     
     if df_index is not None and len(df_index) > 0:
         trend_result = trend_model.predict(df_index)

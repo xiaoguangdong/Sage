@@ -52,16 +52,23 @@ class DataLoader:
             logger.error(f"加载Baostock数据失败: {stock_code}, 错误: {e}")
             return None
     
-    def load_all_baostock_data(self, stock_codes: List[str]) -> pd.DataFrame:
+    def load_all_baostock_data(self, stock_codes: Optional[List[str]] = None) -> pd.DataFrame:
         """
         加载所有Baostock数据
         
         Args:
-            stock_codes: 股票代码列表
+            stock_codes: 股票代码列表（可选；为空则加载raw目录全部parquet）
             
         Returns:
             合并后的DataFrame
         """
+        if stock_codes is None:
+            stock_files = list(self.raw_dir.glob("*.parquet"))
+            stock_codes = [f.stem for f in stock_files]
+            if not stock_codes:
+                logger.warning(f"raw目录下未找到parquet文件: {self.raw_dir}")
+                return pd.DataFrame()
+        
         dfs = []
         
         for code in stock_codes:
