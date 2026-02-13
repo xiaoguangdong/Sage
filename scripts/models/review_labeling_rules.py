@@ -7,12 +7,14 @@ import pandas as pd
 import numpy as np
 from datetime import datetime
 
+from scripts.data._shared.runtime import get_tushare_root
+
 # 读取沪深300指数数据
 print("=" * 80)
 print("加载沪深300指数数据")
 print("=" * 80)
 
-df = pd.read_parquet('data/tushare/index/index_000300_SH_ohlc.parquet')
+df = pd.read_parquet(str(get_tushare_root() / "index" / "index_000300_SH_ohlc.parquet"))
 print(f"数据形状: {df.shape}")
 print(f"时间范围: {df['date'].min()} 至 {df['date'].max()}")
 print(f"列名: {df.columns.tolist()}")

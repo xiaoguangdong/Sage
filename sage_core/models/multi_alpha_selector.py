@@ -12,6 +12,7 @@ import logging
 import numpy as np
 import pandas as pd
 
+from scripts.data._shared.runtime import get_tushare_root
 logger = logging.getLogger(__name__)
 
 
@@ -75,8 +76,8 @@ class MultiAlphaConfig:
 class MultiAlphaStockSelector:
     """多逻辑选股模型"""
 
-    def __init__(self, data_dir: str = "data/tushare", config: Optional[MultiAlphaConfig] = None):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir: str = None, config: Optional[MultiAlphaConfig] = None):
+        self.data_dir = Path(data_dir or str(get_tushare_root()))
         self.daily_dir = self.data_dir / "daily"
         self.fina_dir = self.data_dir / "fundamental"
         self.daily_basic_path = self.data_dir / "daily_basic_all.parquet"

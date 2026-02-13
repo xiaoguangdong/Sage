@@ -15,6 +15,7 @@ from datetime import datetime
 import logging
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -40,7 +41,7 @@ class FinaMainbzFetcher:
         self.quarter_delay = 60  # 季度间延迟60秒
 
         # 输出目录
-        self.output_dir = "data/tushare/macro/segments"
+        self.output_dir = str(MACRO_DIR / "segments")
         os.makedirs(self.output_dir, exist_ok=True)
 
     def get_all_quarters(self, start_year=2020, end_year=2026):

@@ -26,7 +26,7 @@ import tushare as ts
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_project_root, get_tushare_token, setup_logger
+from scripts.data._shared.runtime import get_project_root, get_tushare_token, setup_logger, get_data_root, get_data_path
 
 logger = setup_logger(Path(__file__).stem)
 
@@ -38,10 +38,11 @@ class DownloadConfig:
     max_retries: int
     backoff_factor: float
     page_limit_default: int
+    states_dir: Path
 
     @property
     def state_dir(self) -> Path:
-        return self.output_dir / "states"
+        return self.states_dir
 
 
 def _to_yyyymmdd(date_str: str) -> str:
@@ -55,7 +56,7 @@ def _resolve_output_root(output_dir: Optional[str]) -> Path:
     cfg = load_config()
     root = Path(output_dir) if output_dir else cfg.output_dir
     if not root.is_absolute():
-        root = get_project_root() / root
+        root = get_data_root("primary") / root
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -80,10 +81,10 @@ def load_config(config_path: Optional[Path] = None) -> DownloadConfig:
             logger.warning(f"读取配置失败，使用默认值: {exc}")
 
     download_cfg = (config.get("data") or {}).get("download") or {}
-    output_dir = download_cfg.get("output_dir", "/tmp/sage_data")
+    output_dir = download_cfg.get("output_dir", "raw")
     output_dir = Path(output_dir)
     if not output_dir.is_absolute():
-        output_dir = project_root / output_dir
+        output_dir = get_data_root("primary") / output_dir
 
     cfg = DownloadConfig(
         output_dir=output_dir,
@@ -91,6 +92,7 @@ def load_config(config_path: Optional[Path] = None) -> DownloadConfig:
         max_retries=int(download_cfg.get("max_retries", 3)),
         backoff_factor=float(download_cfg.get("backoff_factor", 2.0)),
         page_limit_default=int(download_cfg.get("page_limit_default", 4000)),
+        states_dir=get_data_path("states", ensure=True),
     )
     cfg.output_dir.mkdir(parents=True, exist_ok=True)
     cfg.state_dir.mkdir(parents=True, exist_ok=True)
@@ -304,7 +306,7 @@ def download_index_ohlc(
         cfg.sleep_seconds = sleep_seconds
 
     tushare_root = _tushare_root(output_dir)
-    output_path = tushare_root / "index_ohlc"
+    output_path = tushare_root / "index"
     output_path.mkdir(parents=True, exist_ok=True)
 
     start = _to_yyyymmdd(start_date)
@@ -314,6 +316,7 @@ def download_index_ohlc(
     if not indices:
         indices = [("000300.SH", "沪深300"), ("000905.SH", "中证500")]
 
+    all_frames = []
     for code, name in indices:
         df = request_with_retry(lambda: pro.daily(ts_code=code, start_date=start, end_date=end), cfg)
         if df is None or df.empty:
@@ -321,7 +324,12 @@ def download_index_ohlc(
             continue
         df = df.rename(columns={"trade_date": "date", "ts_code": "code", "pct_chg": "pct_change"})
         df.to_parquet(output_path / f"index_{code.replace('.', '_')}_ohlc.parquet", index=False)
+        all_frames.append(df)
         time.sleep(cfg.sleep_seconds)
+
+    if all_frames:
+        combined = pd.concat(all_frames, ignore_index=True)
+        combined.to_parquet(output_path / "index_ohlc_all.parquet", index=False)
 
     return output_path
 
@@ -801,7 +809,7 @@ def main():
     # download_sw_industry_classify(output_dir="/tmp/sage_data")
     # download_sw_industry_daily(start_date="20240101", end_date="20240105", output_dir="/tmp/sage_data")
     # download_opt_daily(start_date="20240101", end_date="20240105", output_dir="/tmp/sage_data")
-    # download_fina_indicator(stock_list_csv="data/tushare/filtered_stocks_list.csv", start_date="20240101", end_date="20241231", output_dir="/tmp/sage_data")
+    # download_fina_indicator(stock_list_csv="data/raw/tushare/filtered_stocks_list.csv", start_date="20240101", end_date="20241231", output_dir="/tmp/sage_data")
     # download_fina_indicator_vip(start_year=2020, end_year=2021, output_dir="/tmp/sage_data")
     # fetch_tushare_sectors(output_dir="/tmp/sage_data")
     # concept_update_tushare(mode="init", start_date="20240924", end_date="20241231", output_dir="/tmp/sage_data")
@@ -817,7 +825,7 @@ def main():
     parser.add_argument("--sleep-seconds", type=float, default=None)
     parser.add_argument("--start-year", type=int, default=2020)
     parser.add_argument("--end-year", type=int, default=2021)
-    parser.add_argument("--stock-list-csv", type=str, default="data/tushare/filtered_stocks_list.csv")
+    parser.add_argument("--stock-list-csv", type=str, default=str(get_data_path("raw", "tushare", "filtered_stocks_list.csv")))
     parser.add_argument("--mode", type=str, default="update")
     parser.add_argument("--min-stock-count", type=int, default=10)
     args = parser.parse_args()

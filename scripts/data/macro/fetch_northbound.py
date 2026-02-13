@@ -18,12 +18,13 @@ import os
 import time
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import NORTHBOUND_DIR
 class NorthboundDataFetcher:
     """北向资金数据获取器"""
     
     def __init__(self, token):
         self.pro = ts.pro_api(token)
-        self.output_dir = 'data/tushare/northbound'
+        self.output_dir = str(NORTHBOUND_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         self.api_delay = 30  # API请求间隔30秒
     

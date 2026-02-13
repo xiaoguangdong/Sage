@@ -15,6 +15,8 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import seaborn as sns
 
+from scripts.data._shared.runtime import get_tushare_root, get_data_path
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -30,8 +32,8 @@ class StyleModelBacktester:
     """风格模型回测对比"""
 
     def __init__(self):
-        self.data_dir = "data/tushare"
-        self.output_dir = "data/tushare/factors"
+        self.data_dir = str(get_tushare_root())
+        self.output_dir = str(get_data_path("processed", "factors", ensure=True))
 
         logger.info("风格模型回测对比初始化")
 
@@ -68,7 +70,7 @@ class StyleModelBacktester:
         logger.info("加载基准数据...")
 
         # 加载指数数据作为基准
-        index_file = os.path.join(self.data_dir, "index_ohlc_all.parquet")
+        index_file = os.path.join(self.data_dir, "index", "index_ohlc_all.parquet")
         if os.path.exists(index_file):
             self.index_data = pd.read_parquet(index_file)
             self.index_data['trade_date'] = pd.to_datetime(self.index_data['date'])
@@ -439,8 +441,8 @@ def main():
         print("对比完成！")
         print("=" * 70)
         print("\n文件位置：")
-        print("- 对比报告: data/tushare/factors/style_models_comparison_report.txt")
-        print("- 对比图表: data/tushare/factors/style_models_comparison.png")
+        print("- 对比报告: data/processed/factors/style_models_comparison_report.txt")
+        print("- 对比图表: data/processed/factors/style_models_comparison.png")
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timedelta
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import NORTHBOUND_DIR
 
 
 def fetch_northbound_flow(token=None, start_date='20200101', end_date='20251231'):
@@ -35,7 +36,7 @@ def fetch_northbound_flow(token=None, start_date='20200101', end_date='20251231'
     api_delay = 40  # 每次请求间隔40秒
     max_retries = 3  # 最大重试次数
 
-    output_dir = 'data/tushare/northbound'
+    output_dir = str(NORTHBOUND_DIR)
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, 'daily_flow.parquet')
 
@@ -155,7 +156,7 @@ def fetch_northbound_hold(token=None, start_date='20200101', end_date='20251231'
     api_delay = 40  # 每次请求间隔40秒
     max_retries = 3  # 最大重试次数
 
-    output_dir = 'data/tushare/northbound'
+    output_dir = str(NORTHBOUND_DIR)
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, 'hk_hold.parquet')
 
@@ -281,7 +282,7 @@ def fetch_northbound_top10(token=None, start_date='20200101', end_date='20251231
     api_delay = 40  # 每次请求间隔40秒
     max_retries = 3  # 最大重试次数
 
-    output_dir = 'data/tushare/northbound'
+    output_dir = str(NORTHBOUND_DIR)
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, 'hsgt_top10.parquet')
 

@@ -9,6 +9,8 @@ import numpy as np
 from pathlib import Path
 import logging
 
+from scripts.data._shared.runtime import get_tushare_root, get_data_path
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -24,13 +26,13 @@ def backtest_with_value_filter():
 
     # 读取因子数据
     logger.info("加载因子数据...")
-    factors = pd.read_parquet('data/tushare/factors/stock_factors_with_score.parquet')
+    factors = pd.read_parquet(str(get_data_path("processed", "factors", "stock_factors_with_score.parquet")))
     factors['trade_date'] = pd.to_datetime(factors['trade_date'])
     logger.info(f"✓ 因子数据: {len(factors)} 条记录")
 
     # 读取日线数据用于计算未来收益
     logger.info("加载日线数据...")
-    daily_files = list(Path('data/tushare/daily').glob('daily_*.parquet'))
+    daily_files = list((get_tushare_root() / "daily").glob('daily_*.parquet'))
     daily = pd.concat([pd.read_parquet(f) for f in daily_files])
     daily['trade_date'] = pd.to_datetime(daily['trade_date'])
     logger.info(f"✓ 日线数据: {len(daily)} 条记录")
@@ -163,7 +165,7 @@ def backtest_with_value_filter():
     logger.info(f"  12周: {with_filter_win_12w - no_filter_win_12w:+.2%}")
 
     # 保存结果
-    output_file = 'data/tushare/factors/value_enhanced_backtest_results.csv'
+    output_file = str(get_data_path("processed", "factors", "value_enhanced_backtest_results.csv"))
     results_df.to_csv(output_file, index=False)
     logger.info(f"\n✓ 结果已保存: {output_file}")
 

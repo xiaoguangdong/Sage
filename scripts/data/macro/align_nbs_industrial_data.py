@@ -17,18 +17,20 @@ import os
 from typing import Dict, List, Optional
 from datetime import datetime
 
+from scripts.data.macro.paths import MACRO_DIR
+
 
 class NBSIndustrialDataAligner:
     """NBS工业品数据对齐器"""
     
-    def __init__(self, data_dir: str = 'data/tushare/macro'):
+    def __init__(self, data_dir: str = None):
         """
         初始化对齐器
         
         Args:
             data_dir: 数据目录
         """
-        self.data_dir = data_dir
+        self.data_dir = data_dir or str(MACRO_DIR)
         
         # 工业品到申万行业的映射（简化版，需要完善）
         self.product_to_sw_industry = {

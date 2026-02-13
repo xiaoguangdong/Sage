@@ -14,6 +14,7 @@ import json
 import os
 from urllib.parse import unquote
 
+from scripts.data.macro.paths import MACRO_DIR
 
 class NBSDataExplorer:
     def __init__(self):
@@ -25,7 +26,7 @@ class NBSDataExplorer:
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         }
         self.session = requests.session()
-        self.output_dir = 'data/tushare/macro'
+        self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
 
     def fetch_parent_categories(self):

@@ -13,6 +13,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
 
+from scripts.data._shared.runtime import get_tushare_root
+
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -21,7 +23,7 @@ plt.rcParams['axes.unicode_minus'] = False
 class HS300Labeler:
     """沪深300指数打标器 - 支持日线和周线"""
     
-    def __init__(self, data_dir="data/tushare", output_dir="images/label", timeframe='weekly'):
+    def __init__(self, data_dir=None, output_dir="images/label", timeframe='weekly'):
         """
         初始化打标器
         
@@ -30,7 +32,7 @@ class HS300Labeler:
             output_dir: 输出目录
             timeframe: 时间周期 ('daily' 或 'weekly')
         """
-        self.data_dir = data_dir
+        self.data_dir = data_dir or str(get_tushare_root())
         self.output_dir = output_dir
         self.timeframe = timeframe
         

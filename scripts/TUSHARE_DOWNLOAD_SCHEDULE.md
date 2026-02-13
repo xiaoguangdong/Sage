@@ -40,7 +40,7 @@ echo "/Users/dongxg/SourceCode/deep_final_kp/scripts/schedule_tushare_download.s
 ## 查看日志
 
 ```bash
-tail -f /Users/dongxg/SourceCode/deep_final_kp/data/tushare/download_batch.log
+tail -f /Users/dongxg/SourceCode/Sage/logs/data/*.log
 ```
 
 ## 每天定时运行

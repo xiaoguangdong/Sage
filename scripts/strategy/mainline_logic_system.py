@@ -19,19 +19,21 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+from scripts.data._shared.runtime import get_tushare_root, get_data_path
+
 class MainlineLogicSystem:
     """主线逻辑识别系统"""
     
-    def __init__(self, data_dir='data/tushare'):
+    def __init__(self, data_dir=None):
         """
         初始化系统
         
         Args:
             data_dir: 数据目录
         """
-        self.data_dir = data_dir
-        self.factors_dir = os.path.join(data_dir, 'factors')
-        self.sectors_dir = os.path.join(data_dir, 'sectors')
+        self.data_dir = data_dir or str(get_tushare_root())
+        self.factors_dir = str(get_data_path("processed", "factors", ensure=True))
+        self.sectors_dir = os.path.join(self.data_dir, 'sectors')
         
         os.makedirs(self.factors_dir, exist_ok=True)
         os.makedirs(self.sectors_dir, exist_ok=True)
@@ -91,7 +93,7 @@ class MainlineLogicSystem:
             print(f"  ✓ 财务数据: {len(self.fina_indicator)} 条记录")
         
         # 加载指数数据
-        index_file = os.path.join(self.data_dir, 'index_ohlc_all.parquet')
+        index_file = os.path.join(self.data_dir, 'index', 'index_ohlc_all.parquet')
         if os.path.exists(index_file):
             self.index_data = pd.read_parquet(index_file)
             self.index_data['trade_date'] = pd.to_datetime(self.index_data['date'])

@@ -3,7 +3,7 @@
 ## 一、数据目录结构
 
 ```
-data/tushare/
+data/raw/tushare/
 ├── macro/                           # 宏观数据
 │   ├── nbs_ppi_industry_*.csv      # NBS分行业PPI（月度）
 │   ├── nbs_fai_industry_*.csv       # NBS分行业固定资产投资（月度）

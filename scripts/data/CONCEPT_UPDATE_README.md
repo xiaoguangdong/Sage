@@ -102,14 +102,14 @@ python scripts/data/tushare_suite.py --action concept_update_tushare --mode calc
 
 ### 输入文件
 
-- `data/tushare/daily/daily_YYYY.parquet` - 个股日线数据（按年存储）
-- `data/tushare/sectors/all_concept_details_base.csv` - 基准概念成分股数据
+- `data/raw/tushare/daily/daily_YYYY.parquet` - 个股日线数据（按年存储）
+- `data/raw/tushare/sectors/all_concept_details_base.csv` - 基准概念成分股数据
 
 ### 输出文件
 
-- `data/tushare/sectors/all_concept_details_YYYYMMDD.csv` - 带时间戳的概念成分股数据
-- `data/tushare/sectors/all_concept_details.csv` - 最新概念成分股数据
-- `data/tushare/sectors/concept_performance_YYYYMMDD.csv` - 概念表现和评分
+- `data/raw/tushare/sectors/all_concept_details_YYYYMMDD.csv` - 带时间戳的概念成分股数据
+- `data/raw/tushare/sectors/all_concept_details.csv` - 最新概念成分股数据
+- `data/raw/tushare/sectors/concept_performance_YYYYMMDD.csv` - 概念表现和评分
 - `logs/data/YYYYMMDD_NNN_tushare_suite.log` - 更新日志
 
 ## 日志记录
@@ -160,7 +160,7 @@ crontab -e
 
 ### 问题3：个股数据文件不存在
 
-**现象**: `个股数据文件不存在: data/tushare/daily/daily_2024.parquet`
+**现象**: `个股数据文件不存在: data/raw/tushare/daily/daily_2024.parquet`
 
 **解决**:
 - 确认个股数据已下载

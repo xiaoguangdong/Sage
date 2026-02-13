@@ -20,12 +20,13 @@ import time
 from datetime import datetime
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR
 
 
 class TushareMacroDataFetcher:
     def __init__(self, token):
         self.pro = ts.pro_api(token)
-        self.output_dir = 'data/tushare/macro'
+        self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         self.max_retries = 3  # 最大重试次数
         self.retry_delay = 60  # 重试延迟60秒

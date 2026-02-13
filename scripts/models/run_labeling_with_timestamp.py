@@ -36,7 +36,7 @@ def download_index_data(start_date, end_date):
     output_root = download_index_ohlc(
         start_date=start_date,
         end_date=end_date,
-        output_dir="data",
+        output_dir=None,
         indices=[("000300.SH", "沪深300")],
         sleep_seconds=1,
     )
@@ -46,7 +46,7 @@ def download_index_data(start_date, end_date):
         print("✗ 数据下载失败")
         return False
 
-    legacy_dir = PROJECT_ROOT / "data" / "tushare" / "index"
+    legacy_dir = PROJECT_ROOT / "data" / "raw" / "tushare" / "index"
     legacy_dir.mkdir(parents=True, exist_ok=True)
     output_file = legacy_dir / "index_000300_SH_ohlc.parquet"
     shutil.copy2(src_file, output_file)

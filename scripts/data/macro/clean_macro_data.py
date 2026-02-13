@@ -17,6 +17,8 @@ import numpy as np
 import os
 from typing import Dict, Optional
 
+from scripts.data.macro.paths import MACRO_DIR
+
 
 # 修复pandas版本兼容性
 try:
@@ -37,14 +39,14 @@ class MacroDataProcessor:
     4. 数据对齐
     """
     
-    def __init__(self, data_dir: str = 'data/tushare/macro'):
+    def __init__(self, data_dir: str = None):
         """
         初始化处理器
         
         Args:
             data_dir: 数据目录
         """
-        self.data_dir = data_dir
+        self.data_dir = data_dir or str(MACRO_DIR)
         self.macro_data = None
         self.industry_data = None
         self.northbound_data = None

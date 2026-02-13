@@ -13,6 +13,7 @@ import yaml
 from datetime import datetime
 import os
 
+from scripts.data.macro.paths import MACRO_DIR
 
 def load_fai_sw_data():
     """加载对齐后的申万行业FAI数据"""
@@ -35,7 +36,7 @@ def load_macro_data():
     macro_data = []
     
     # 加载CPI
-    cpi_file = 'data/tushare/macro/tushare_cpi.parquet'
+    cpi_file = str(MACRO_DIR / 'tushare_cpi.parquet')
     if os.path.exists(cpi_file):
         cpi = pd.read_parquet(cpi_file)
         cpi['date'] = pd.to_datetime(cpi['month'].astype(str), format='%Y%m')
@@ -43,7 +44,7 @@ def load_macro_data():
         macro_data.append(cpi[['date', 'cpi_yoy']])
     
     # 加载PPI
-    ppi_file = 'data/tushare/macro/tushare_ppi.parquet'
+    ppi_file = str(MACRO_DIR / 'tushare_ppi.parquet')
     if os.path.exists(ppi_file):
         ppi = pd.read_parquet(ppi_file)
         ppi['date'] = pd.to_datetime(ppi['month'].astype(str), format='%Y%m')
@@ -51,7 +52,7 @@ def load_macro_data():
         macro_data.append(ppi[['date', 'ppi_yoy']])
     
     # 加载PMI
-    pmi_file = 'data/tushare/macro/tushare_pmi.parquet'
+    pmi_file = str(MACRO_DIR / 'tushare_pmi.parquet')
     if os.path.exists(pmi_file):
         pmi = pd.read_parquet(pmi_file)
         pmi['date'] = pd.to_datetime(pmi['MONTH'].astype(str), format='%Y%m')
@@ -59,7 +60,7 @@ def load_macro_data():
         macro_data.append(pmi[['date', 'pmi']])
     
     # 加载收益率
-    yield_file = 'data/tushare/macro/yield_10y.parquet'
+    yield_file = str(MACRO_DIR / 'yield_10y.parquet')
     if os.path.exists(yield_file):
         yield_10y = pd.read_parquet(yield_file)
         yield_10y['date'] = pd.to_datetime(yield_10y['trade_date'])

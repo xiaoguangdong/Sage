@@ -12,6 +12,7 @@ import time
 from pathlib import Path
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR
 
 
 def get_sw_daily_with_retry(pro, start_date, end_date, offset=0, max_retries=3):
@@ -54,7 +55,7 @@ def fetch_missing_months():
         print(f"  {start} ~ {end}")
 
     # 输出文件
-    output_dir = Path('data/tushare/macro')
+    output_dir = Path(MACRO_DIR)
     output_file = output_dir / 'sw_valuation.parquet'
 
     # 加载已有数据

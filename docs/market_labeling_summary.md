@@ -215,7 +215,7 @@ import numpy as np
 from hmmlearn import hmm
 
 # 1. 加载数据
-df = pd.read_parquet('data/tushare/index_000300_SH_ohlc.parquet')
+df = pd.read_parquet('data/raw/tushare/index/index_000300_SH_ohlc.parquet')
 df['date'] = pd.to_datetime(df['date'])
 df = df.sort_values('date').reset_index(drop=True)
 
@@ -296,7 +296,7 @@ labels = [map_hmm_to_label(s) for s in states]
 - `scripts/models/compare_labeling_methods.py` - 方法对比
 
 **数据文件**：
-- `data/tushare/index/index_000300_SH_ohlc.parquet` - 沪深300日线
+- `data/raw/tushare/index/index_000300_SH_ohlc.parquet` - 沪深300日线
 - `images/label/hs300_weekly_labels.csv` - 打标结果
 - `images/label/hs300_daily_labels.csv` - 日线打标结果
 
@@ -646,7 +646,7 @@ for _, row in labels.iterrows():
 - `scripts/data/tushare_suite.py` - 数据下载（`--action index_ohlc`）
 
 **数据文件**：
-- `data/tushare/index/index_000300_SH_ohlc.parquet` - 沪深300日线
+- `data/raw/tushare/index/index_000300_SH_ohlc.parquet` - 沪深300日线
 - `images/label/hs300_weekly_labels.csv` - 周线标签
 - `images/label/hs300_daily_labels.csv` - 日线标签
 

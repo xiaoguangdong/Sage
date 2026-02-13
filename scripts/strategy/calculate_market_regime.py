@@ -14,6 +14,8 @@ import logging
 from typing import Dict, List, Tuple
 from scipy import stats
 
+from scripts.data._shared.runtime import get_tushare_root, get_data_path
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -29,8 +31,8 @@ class MarketRegimeAnalyzer:
     """市场风格分析器"""
     
     def __init__(self):
-        self.data_dir = "data/tushare"
-        self.output_dir = "data/tushare/factors"
+        self.data_dir = str(get_tushare_root())
+        self.output_dir = str(get_data_path("processed", "factors", ensure=True))
         
         # 创建输出目录
         os.makedirs(self.output_dir, exist_ok=True)
@@ -90,7 +92,7 @@ class MarketRegimeAnalyzer:
         
         # 加载指数数据
         logger.info("加载指数数据...")
-        index_file = os.path.join(self.data_dir, "index_ohlc_all.parquet")
+        index_file = os.path.join(self.data_dir, "index", "index_ohlc_all.parquet")
         if os.path.exists(index_file):
             self.index_data = pd.read_parquet(index_file)
             self.index_data['trade_date'] = pd.to_datetime(self.index_data['date'])

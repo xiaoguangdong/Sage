@@ -12,6 +12,7 @@ import json
 from datetime import datetime
 import os
 
+from scripts.data.macro.paths import MACRO_DIR
 
 def parse_nbs_json(json_file: str, target_codes: list) -> pd.DataFrame:
     """解析NBS JSON数据，提取目标代码的数据"""
@@ -89,7 +90,7 @@ def analyze_ai_investment():
     ]
     
     # 加载FAI数据
-    fai_file = 'data/tushare/macro/A0403_固定资产投资.json'
+    fai_file = str(MACRO_DIR / 'A0403_固定资产投资.json')
     if not os.path.exists(fai_file):
         print(f"文件不存在: {fai_file}")
         return
@@ -201,7 +202,7 @@ def analyze_ai_investment():
     print("=" * 80)
     
     # 加载宏观数据
-    pmi_file = 'data/tushare/macro/tushare_pmi.parquet'
+    pmi_file = str(MACRO_DIR / 'tushare_pmi.parquet')
     if os.path.exists(pmi_file):
         pmi = pd.read_parquet(pmi_file)
         pmi['date'] = pd.to_datetime(pmi['MONTH'].astype(str), format='%Y%m')

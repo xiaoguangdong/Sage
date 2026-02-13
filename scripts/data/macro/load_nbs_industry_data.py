@@ -16,6 +16,8 @@ import yaml
 import os
 from datetime import datetime
 
+from scripts.data.macro.paths import MACRO_DIR
+
 def load_nbs_industry_data(start_date='2020-01-01', end_date='2026-12-31'):
     """
     加载NBS数据并映射到申万行业
@@ -30,7 +32,7 @@ def load_nbs_industry_data(start_date='2020-01-01', end_date='2026-12-31'):
             - 'industry_fai': 申万行业FAI数据
             - 'sw_industries': 申万行业列表
     """
-    data_dir = 'data/tushare/macro'
+    data_dir = str(MACRO_DIR)
 
     print("=" * 80)
     print("加载NBS数据并映射到申万行业")

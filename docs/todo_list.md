@@ -60,7 +60,7 @@
 ### 相关文件
 - `scripts/data/tushare_suite.py`（`--action concept_update_tushare`）
 - `scripts/data/tushare_suite.py`（`--action concept_update_eastmoney`）
-- `data/tushare/sectors/all_concept_details.csv` (100个概念)
+- `data/raw/tushare/sectors/all_concept_details.csv` (100个概念)
 
 ---
 
@@ -160,7 +160,7 @@
 - 可用于趋势预测的宏观特征
 
 ### 相关文件
-- `data/tushare/macro/` (待创建)
+- `data/raw/tushare/macro/` (待创建)
 - `scripts/data/macro/fetch_macro_data.py` (待实现)
 - `scripts/data/macro/clean_macro_data.py` (待完善)
 

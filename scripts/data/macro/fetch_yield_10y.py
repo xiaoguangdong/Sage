@@ -14,6 +14,7 @@ import time
 from datetime import datetime, timedelta
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR
 
 def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='20251231'):
     """
@@ -36,7 +37,7 @@ def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='2025
     api_delay = 40  # 每次请求间隔40秒
     max_retries = 3  # 最大重试次数
 
-    output_dir = 'data/tushare/macro'
+    output_dir = str(MACRO_DIR)
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, f'yield_{curve_term}y.parquet')
 

@@ -289,10 +289,10 @@ risk_weight /= total
 | `scripts/strategy/calculate_market_regime.py` | 市场风格状态机 |
 | `scripts/models/adaptive_factor_weights.py` | 自适应因子权重系统 |
 | `run_factor_calculation.sh` | 后台任务运行脚本 |
-| `data/tushare/factors/stock_factors_with_score.parquet` | 固定因子得分 |
-| `data/tushare/factors/stock_factors_with_adaptive_score.parquet` | 自适应因子得分 |
-| `data/tushare/factors/market_regime_features.parquet` | 市场风格特征 |
-| `data/tushare/factors/adaptive_factor_weights.csv` | 因子权重历史 |
+| `data/processed/factors/stock_factors_with_score.parquet` | 固定因子得分 |
+| `data/processed/factors/stock_factors_with_adaptive_score.parquet` | 自适应因子得分 |
+| `data/processed/factors/market_regime_features.parquet` | 市场风格特征 |
+| `data/processed/factors/adaptive_factor_weights.csv` | 因子权重历史 |
 
 ## 数据统计
 

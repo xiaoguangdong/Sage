@@ -98,7 +98,7 @@ sw_data = mapper.map_nbs_data_to_sw(
 python3 scripts/data/macro/map_nbs_to_sw.py
 ```
 
-**输出文件**：`data/tushare/macro/sw_ppi_yoy_YYYYMM.csv`
+**输出文件**：`data/raw/tushare/macro/sw_ppi_yoy_YYYYMM.csv`
 
 **输出格式**：
 
@@ -154,7 +154,7 @@ python3 scripts/data/macro/map_nbs_to_sw.py
 
 ```python
 # 加载申万行业PPI数据
-sw_ppi = pd.read_csv('data/tushare/macro/sw_ppi_yoy_202512.csv')
+sw_ppi = pd.read_csv('data/raw/tushare/macro/sw_ppi_yoy_202512.csv')
 
 # 分析行业景气度
 top_industries = sw_ppi.nsmallest(5, 'sw_ppi_yoy')

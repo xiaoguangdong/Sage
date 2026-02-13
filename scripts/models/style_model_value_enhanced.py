@@ -9,6 +9,8 @@ import numpy as np
 from pathlib import Path
 import logging
 
+from scripts.data._shared.runtime import get_tushare_root
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -19,8 +21,8 @@ logger = logging.getLogger(__name__)
 class ValueEnhancedStyleModel:
     """价值增强版风格模型"""
 
-    def __init__(self, data_dir="data/tushare"):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir=None):
+        self.data_dir = Path(data_dir or str(get_tushare_root()))
         self.load_data()
 
     def load_data(self):

@@ -12,6 +12,8 @@ import matplotlib.dates as mdates
 from matplotlib.patches import Rectangle
 from datetime import datetime, timedelta
 
+from scripts.data._shared.runtime import get_tushare_root
+
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -20,7 +22,7 @@ plt.rcParams['axes.unicode_minus'] = False
 class StockLabeler:
     """股票打标器"""
     
-    def __init__(self, data_dir="data/tushare", output_dir="images/label", 
+    def __init__(self, data_dir=None, output_dir="images/label", 
                  num_stocks=30, start_year=2020, end_year=2025):
         """
         初始化打标器
@@ -32,7 +34,7 @@ class StockLabeler:
             start_year: 开始年份
             end_year: 结束年份
         """
-        self.data_dir = data_dir
+        self.data_dir = data_dir or str(get_tushare_root())
         self.output_dir = output_dir
         self.num_stocks = num_stocks
         self.start_year = start_year
@@ -427,7 +429,7 @@ def main():
     
     # 创建打标器
     labeler = StockLabeler(
-        data_dir="data/tushare",
+        data_dir=str(get_tushare_root()),
         output_dir="images/label",
         num_stocks=30,  # 默认30只股票
         start_year=2020,

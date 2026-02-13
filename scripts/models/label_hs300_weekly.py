@@ -14,6 +14,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
 
+from scripts.data._shared.runtime import get_tushare_root
+
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -22,7 +24,7 @@ plt.rcParams['axes.unicode_minus'] = False
 class WeeklyLabeler:
     """基于周线指标的沪深300打标器"""
     
-    def __init__(self, data_dir="data/tushare", output_dir="images/label"):
+    def __init__(self, data_dir=None, output_dir="images/label"):
         """
         初始化打标器
         
@@ -30,7 +32,7 @@ class WeeklyLabeler:
             data_dir: 数据目录
             output_dir: 输出目录
         """
-        self.data_dir = data_dir
+        self.data_dir = data_dir or str(get_tushare_root())
         self.output_dir = output_dir
         
         # 创建输出目录

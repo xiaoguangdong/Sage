@@ -12,6 +12,8 @@ import numpy as np
 import logging
 from typing import Dict, List, Tuple
 
+from scripts.data._shared.runtime import get_tushare_root, get_data_path
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -27,8 +29,8 @@ class AdaptiveFactorWeightSystem:
     """自适应因子权重系统"""
     
     def __init__(self):
-        self.data_dir = "data/tushare"
-        self.output_dir = "data/tushare/factors"
+        self.data_dir = str(get_tushare_root())
+        self.output_dir = str(get_data_path("processed", "factors", ensure=True))
         
         # 创建输出目录
         os.makedirs(self.output_dir, exist_ok=True)

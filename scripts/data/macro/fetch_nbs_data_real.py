@@ -16,11 +16,13 @@ import time
 import os
 from datetime import datetime
 
+from scripts.data.macro.paths import MACRO_DIR
+
 
 class NBSDataFetcher:
     def __init__(self):
         self.base_url = "https://data.stats.gov.cn/easyquery.htm"
-        self.output_dir = 'data/tushare/macro'
+        self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",

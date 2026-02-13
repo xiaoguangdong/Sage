@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from sage_core.models.multi_alpha_selector import MultiAlphaStockSelector
+from scripts.data._shared.runtime import get_tushare_root
 
 
 logging.basicConfig(
@@ -52,7 +53,7 @@ def main():
     parser.add_argument("--top-n", type=int, default=30, help="每个子组合选股数量")
     parser.add_argument("--allocation", type=str, default="fixed", choices=["fixed", "regime"], help="组合权重方式")
     parser.add_argument("--regime", type=str, default="sideways", choices=["bear", "sideways", "bull"], help="市场状态")
-    parser.add_argument("--data-dir", type=str, default="data/tushare", help="数据目录")
+    parser.add_argument("--data-dir", type=str, default=str(get_tushare_root()), help="数据目录")
     parser.add_argument("--output", type=str, default=None, help="输出CSV路径")
 
     args = parser.parse_args()

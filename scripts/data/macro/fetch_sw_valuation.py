@@ -15,6 +15,7 @@ from datetime import datetime
 from pathlib import Path
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR
 
 
 def get_sw_daily_with_retry(pro, start_date, end_date, offset=0, max_retries=3):
@@ -107,7 +108,7 @@ def fetch_sw_valuation_data():
     pro = ts.pro_api(token)
 
     # 创建输出目录
-    output_dir = Path('data/tushare/macro')
+    output_dir = Path(MACRO_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 进度文件

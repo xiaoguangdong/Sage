@@ -29,13 +29,13 @@ import tushare as ts
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_tushare_token, setup_logger
+from scripts.data._shared.runtime import get_tushare_token, setup_logger, get_tushare_root
 
 logger = setup_logger(Path(__file__).stem, module="strategy")
 
 # 配置参数
 TIMEOUT = 30
-DATA_DIR = 'data/tushare/sectors'
+DATA_DIR = str(get_tushare_root() / "sectors")
 START_DATE = '20240924'
 END_DATE = '20260206'
 

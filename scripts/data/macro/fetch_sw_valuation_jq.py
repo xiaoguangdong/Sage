@@ -16,6 +16,7 @@ import yaml
 from datetime import datetime, timedelta
 import time
 
+from scripts.data.macro.paths import MACRO_DIR
 try:
     import jqdatasdk as jq
     JQDATA_AVAILABLE = True
@@ -210,7 +211,7 @@ def main():
         df = merge_industry_name(df)
         
         # 7. 保存数据
-        output_path = 'data/tushare/macro/sw_valuation.parquet'
+        output_path = str(MACRO_DIR / 'sw_valuation.parquet')
         save_data(df, output_path)
         
         # 8. 显示统计信息

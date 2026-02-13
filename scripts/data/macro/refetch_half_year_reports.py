@@ -13,6 +13,7 @@ import os
 import logging
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
@@ -38,7 +39,7 @@ class HalfYearReportFetcher:
         self.api_delay = api_delay
         self.max_retries = 3  # 最大重试次数
         self.retry_delay = 60  # 重试延迟60秒
-        self.output_dir = "data/tushare/macro/segments"
+        self.output_dir = str(MACRO_DIR / "segments")
         os.makedirs(self.output_dir, exist_ok=True)
 
     def get_half_year_quarters(self, start_year=2020, end_year=2026):

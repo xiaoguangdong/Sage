@@ -25,11 +25,12 @@ import os
 from datetime import datetime, timedelta
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR
 
 class CompleteNBSDataFetcher:
     def __init__(self, tushare_token=None):
         self.base_url = "https://data.stats.gov.cn/easyquery.htm"
-        self.output_dir = 'data/tushare/macro'
+        self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         
         # Tushare用于获取PMI数据

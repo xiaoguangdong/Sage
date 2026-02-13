@@ -16,6 +16,7 @@ from pathlib import Path
 from datetime import datetime
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import NORTHBOUND_DIR
 
 
 def get_sw_industry_constituents(pro):
@@ -114,7 +115,7 @@ def main():
     pro = ts.pro_api(token)
     
     # 创建输出目录
-    output_dir = Path('data/tushare/northbound')
+    output_dir = Path(NORTHBOUND_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. 获取申万行业成分股列表

@@ -7,6 +7,8 @@
 - 设置 Tushare Token 环境变量：`export TUSHARE_TOKEN=xxxx`
 - 或在项目根目录创建 `.env`：`TUSHARE_TOKEN=xxxx`
 - 日志默认输出到：`logs/data/YYYYMMDD_NNN_<script>.log`
+- 数据根目录优先从 `config/base.yaml -> data.roots.primary` 读取（如 `/Volumes/SPEED/BizData/Stock/sage_primary`）
+- 可用环境变量覆盖：`SAGE_DATA_ROOT_PRIMARY` / `SAGE_DATA_ROOT_SECONDARY`
 
 ## Tushare 统一脚本
 
@@ -25,6 +27,8 @@ python scripts/data/tushare_suite.py --action margin \
 输出分片目录：
 - `/tmp/sage_data/tushare/daily_basic/parts/`
 - `/tmp/sage_data/tushare/margin/parts/`
+
+默认输出目录（不传 `--output-dir`）：`data/raw/tushare/`
 
 ### 其他示例（YYYYMMDD）
 
@@ -66,7 +70,7 @@ python scripts/data/tushare_suite.py --action opt_daily \
 # 财务指标
 python scripts/data/tushare_suite.py --action fina_indicator \
   --start-date 20240101 --end-date 20241231 \
-  --stock-list-csv data/tushare/filtered_stocks_list.csv \
+  --stock-list-csv data/raw/tushare/filtered_stocks_list.csv \
   --output-dir /tmp/sage_data
 
 # 财务指标VIP

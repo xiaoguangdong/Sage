@@ -7,7 +7,8 @@ echo "检查时间: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
 # 数据目录
-DATA_DIR="data/tushare/macro"
+DATA_ROOT="${SAGE_DATA_ROOT_PRIMARY:-data}"
+DATA_DIR="${DATA_ROOT}/raw/tushare/macro"
 LOG_DIR="logs/macro"
 
 # 检查最新数据文件

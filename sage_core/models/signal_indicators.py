@@ -13,12 +13,13 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 
+from scripts.data._shared.runtime import get_data_path
 
 class MacroSignal:
     """宏观信号指标：PMI拐点 + 利率曲线斜率"""
     
-    def __init__(self, data_dir='data/tushare/macro'):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir=None):
+        self.data_dir = Path(data_dir or str(get_data_path("raw", "tushare", "macro")))
     
     def load_data(self):
         """加载PMI和国债收益率数据"""
@@ -156,8 +157,8 @@ class MacroSignal:
 class IndustryProsperity:
     """行业景气度指标：营收增速二阶导 + 毛利率扩张"""
     
-    def __init__(self, data_dir='data/tushare/fundamental'):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir=None):
+        self.data_dir = Path(data_dir or str(get_data_path("raw", "tushare", "fundamental")))
     
     def load_data(self):
         """加载财务数据"""
@@ -265,8 +266,8 @@ class IndustryProsperity:
 class NorthboundFlow:
     """资金流指标：北向资金行业配置比例突破布林带"""
     
-    def __init__(self, data_dir='data/tushare/northbound'):
-        self.data_dir = Path(data_dir)
+    def __init__(self, data_dir=None):
+        self.data_dir = Path(data_dir or str(get_data_path("raw", "tushare", "northbound")))
     
     def load_data(self):
         """加载北向资金数据"""

@@ -14,6 +14,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import CONCEPTS_DIR
 
 
 def get_with_retry(pro, api_name, params, max_retries=3, sleep_time=40):
@@ -274,7 +275,7 @@ def main():
     pro = ts.pro_api(token)
 
     # 输出目录
-    output_dir = Path('data/tushare/concepts')
+    output_dir = Path(CONCEPTS_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 步骤1: 获取概念指数历史数据

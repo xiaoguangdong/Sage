@@ -12,18 +12,19 @@
 import pandas as pd
 from pathlib import Path
 
+from scripts.data.macro.paths import CONSTITUENTS_DIR, NORTHBOUND_DIR
 
 def load_data():
     """加载数据"""
     print("加载数据...")
     
     # 加载HS300成分股数据
-    constituents_file = Path('data/tushare/constituents/hs300_constituents_all.parquet')
+    constituents_file = Path(CONSTITUENTS_DIR) / 'hs300_constituents_all.parquet'
     constituents_df = pd.read_parquet(constituents_file)
     print(f"  HS300成分股: {len(constituents_df)} 条记录")
     
     # 加载个股北向资金持仓数据
-    holdings_file = Path('data/tushare/northbound/hk_hold.parquet')
+    holdings_file = Path(NORTHBOUND_DIR) / 'hk_hold.parquet'
     holdings_df = pd.read_parquet(holdings_file)
     print(f"  北向资金持仓: {len(holdings_df)} 条记录")
     
@@ -117,7 +118,7 @@ def main():
     print("=" * 80)
     
     # 创建输出目录
-    output_dir = Path('data/tushare/northbound')
+    output_dir = Path(NORTHBOUND_DIR)
     
     # 1. 加载数据
     constituents_df, holdings_df = load_data()

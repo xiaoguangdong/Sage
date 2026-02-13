@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from datetime import datetime
 
+from scripts.data._shared.runtime import get_tushare_root
+
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei', 'Arial Unicode MS', 'DejaVu Sans']
 plt.rcParams['axes.unicode_minus'] = False
@@ -18,8 +20,8 @@ plt.rcParams['axes.unicode_minus'] = False
 class LabelingMethodComparison:
     """标注方法对比"""
     
-    def __init__(self, data_dir="data/tushare", output_dir="images/label"):
-        self.data_dir = data_dir
+    def __init__(self, data_dir=None, output_dir="images/label"):
+        self.data_dir = data_dir or str(get_tushare_root())
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
         self.load_data()

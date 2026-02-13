@@ -13,18 +13,19 @@ import os
 from datetime import datetime
 import numpy as np
 
+from scripts.data.macro.paths import MACRO_DIR
 
 class NBSDataAnalyzer:
     """NBS数据分析器"""
     
-    def __init__(self, data_dir: str = 'data/tushare/macro'):
+    def __init__(self, data_dir: str = None):
         """
         初始化分析器
         
         Args:
             data_dir: 数据目录
         """
-        self.data_dir = data_dir
+        self.data_dir = data_dir or str(MACRO_DIR)
     
     def parse_nbs_json(self, json_file: str) -> pd.DataFrame:
         """解析NBS JSON数据"""

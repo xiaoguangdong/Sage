@@ -14,6 +14,7 @@ import numpy as np
 from pathlib import Path
 from datetime import datetime
 
+from scripts.data.macro.paths import DAILY_DIR, PRICE_STRUCTURE_DIR, TUSHARE_ROOT
 
 def calculate_price_structure():
     """计算个股价格结构指标"""
@@ -23,7 +24,7 @@ def calculate_price_structure():
 
     # 加载个股日度数据
     print("\n加载个股日度数据...")
-    daily_dir = Path('data/tushare/daily')
+    daily_dir = Path(DAILY_DIR)
     daily_files = sorted(daily_dir.glob('daily_*.parquet'))
     
     all_daily = []
@@ -37,13 +38,13 @@ def calculate_price_structure():
 
     # 加载指数数据（沪深300）
     print("\n加载指数数据...")
-    index_df = pd.read_parquet('data/tushare/index/index_000300_SH_ohlc.parquet')
+    index_df = pd.read_parquet(str(TUSHARE_ROOT / 'index' / 'index_000300_SH_ohlc.parquet'))
     index_df = index_df.rename(columns={'date': 'trade_date', 'pct_change': 'pct_chg'})
     print(f"  加载 {len(index_df)} 条记录")
     print(f"  日期范围: {index_df['trade_date'].min()} ~ {index_df['trade_date'].max()}")
 
     # 输出文件
-    output_dir = Path('data/tushare/price_structure')
+    output_dir = Path(PRICE_STRUCTURE_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / 'price_structure.parquet'
 

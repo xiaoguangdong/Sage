@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 import time
 import os
 
+from scripts.data.macro.paths import MACRO_DIR
+
 class NBSDataFetcher:
     """国家统计局数据获取器"""
     
@@ -27,7 +29,7 @@ class NBSDataFetcher:
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
-        self.output_dir = 'data/tushare/macro'
+        self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
     
     def fetch_ppi_industry(self, year, month):

@@ -18,13 +18,14 @@ import os
 from datetime import datetime, timedelta
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import MACRO_DIR, NORTHBOUND_DIR
 
 class MissingMacroDataFetcher:
     def __init__(self, token=None):
         self.token = get_tushare_token(token)
         self.pro = ts.pro_api(self.token)
-        self.output_dir = 'data/tushare/macro'
-        self.northbound_dir = 'data/tushare/northbound'
+        self.output_dir = str(MACRO_DIR)
+        self.northbound_dir = str(NORTHBOUND_DIR)
         
         os.makedirs(self.output_dir, exist_ok=True)
         os.makedirs(self.northbound_dir, exist_ok=True)

@@ -13,6 +13,7 @@ import time
 from pathlib import Path
 
 from tushare_auth import get_tushare_token
+from scripts.data.macro.paths import CONCEPTS_DIR
 
 
 def get_data_with_retry(pro, func_name, max_retries=3, **kwargs):
@@ -51,7 +52,7 @@ def fetch_concept_data_new():
     pro = ts.pro_api(token)
 
     # 创建输出目录
-    output_dir = Path('data/tushare/concepts')
+    output_dir = Path(CONCEPTS_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 1. 获取概念指数数据

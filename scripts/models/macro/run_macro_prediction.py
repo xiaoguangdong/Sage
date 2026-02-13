@@ -25,6 +25,7 @@ sys.path.insert(0, project_root)
 
 from sage_core.models.macro_predictor import MacroPredictor
 from scripts.data.macro.clean_macro_data import MacroDataProcessor
+from scripts.data._shared.runtime import get_data_path
 
 
 class MacroPredictionRunner:
@@ -40,8 +41,8 @@ class MacroPredictionRunner:
     
     def __init__(
         self,
-        data_dir: str = 'data/tushare/macro',
-        processed_dir: str = 'data/processed',
+        data_dir: str = None,
+        processed_dir: str = None,
         config_path: str = 'config/sw_nbs_mapping.yaml'
     ):
         """
@@ -52,8 +53,8 @@ class MacroPredictionRunner:
             processed_dir: 处理后数据目录
             config_path: 配置文件路径
         """
-        self.data_dir = data_dir
-        self.processed_dir = processed_dir
+        self.data_dir = data_dir or str(get_data_path("raw", "tushare", "macro"))
+        self.processed_dir = processed_dir or str(get_data_path("processed"))
         self.config_path = config_path
         self.predictor = None
         self.macro_data = None
@@ -371,9 +372,9 @@ def main():
                        help='结束日期 (YYYY-MM-DD)')
     parser.add_argument('--output', type=str, default=None,
                        help='输出文件路径')
-    parser.add_argument('--data-dir', type=str, default='data/tushare/macro',
+    parser.add_argument('--data-dir', type=str, default=str(get_data_path("raw", "tushare", "macro")),
                        help='数据目录')
-    parser.add_argument('--processed-dir', type=str, default='data/processed',
+    parser.add_argument('--processed-dir', type=str, default=str(get_data_path("processed")),
                        help='处理后数据目录')
     parser.add_argument('--config', type=str, default='config/sw_nbs_mapping.yaml',
                        help='配置文件路径')

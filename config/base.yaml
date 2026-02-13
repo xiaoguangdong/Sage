@@ -16,8 +16,20 @@ logging:
   format: "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 data:
+  roots:
+    primary: "/Volumes/SPEED/BizData/Stock/sage_primary"
+    secondary: "/Volumes/SPEED/BizData/Stock/sage_secondary"
+  layout:
+    raw: "raw"
+    processed: "processed"
+    features: "features"
+    labels: "labels"
+    backtest: "backtest"
+    cache: "cache"
+    states: "states"
+    meta: "meta"
   download:
-    output_dir: "/tmp/sage_data"
+    output_dir: "raw"
     sleep_seconds: 60
     max_retries: 3
     backoff_factor: 2.0

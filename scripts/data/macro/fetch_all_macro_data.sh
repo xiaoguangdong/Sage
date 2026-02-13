@@ -7,7 +7,9 @@ echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
 echo ""
 
 # 创建数据目录
-mkdir -p data/tushare/macro
+DATA_ROOT="${SAGE_DATA_ROOT_PRIMARY:-data}"
+MACRO_DIR="${DATA_ROOT}/raw/tushare/macro"
+mkdir -p "$MACRO_DIR"
 
 # 获取NBS数据（上个月）
 echo "步骤1: 获取国家统计局数据..."
@@ -30,7 +32,7 @@ python3 scripts/data/macro/map_nbs_to_sw_all.py
 
 echo ""
 echo "=== 数据获取完成 ==="
-echo "数据目录: data/tushare/macro"
+echo "数据目录: ${MACRO_DIR}"
 echo ""
 echo "数据文件:"
-ls -lh data/tushare/macro/*.csv data/tushare/macro/*.parquet 2>/dev/null | awk '{print $9, "("$5") bytes'}
+ls -lh "${MACRO_DIR}"/*.csv "${MACRO_DIR}"/*.parquet 2>/dev/null | awk '{print $9, "("$5") bytes'}
