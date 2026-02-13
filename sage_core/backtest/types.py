@@ -16,6 +16,7 @@ class BacktestConfig:
     cost_rate: float = 0.0005
     max_positions: int = 10
     max_industry_weight: float = 0.40
+    t_plus_one: bool = True
 
 
 @dataclass
