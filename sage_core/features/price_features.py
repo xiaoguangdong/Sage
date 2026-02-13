@@ -6,11 +6,21 @@ import numpy as np
 from typing import Optional, List
 import logging
 
+from .base import FeatureGenerator, FeatureSpec
+from .registry import register_feature
+
 logger = logging.getLogger(__name__)
 
 
-class PriceFeatures:
+@register_feature
+class PriceFeatures(FeatureGenerator):
     """价格特征提取器"""
+
+    spec = FeatureSpec(
+        name="price_features",
+        input_fields=("date", "stock", "close"),
+        description="个股价格相关特征（动量/流动性/波动/技术指标）",
+    )
     
     def __init__(self):
         """初始化价格特征提取器"""
@@ -210,6 +220,10 @@ class PriceFeatures:
         logger.info(f"价格特征计算完成，总特征数: {len(df.columns) - len(required_cols)}")
         
         return df
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self.validate_input(df)
+        return self.calculate_all_features(df)
 
 
 if __name__ == "__main__":

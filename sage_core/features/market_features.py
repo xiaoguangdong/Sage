@@ -6,11 +6,21 @@ import numpy as np
 from typing import Dict, Optional, List
 import logging
 
+from .base import FeatureGenerator, FeatureSpec
+from .registry import register_feature
+
 logger = logging.getLogger(__name__)
 
 
-class MarketFeatures:
+@register_feature
+class MarketFeatures(FeatureGenerator):
     """市场特征提取器（基于沪深300指数）"""
+
+    spec = FeatureSpec(
+        name="market_features",
+        input_fields=("date", "close"),
+        description="指数级市场特征（趋势/波动/量价/回撤）",
+    )
     
     def __init__(self, index_code: str = "000300.SH"):
         """
@@ -294,6 +304,10 @@ class MarketFeatures:
         logger.info(f"市场特征计算完成，总特征数: {len(df.columns) - len(required_cols)}")
         
         return df
+
+    def transform(self, df: pd.DataFrame) -> pd.DataFrame:
+        self.validate_input(df)
+        return self.calculate_all_features(df)
 
 
 if __name__ == "__main__":

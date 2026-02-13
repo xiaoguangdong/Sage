@@ -7,6 +7,8 @@ from typing import Dict, List, Tuple
 import logging
 from datetime import datetime, timedelta
 
+from .types import BacktestResult
+
 logger = logging.getLogger(__name__)
 
 
@@ -181,6 +183,13 @@ class WalkForwardBacktest:
             'metrics': metrics,
             'splits': splits
         }
+        self.result_object = BacktestResult(
+            returns=portfolio_returns,
+            values=portfolio_values,
+            trades=trade_records,
+            metrics=metrics,
+            splits=splits,
+        )
         
         logger.info("回测完成")
         
