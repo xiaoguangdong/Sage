@@ -192,7 +192,7 @@ class HS300Labeler:
             df['vol_4w'] = df['ret_4w'].rolling(window=4).std()
             df['ma_diff'] = df['ma12'] - df['ma24']
             df['ma_diff_norm'] = df['ma_diff'] / df['ma24'] * 100
-            df['ma_slope'] = df['ma12'].diff()
+            df['ma_slope'] = df['ma4'].diff()
 
         # 9. 成交量比率
         df['vol_ratio'] = df['vol'] / df['vol'].rolling(window=20).mean()
@@ -800,14 +800,21 @@ class HS300Labeler:
         current_state = 1
         confirmation_count = 0
         
+        if self.timeframe == 'daily':
+            ma_short = 20
+            ma_long = 60
+        else:
+            ma_short = 4
+            ma_long = 12
+
         for i in range(len(df)):
-            if i < 20:
+            if i < ma_long:
                 labels.append(1)
                 continue
             
             close = df['close'].iloc[i]
-            ma20 = df['ma20'].iloc[i]
-            ma60 = df['ma60'].iloc[i]
+            ma20 = df[f'ma{ma_short}'].iloc[i]
+            ma60 = df[f'ma{ma_long}'].iloc[i]
             ma_slope = df['ma_slope'].iloc[i]
             
             if pd.isna(ma20) or pd.isna(ma60) or pd.isna(ma_slope):
@@ -987,13 +994,20 @@ class HS300Labeler:
         
         methods = [(name, col, axes[i]) for i, (name, col) in enumerate(methods)]
         
+        if self.timeframe == 'daily':
+            ma_short = 20
+            ma_long = 60
+        else:
+            ma_short = 4
+            ma_long = 12
+
         for name, col, ax in methods:
             # 绘制价格
             ax.plot(df['date'], df['close'], label='价格', linewidth=1.5, color='black', alpha=0.7)
             
-            # 绘制MA20和MA60
-            ax.plot(df['date'], df['ma20'], label='MA20', linewidth=1, color='blue', alpha=0.5)
-            ax.plot(df['date'], df['ma60'], label='MA60', linewidth=1, color='orange', alpha=0.5)
+            # 绘制短/长均线
+            ax.plot(df['date'], df[f'ma{ma_short}'], label=f'MA{ma_short}', linewidth=1, color='blue', alpha=0.5)
+            ax.plot(df['date'], df[f'ma{ma_long}'], label=f'MA{ma_long}', linewidth=1, color='orange', alpha=0.5)
             
             # 用颜色标记市场状态
             for i in range(1, len(df)):
