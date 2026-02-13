@@ -23,3 +23,9 @@ python scripts/data/tushare_downloader.py --endpoint margin \
 输出分片目录：
 - `/tmp/sage_data/daily_basic/parts/`
 - `/tmp/sage_data/margin/parts/`
+
+## Baostock 下载器
+
+`scripts/data/baostock_downloader.py`
+
+示例调用在 `main()` 中已注释（按需打开）。
