@@ -91,6 +91,8 @@ def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='2025
             break
 
         # 筛选指定期限
+        if 'curve_term' in df.columns:
+            df['curve_term'] = pd.to_numeric(df['curve_term'], errors='coerce')
         df_y = df[df['curve_term'] == curve_term].copy()
         
         if len(df_y) > 0:
@@ -127,8 +129,18 @@ def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='2025
         # 合并所有数据
         result = pd.concat(all_data, ignore_index=True)
 
-        # 筛选curve_type=0（注意curve_type可能是字符串）
-        df_y = result[result['curve_type'].astype(str) == '0'][['trade_date', 'yield']].copy()
+        df_y = result.copy()
+        if 'curve_type' in df_y.columns:
+            curve_type = pd.to_numeric(df_y['curve_type'], errors='coerce')
+            df_filtered = df_y[curve_type == 0]
+            if df_filtered.empty:
+                df_filtered = df_y
+            df_y = df_filtered
+
+        if 'yield' not in df_y.columns and 'value' in df_y.columns:
+            df_y = df_y.rename(columns={'value': 'yield'})
+
+        df_y = df_y[['trade_date', 'yield']].copy()
         df_y = df_y.sort_values('trade_date')
 
         # 筛选日期范围
