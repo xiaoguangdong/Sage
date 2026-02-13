@@ -15,9 +15,16 @@ logging:
   base_dir: "logs"
   format: "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
+data:
+  download:
+    output_dir: "/tmp/sage_data"
+    sleep_seconds: 60
+    max_retries: 3
+    backoff_factor: 2.0
+    page_limit_default: 4000
+
 models:
   trend:
     type: "trend_ma_rule"
     short_window: 20
     long_window: 60
-
