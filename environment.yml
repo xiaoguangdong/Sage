@@ -1,0 +1,19 @@
+name: sage
+channels:
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pandas
+  - numpy
+  - pyyaml
+  - requests
+  - pip:
+      - tushare
+      - akshare
+      - scikit-learn
+      - lightgbm
+      - xgboost
+      - pyarrow
+      - pytest
+

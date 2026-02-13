@@ -1,0 +1,23 @@
+project:
+  name: "Sage"
+  mode: "research_backtest"
+  market: "A-share"
+  frequency: "low"
+
+data_sources:
+  priority:
+    - "tushare"
+    - "nbs"
+    - "eastmoney"
+    - "akshare"
+
+logging:
+  base_dir: "logs"
+  format: "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
+
+models:
+  trend:
+    type: "trend_ma_rule"
+    short_window: 20
+    long_window: 60
+

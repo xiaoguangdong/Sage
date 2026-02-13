@@ -1,0 +1,21 @@
+# Core
+pandas
+numpy
+pyyaml
+requests
+
+# Data sources
+tushare
+akshare
+
+# ML
+scikit-learn
+lightgbm
+xgboost
+
+# IO
+pyarrow
+
+# Testing
+pytest
+
