@@ -40,32 +40,26 @@ python scripts/data/tushare_downloader.py --task dc_index \
 > 说明：理想版统一入口以 `config/tushare_tasks.yaml` 为唯一任务清单，
 > 后续新增接口只需追加配置，不再新增脚本。
 
-## Akshare 统一脚本
+## Akshare 统一入口（已合并到理想版下载器）
 
-脚本：`scripts/data/akshare_suite.py`
+脚本：`scripts/data/tushare_downloader.py`
 
 ```bash
 # 概念列表
-python scripts/data/akshare_suite.py --action concept_list \
-  --output-dir /tmp/sage_data
+python scripts/data/tushare_downloader.py --task ak_concept_list
 
 # 概念成分（支持断点续传）
-python scripts/data/akshare_suite.py --action concept_components \
-  --output-dir /tmp/sage_data --resume --max-items 50
+python scripts/data/tushare_downloader.py --task ak_concept_components --resume
 
 # 个股历史（日线，YYYYMMDD）
-python scripts/data/akshare_suite.py --action stock_hist \
-  --start-date 20240101 --end-date 20240201 \
-  --stock-list-csv data/raw/tushare/filtered_stocks_list.csv \
-  --output-dir /tmp/sage_data --resume
+python scripts/data/tushare_downloader.py --task ak_stock_hist \
+  --start-date 20240101 --end-date 20240201 --resume
 ```
 
 输出目录：
-- `/tmp/sage_data/akshare/concepts/`
-- `/tmp/sage_data/akshare/concepts/components/`
-- `/tmp/sage_data/akshare/stock_hist/`
-
-默认输出目录（不传 `--output-dir`）：`data/raw/akshare/`
+- `data/raw/akshare/concepts/`
+- `data/raw/akshare/concepts/components/`
+- `data/raw/akshare/stock_hist/`
 
 ## NBS 工业品对齐（宏观）
 

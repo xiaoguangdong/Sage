@@ -25,7 +25,6 @@ from scripts.data._shared.runtime import (
     add_project_root,
     disable_proxy,
     get_data_path,
-    get_tushare_root,
     get_tushare_token,
 )
 
@@ -110,7 +109,21 @@ def _safe_to_parquet(df: pd.DataFrame, path: Path) -> None:
             df[col_name] = df[col_name].astype(str)
             df.to_parquet(path, index=False)
             return
-        raise
+    raise
+
+
+def _retry_call(func, retries: int = 3, backoff: int = 30, sleep_seconds: int = 1):
+    for attempt in range(retries):
+        try:
+            result = func()
+            time.sleep(sleep_seconds)
+            return result
+        except Exception as exc:
+            if attempt >= retries - 1:
+                raise
+            wait = (attempt + 1) * backoff
+            print(f"  请求失败: {exc}，{wait}s 后重试...")
+            time.sleep(wait)
 
 
 @dataclass
@@ -119,6 +132,7 @@ class TaskConfig:
     api: str
     mode: str
     output: str
+    provider: str = "tushare"
     state: Optional[str] = None
     start_field: Optional[str] = None
     end_field: Optional[str] = None
@@ -145,6 +159,7 @@ class TaskConfig:
             api=payload["api"],
             mode=payload.get("mode", "single"),
             output=payload["output"],
+            provider=payload.get("provider", "tushare"),
             state=payload.get("state"),
             start_field=payload.get("start_field"),
             end_field=payload.get("end_field"),
@@ -288,6 +303,131 @@ def _iter_quarters(task: TaskConfig) -> List[str]:
     return periods
 
 
+def _ak_safe_filename(value: str) -> str:
+    return "".join(ch if ch.isalnum() or ch in ("_", "-", ".") else "_" for ch in value.strip())
+
+
+def _ak_load_concepts(path: Path) -> List[tuple[str, str]]:
+    if not path.exists():
+        raise FileNotFoundError(f"概念列表不存在: {path}")
+    if path.suffix == ".parquet":
+        df = pd.read_parquet(path)
+    else:
+        df = pd.read_csv(path)
+    name_col = "板块名称" if "板块名称" in df.columns else "名称"
+    code_col = "板块代码" if "板块代码" in df.columns else "代码"
+    concepts: List[tuple[str, str]] = []
+    for _, row in df.iterrows():
+        name = str(row.get(name_col, "")).strip()
+        code = str(row.get(code_col, "")).strip()
+        if name:
+            concepts.append((name, code))
+    return concepts
+
+
+def _ak_load_stock_list(list_path: Optional[str], project_root: Path) -> List[str]:
+    if not list_path:
+        return ["000001", "000002"]
+    path = Path(list_path)
+    if not path.is_absolute():
+        path = project_root / path
+    if not path.exists():
+        raise FileNotFoundError(f"stock_list_csv 不存在: {path}")
+    df = pd.read_csv(path)
+    for column in ("ts_code", "symbol", "code"):
+        if column in df.columns:
+            values = df[column].dropna().astype(str).tolist()
+            return [v.split(".", 1)[0] for v in values if str(v).strip()]
+    first_col = df.columns[0]
+    values = df[first_col].dropna().astype(str).tolist()
+    return [v.split(".", 1)[0] for v in values if str(v).strip()]
+
+
+def _run_akshare_task(
+    task: TaskConfig,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    output_root: Path,
+    sleep_seconds: int,
+    resume: bool,
+    dry_run: bool,
+    project_root: Path,
+) -> None:
+    try:
+        import akshare as ak  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("缺少 akshare 依赖，请先安装") from exc
+
+    output_path = _resolve_output(task.output, output_root)
+    if dry_run:
+        print(f"任务 {task.name} (akshare) 输出到 {output_path}")
+        return
+
+    if task.name == "ak_concept_list":
+        df = _retry_call(lambda: ak.stock_board_concept_name_em(), sleep_seconds=sleep_seconds)
+        _safe_to_parquet(df, output_path)
+        print(f"✅ 输出: {output_path}")
+        return
+
+    if task.name == "ak_concept_components":
+        state_path = _resolve_state(task.state) if task.state else None
+        state = _load_state(state_path) if (resume and state_path) else {}
+        start_index = int(state.get("next_index", 0))
+
+        list_path = _resolve_output(task.params.get("concept_list_path", "akshare/concepts/concept_list.parquet"), output_root)
+        concepts = _ak_load_concepts(list_path)
+        component_dir = output_path.parent
+        component_dir.mkdir(parents=True, exist_ok=True)
+
+        for idx in range(start_index, len(concepts)):
+            name, code = concepts[idx]
+            print(f"[{idx+1}/{len(concepts)}] 概念成分: {name}")
+            df = _retry_call(lambda: ak.stock_board_concept_cons_em(symbol=name), sleep_seconds=sleep_seconds)
+            if df is not None and not df.empty:
+                df["concept_name"] = name
+                df["concept_code"] = code
+                filename = component_dir / f"{_ak_safe_filename(name)}.parquet"
+                _safe_to_parquet(df, filename)
+            if state_path:
+                _save_state(state_path, {"next_index": idx + 1, "total": len(concepts)})
+        return
+
+    if task.name == "ak_stock_hist":
+        if not start_date or not end_date:
+            raise ValueError("该任务需要 --start-date 与 --end-date（YYYYMMDD）")
+        adjust = (task.params or {}).get("adjust", "qfq")
+        symbols = _ak_load_stock_list(task.list_file, project_root)
+        state_path = _resolve_state(task.state) if task.state else None
+        state = _load_state(state_path) if (resume and state_path) else {}
+        start_index = int(state.get("next_index", 0))
+
+        start_fmt = start_date
+        end_fmt = end_date
+        for idx in range(start_index, len(symbols)):
+            symbol = symbols[idx]
+            print(f"[{idx+1}/{len(symbols)}] 个股历史: {symbol}")
+            df = _retry_call(
+                lambda: ak.stock_zh_a_hist(
+                    symbol=symbol,
+                    period="daily",
+                    start_date=start_fmt,
+                    end_date=end_fmt,
+                    adjust=adjust,
+                ),
+                sleep_seconds=sleep_seconds,
+            )
+            if df is not None and not df.empty:
+                if "日期" in df.columns:
+                    df["日期"] = df["日期"].astype(str).str.replace("-", "")
+                target = output_path.parent / f"{symbol}_{start_fmt}_{end_fmt}.parquet"
+                _safe_to_parquet(df, target)
+            if state_path:
+                _save_state(state_path, {"next_index": idx + 1, "symbol_count": len(symbols)})
+        return
+
+    raise ValueError(f"未知 akshare 任务: {task.name}")
+
+
 def run_task(
     task: TaskConfig,
     start_date: Optional[str],
@@ -301,6 +441,10 @@ def run_task(
     state_path = _resolve_state(task.state) if task.state else None
 
     project_root = add_project_root()
+
+    if task.provider == "akshare":
+        _run_akshare_task(task, start_date, end_date, output_root, sleep_seconds, resume, dry_run, project_root)
+        return
 
     start_dt = datetime.now()
     end_dt = start_dt
@@ -412,7 +556,7 @@ def main() -> None:
         raise KeyError(f"任务未定义: {args.task}")
     task = TaskConfig.from_dict(args.task, tasks[args.task])
 
-    output_root = Path(args.output_root) if args.output_root else get_tushare_root(ensure=True)
+    output_root = Path(args.output_root) if args.output_root else get_data_path("raw", ensure=True)
 
     if args.disable_proxy:
         disable_proxy()
