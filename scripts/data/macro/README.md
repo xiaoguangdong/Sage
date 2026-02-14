@@ -11,11 +11,12 @@ data/raw/tushare/
 │   ├── tushare_cpi.parquet         # Tushare CPI（月度）
 │   ├── tushare_ppi.parquet         # Tushare PPI（月度）
 │   ├── tushare_pmi.parquet         # Tushare PMI（月度）
-│   ├── tushare_yield_10y.parquet   # Tushare 10年期收益率（日度）
+│   ├── yield_10y.parquet           # Tushare 10年期收益率（日度）
+│   ├── yield_2y.parquet            # Tushare 2年期收益率（日度）
 │   └── tushare_shibor.parquet      # Tushare SHIBOR（日度）
 ├── northbound/                      # 北向资金数据
-│   ├── northbound_daily_flow.parquet    # 北向资金日度流向（日度）
-│   └── northbound_hk_hold.parquet       # 北向资金持仓（日度）
+│   ├── northbound_flow.parquet          # 北向资金日度流向（日度）
+│   └── northbound_hold.parquet          # 北向资金持仓（日度）
 └── sectors/                        # 行业数据
     ├── sw_daily_all.parquet          # 申万行业日K线
     └── all_concept_details.csv       # 概念成分股数据
@@ -123,7 +124,23 @@ trade_date,ts_code,name,hold_amount,hold_ratio,exchange_code
 ...
 ```
 
-## 三、数据更新时间表
+## 三、统一下载入口（理想版）
+
+统一入口：`scripts/data/tushare_downloader.py`  
+任务清单：`config/tushare_tasks.yaml`
+
+示例：
+```bash
+python3 scripts/data/tushare_downloader.py --task cn_cpi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task cn_ppi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task cn_pmi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task yield_10y --resume
+python3 scripts/data/tushare_downloader.py --task yield_2y --resume
+python3 scripts/data/tushare_downloader.py --task northbound_flow --start-date 20200101 --end-date $(date +%Y%m%d) --resume
+python3 scripts/data/tushare_downloader.py --task northbound_hold --start-date 20200101 --end-date $(date +%Y%m%d) --resume
+```
+
+## 四、数据更新时间表
 
 | 数据类型 | 更新频率 | 更新时间 | 数据来源 |
 |---------|---------|---------|---------|
@@ -137,7 +154,7 @@ trade_date,ts_code,name,hold_amount,hold_ratio,exchange_code
 | 北向资金流向 | 日度 | 每日收盘后 | Tushare API |
 | 北向资金持仓 | 周度 | 每周五收盘后 | Tushare API |
 
-## 四、数据质量检查
+## 五、数据质量检查
 
 ### 4.1 检查脚本
 ```bash
@@ -151,18 +168,18 @@ trade_date,ts_code,name,hold_amount,hold_ratio,exchange_code
 - [ ] 数据没有缺失值
 - [ ] 数据格式正确
 
-## 五、数据备份
+## 六、数据备份
 
-### 5.1 备份策略
+### 6.1 备份策略
 - 每月自动备份到 `data/backup/macro/` 目录
 - 保留最近12个月的数据
 - 超过12个月的数据压缩存储
 
-### 5.2 恢复策略
+### 6.2 恢复策略
 - 从备份目录恢复历史数据
 - 使用增量更新补全数据
 
-## 六、常见问题
+## 七、常见问题
 
 ### Q1: 数据更新失败
 **A**: 检查网络连接，检查Tushare token是否有效，检查cron服务是否运行
