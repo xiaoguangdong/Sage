@@ -278,7 +278,7 @@ class MacroDataProcessor:
         for df in dfs[1:]:
             merged = merged.merge(df, on=['sw_industry', 'date'], how='outer')
         return merged.sort_values(['sw_industry', 'date']).reset_index(drop=True)
-    
+
     def load_sw_industry(self) -> pd.DataFrame:
         """
         加载申万行业数据（已映射）
@@ -320,6 +320,96 @@ class MacroDataProcessor:
         print(f"加载申万行业数据: {len(sw_industry)}条记录")
         
         return sw_industry
+
+    def _get_tushare_root(self) -> Path:
+        return Path(self.data_dir).parent
+
+    def load_sw_turnover_rate(self, sw_list: List[str]) -> pd.DataFrame:
+        """
+        计算申万行业月度换手率（基于sw_daily_all）
+        """
+        path = self._get_tushare_root() / "sectors" / "sw_daily_all.parquet"
+        if not path.exists():
+            return pd.DataFrame()
+
+        df = pd.read_parquet(path)
+        if df.empty:
+            return df
+
+        df = df[df["name"].isin(sw_list)].copy()
+        if df.empty:
+            return pd.DataFrame()
+
+        df["trade_date"] = pd.to_datetime(df["trade_date"].astype(str))
+        df = df.sort_values(["name", "trade_date"])
+        df["turnover_rate"] = np.nan
+        if "amount" in df.columns and "float_mv" in df.columns:
+            df["turnover_rate"] = pd.to_numeric(df["amount"], errors="coerce") / pd.to_numeric(df["float_mv"], errors="coerce").replace(0, np.nan)
+
+        df["date"] = df["trade_date"].dt.to_period("M").dt.to_timestamp()
+        df_monthly = df.groupby(["name", "date"]).tail(1).copy()
+        df_monthly = df_monthly.rename(columns={"name": "sw_industry"})
+        return df_monthly[["sw_industry", "date", "turnover_rate"]]
+
+    def load_sw_stock_industry_map(self) -> pd.DataFrame:
+        """
+        构建股票 -> 申万一级行业映射（基于指数成分 + L2/L1分类）
+        """
+        sectors_dir = self._get_tushare_root() / "sectors"
+        members_path = sectors_dir / "all_index_members.csv"
+        l2_path = sectors_dir / "SW2021_L2_classify.csv"
+        l1_path = sectors_dir / "SW2021_L1_classify.csv"
+
+        if not (members_path.exists() and l2_path.exists() and l1_path.exists()):
+            return pd.DataFrame()
+
+        members = pd.read_csv(members_path)
+        if "industry_name" in members.columns:
+            members = members.rename(columns={"industry_name": "industry_name_l2"})
+        l2 = pd.read_csv(l2_path)
+        l1 = pd.read_csv(l1_path)
+
+        members["in_date"] = pd.to_datetime(members["in_date"], errors="coerce")
+        l2_map = l2[["index_code", "parent_code"]]
+        l1_map = l1[["industry_code", "industry_name"]].rename(columns={"industry_code": "parent_code"})
+
+        merged = members.merge(l2_map, on="index_code", how="left")
+        merged = merged.merge(l1_map, on="parent_code", how="left")
+
+        merged = merged.sort_values("in_date").dropna(subset=["industry_name"])
+        latest = merged.groupby("con_code").tail(1)
+        return latest.rename(columns={"con_code": "ts_code", "industry_name": "sw_industry"})[["ts_code", "sw_industry"]]
+
+    def load_industry_rev_yoy(self, stock_map: pd.DataFrame) -> pd.DataFrame:
+        """
+        汇总行业营收同比（rev_yoy）
+        """
+        if stock_map is None or stock_map.empty:
+            return pd.DataFrame()
+
+        fundamental_dir = self._get_tushare_root() / "fundamental"
+        if not fundamental_dir.exists():
+            return pd.DataFrame()
+
+        frames = []
+        for path in sorted(fundamental_dir.glob("fina_indicator_*.parquet")):
+            df = pd.read_parquet(path, columns=["ts_code", "end_date", "tr_yoy"])
+            frames.append(df)
+
+        if not frames:
+            return pd.DataFrame()
+
+        data = pd.concat(frames, ignore_index=True)
+        data["end_date"] = pd.to_datetime(data["end_date"].astype(str), errors="coerce")
+        data = data.merge(stock_map, on="ts_code", how="inner")
+        data = data.dropna(subset=["sw_industry", "end_date"])
+        if data.empty:
+            return pd.DataFrame()
+
+        data["date"] = data["end_date"].dt.to_period("M").dt.to_timestamp()
+        grouped = data.groupby(["sw_industry", "date"])["tr_yoy"].mean().reset_index()
+        grouped = grouped.rename(columns={"tr_yoy": "rev_yoy"})
+        return grouped
 
     def load_sw_valuation_features(self, sw_list: List[str]) -> pd.DataFrame:
         """
@@ -528,14 +618,32 @@ class MacroDataProcessor:
             return industry_df
 
         valuation_df = self.load_sw_valuation_features(sw_list)
-        if valuation_df.empty:
-            return industry_df
+        turnover_df = self.load_sw_turnover_rate(sw_list)
+        stock_map = self.load_sw_stock_industry_map()
+        rev_yoy_df = self.load_industry_rev_yoy(stock_map)
 
-        result = industry_df.merge(
-            valuation_df,
-            on=['sw_industry', 'date'],
-            how='left'
-        )
+        if valuation_df.empty:
+            valuation_df = pd.DataFrame()
+
+        result = industry_df.copy()
+        if not valuation_df.empty:
+            result = result.merge(
+                valuation_df,
+                on=['sw_industry', 'date'],
+                how='left'
+            )
+        if not turnover_df.empty:
+            result = result.merge(
+                turnover_df,
+                on=['sw_industry', 'date'],
+                how='left'
+            )
+        if not rev_yoy_df.empty:
+            result = result.merge(
+                rev_yoy_df,
+                on=['sw_industry', 'date'],
+                how='left'
+            )
         return result
     
     def process_all(self) -> Dict[str, pd.DataFrame]:
@@ -567,11 +675,21 @@ class MacroDataProcessor:
             sw_list = []
 
         industry_with_market = self.add_market_data(industry_cleaned, sw_list)
+        if not industry_with_market.empty:
+            industry_with_market = industry_with_market.sort_values(["sw_industry", "date"])
+            industry_with_market["rev_yoy"] = industry_with_market.groupby("sw_industry")["rev_yoy"].ffill()
+            industry_with_market["turnover_rate"] = industry_with_market.groupby("sw_industry")["turnover_rate"].ffill()
 
         # 4. 补齐字段
         industry_final = industry_with_market.copy()
         if 'sw_ppi_yoy' not in industry_final.columns and 'ppi_yoy' in industry_final.columns:
             industry_final['sw_ppi_yoy'] = industry_final['ppi_yoy']
+
+        if 'inventory_yoy' not in industry_final.columns:
+            industry_final['inventory_yoy'] = np.nan
+        if 'output_yoy' in industry_final.columns and 'rev_yoy' in industry_final.columns:
+            mask = industry_final['inventory_yoy'].isna() & industry_final['output_yoy'].notna() & industry_final['rev_yoy'].notna()
+            industry_final.loc[mask, 'inventory_yoy'] = industry_final.loc[mask, 'output_yoy'] - industry_final.loc[mask, 'rev_yoy']
 
         required_cols = [
             'sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
