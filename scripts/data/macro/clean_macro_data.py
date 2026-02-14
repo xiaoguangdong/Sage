@@ -120,19 +120,19 @@ class MacroDataProcessor:
         
         # 加载10年期国债收益率
         yield_df = pd.DataFrame(columns=['date', 'yield_10y'])
-        yield_path = os.path.join(self.data_dir, 'tushare_yield_10y.parquet')
+        yield_path = os.path.join(self.data_dir, 'yield_10y.parquet')
         if os.path.exists(yield_path):
             temp = pd.read_parquet(yield_path)
-            if 'date' in temp.columns and 'yield_10y' in temp.columns:
-                temp['date'] = pd.to_datetime(temp['date'])
+            if 'trade_date' in temp.columns and 'yield' in temp.columns:
+                temp['date'] = pd.to_datetime(temp['trade_date'].astype(str))
+                temp = temp.rename(columns={'yield': 'yield_10y'})
                 yield_df = temp[['date', 'yield_10y']]
         else:
-            yield_alt = os.path.join(self.data_dir, 'yield_10y.parquet')
-            if os.path.exists(yield_alt):
-                temp = pd.read_parquet(yield_alt)
-                if 'trade_date' in temp.columns and 'yield' in temp.columns:
-                    temp['date'] = pd.to_datetime(temp['trade_date'].astype(str))
-                    temp = temp.rename(columns={'yield': 'yield_10y'})
+            legacy = os.path.join(self.data_dir, 'tushare_yield_10y.parquet')
+            if os.path.exists(legacy):
+                temp = pd.read_parquet(legacy)
+                if 'date' in temp.columns and 'yield_10y' in temp.columns:
+                    temp['date'] = pd.to_datetime(temp['date'])
                     yield_df = temp[['date', 'yield_10y']]
         
         # 加载社融和M2数据
@@ -994,7 +994,7 @@ def main():
                 "credit_growth": "社融存量同比口径，前12个月无法计算。",
                 "pmi": "依赖tushare_pmi.parquet，缺失或未同步到raw目录。",
                 "cpi_yoy": "依赖tushare_cpi.parquet，缺失或未同步到raw目录。",
-                "yield_10y": "依赖tushare_yield_10y.parquet或yield_10y.parquet，早期日期可能为空。"
+                "yield_10y": "依赖yield_10y.parquet（旧版tushare_yield_10y.parquet可兼容）。"
             },
             "industry": {
             "sw_ppi_yoy": "仅工业行业口径；非工业行业直接标记为N/A。工业行业PPI由NBS环比指数链式构建，同比需12个月窗口，早期月份为空。",
