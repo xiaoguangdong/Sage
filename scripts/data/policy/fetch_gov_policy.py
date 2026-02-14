@@ -13,12 +13,15 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional
+from urllib.parse import urljoin
 
 import pandas as pd
 
@@ -34,6 +37,7 @@ class SourceConfig:
     url: str
     source_type: str = "rss"
     tag: Optional[str] = None
+    base_url: Optional[str] = None
 
 
 @dataclass
@@ -130,6 +134,92 @@ def parse_rss(content: str) -> List[Dict[str, str]]:
     return items
 
 
+class _AnchorParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.tokens: List[Dict[str, str]] = []
+        self._in_anchor = False
+        self._anchor_href = ""
+        self._anchor_text: List[str] = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag.lower() == "a":
+            self._in_anchor = True
+            self._anchor_href = ""
+            self._anchor_text = []
+            for key, value in attrs:
+                if key.lower() == "href" and value:
+                    self._anchor_href = value
+
+    def handle_endtag(self, tag):
+        if tag.lower() == "a" and self._in_anchor:
+            text = "".join(self._anchor_text).strip()
+            if text:
+                self.tokens.append({
+                    "type": "a",
+                    "text": text,
+                    "href": self._anchor_href,
+                })
+            self._in_anchor = False
+            self._anchor_href = ""
+            self._anchor_text = []
+
+    def handle_data(self, data):
+        text = (data or "").strip()
+        if not text:
+            return
+        if self._in_anchor:
+            self._anchor_text.append(text)
+        else:
+            self.tokens.append({
+                "type": "text",
+                "text": text,
+            })
+
+
+_DATE_PATTERN = re.compile(r"(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})")
+
+
+def _normalize_date(raw: str) -> Optional[str]:
+    match = _DATE_PATTERN.search(raw)
+    if not match:
+        return None
+    year, month, day = match.groups()
+    return f"{year}-{int(month):02d}-{int(day):02d}"
+
+
+def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, str]]:
+    parser = _AnchorParser()
+    parser.feed(content)
+    tokens = parser.tokens
+    items: List[Dict[str, str]] = []
+    for idx, token in enumerate(tokens):
+        if token.get("type") != "a":
+            continue
+        title = token.get("text", "").strip()
+        if not title or title.lower() == "image":
+            continue
+        href = token.get("href", "").strip()
+        url = urljoin(base_url or "", href) if href else ""
+        date_text = _normalize_date(title)
+        if not date_text:
+            for next_token in tokens[idx + 1: idx + 8]:
+                if next_token.get("type") != "text":
+                    continue
+                date_text = _normalize_date(next_token.get("text", ""))
+                if date_text:
+                    break
+        if not date_text:
+            continue
+        items.append({
+            "title": title,
+            "url": url,
+            "publish_date": date_text,
+            "content": "",
+        })
+    return items
+
+
 def _normalize(df: pd.DataFrame, source: SourceConfig) -> pd.DataFrame:
     if df.empty:
         return df
@@ -137,6 +227,7 @@ def _normalize(df: pd.DataFrame, source: SourceConfig) -> pd.DataFrame:
     df = df.dropna(subset=["publish_date"])
     df["source_name"] = source.name
     df["source_tag"] = source.tag or ""
+    df["source_type"] = source.source_type
     return df
 
 
@@ -154,6 +245,7 @@ def load_sources(config_path: Path) -> List[SourceConfig]:
                 url=url,
                 source_type=str(item.get("type") or "rss"),
                 tag=item.get("tag") or item.get("source_tag"),
+                base_url=item.get("base_url"),
             )
         )
     return sources
@@ -180,12 +272,16 @@ def fetch_sources(sources: List[SourceConfig], cfg: FetchConfig) -> pd.DataFrame
         if not source.url:
             logger.warning(f"跳过空URL来源: {source.name}")
             continue
-        if source.source_type.lower() not in {"rss", "atom"}:
+        source_type = source.source_type.lower()
+        if source_type not in {"rss", "atom", "html"}:
             logger.warning(f"暂不支持的来源类型: {source.source_type} ({source.name})")
             continue
         logger.info(f"拉取 {source.name} ({source.url})")
         content = _fetch_url(source.url, cfg)
-        items = parse_rss(content)
+        if source_type == "html":
+            items = parse_html(content, base_url=source.base_url or source.url)
+        else:
+            items = parse_rss(content)
         if not items:
             logger.warning(f"{source.name} 未解析到有效条目")
             continue

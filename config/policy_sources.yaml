@@ -7,8 +7,9 @@ settings:
 sources:
   - name: "国家发展改革委"
     tag: "ndrc"
-    type: "rss"
-    url: ""
+    type: "html"
+    url: "https://www.ndrc.gov.cn/xwdt/"
+    base_url: "https://www.ndrc.gov.cn/"
   - name: "工业和信息化部"
     tag: "miit"
     type: "rss"

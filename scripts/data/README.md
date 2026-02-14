@@ -174,6 +174,7 @@ python scripts/data/policy/fetch_tushare_policy.py \
 
 说明：
 - 先在 `config/policy_sources.yaml` 填写官方 RSS/Atom 地址
+- 支持 `type: html`（用于没有 RSS 的官网列表页），可填写 `base_url` 处理相对链接
 - 输出汇总到 `gov_notices.parquet`
 
 示例：
