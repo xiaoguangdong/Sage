@@ -714,16 +714,38 @@ class MacroDataProcessor:
 
         if 'inventory_yoy' not in industry_final.columns:
             industry_final['inventory_yoy'] = np.nan
+        if 'inventory_yoy_source' not in industry_final.columns:
+            industry_final['inventory_yoy_source'] = pd.Series([None] * len(industry_final), dtype="object")
+
+        # 主口径：库存同比 = 产量同比 - 营收同比
         if 'output_yoy' in industry_final.columns and 'rev_yoy' in industry_final.columns:
             mask = industry_final['inventory_yoy'].isna() & industry_final['output_yoy'].notna() & industry_final['rev_yoy'].notna()
             industry_final.loc[mask, 'inventory_yoy'] = industry_final.loc[mask, 'output_yoy'] - industry_final.loc[mask, 'rev_yoy']
+            industry_final.loc[mask, 'inventory_yoy_source'] = 'calc_output_minus_rev'
+
+        # 备用口径：库存同比 = 产量同比 - 行业PPI同比
+        proxy_col = None
+        if 'sw_ppi_yoy' in industry_final.columns:
+            proxy_col = 'sw_ppi_yoy'
+        elif 'ppi_yoy' in industry_final.columns:
+            proxy_col = 'ppi_yoy'
+
+        if proxy_col and 'output_yoy' in industry_final.columns:
+            mask = industry_final['inventory_yoy'].isna() & industry_final['output_yoy'].notna() & industry_final[proxy_col].notna()
+            industry_final.loc[mask, 'inventory_yoy'] = industry_final.loc[mask, 'output_yoy'] - industry_final.loc[mask, proxy_col]
+            industry_final.loc[mask, 'inventory_yoy_source'] = f'proxy_output_minus_{proxy_col}'
+
+        # 前向填充并标记来源
         if 'inventory_yoy' in industry_final.columns:
+            before_ffill = industry_final['inventory_yoy'].copy()
             industry_final['inventory_yoy'] = industry_final.groupby("sw_industry")['inventory_yoy'].ffill()
+            filled_mask = before_ffill.isna() & industry_final['inventory_yoy'].notna()
+            industry_final.loc[filled_mask, 'inventory_yoy_source'] = 'ffill'
 
         required_cols = [
             'sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
             'pb_percentile', 'pe_percentile', 'turnover_rate', 'rps_120',
-            'inventory_yoy', 'rev_yoy'
+            'inventory_yoy', 'rev_yoy', 'inventory_yoy_source'
         ]
         for col in required_cols:
             if col not in industry_final.columns:
@@ -785,7 +807,7 @@ def main():
             data['industry'],
             ['sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
              'pb_percentile', 'pe_percentile', 'turnover_rate', 'rps_120',
-             'inventory_yoy', 'rev_yoy']
+             'inventory_yoy', 'rev_yoy', 'inventory_yoy_source']
         ),
         "northbound": _coverage(data['northbound'], ['sw_industry', 'trade_date', 'northbound_signal', 'industry_ratio']),
         "causes": {
@@ -802,7 +824,7 @@ def main():
                 "turnover_rate": "依赖sw_daily_all的amount/float_mv，缺口或行业未覆盖。",
                 "rps_120": "需要120个交易日收益率，样本初期为空。",
                 "rev_yoy": "依赖fina_indicator并映射到行业，财报缺口或映射覆盖不足。",
-                "inventory_yoy": "由output_yoy - rev_yoy计算，rev_yoy为空则缺失。"
+                "inventory_yoy": "主口径为output_yoy - rev_yoy，rev_yoy为空则缺失；备用口径为output_yoy - sw_ppi_yoy/ppi_yoy。"
             },
             "northbound": {
                 "northbound_signal": "依赖northbound行业流数据，若行业或日期缺口则为空。",
