@@ -236,33 +236,47 @@ class MacroPredictor:
         
         latest_macro = macro.iloc[-1]
         
+        def _safe(value, default):
+            if value is None:
+                return default
+            try:
+                if pd.isna(value):
+                    return default
+            except Exception:
+                pass
+            return value
+
+        ppi_value = latest_ind_data.get('sw_ppi_yoy', None)
+        if ppi_value is None or (isinstance(ppi_value, float) and pd.isna(ppi_value)):
+            ppi_value = latest_ind_data.get('ppi_yoy', None)
+
         # 构建指标字典
         metrics = {
             # 价格指标
-            'ppi_yoy': latest_ind_data.get('sw_ppi_yoy', None),
+            'ppi_yoy': _safe(ppi_value, None),
             'ppi_change': self._calculate_change(ind_data, 'sw_ppi_yoy', 2),
             
             # 投资指标
-            'fai_yoy': latest_ind_data.get('fai_yoy', None),
+            'fai_yoy': _safe(latest_ind_data.get('fai_yoy', None), None),
             'fai_change': self._calculate_change(ind_data, 'fai_yoy', 3),
             
             # 库存指标
-            'inventory_yoy': latest_ind_data.get('inventory_yoy', 0),
-            'rev_yoy': latest_ind_data.get('rev_yoy', 0),
+            'inventory_yoy': _safe(latest_ind_data.get('inventory_yoy', 0), 0),
+            'rev_yoy': _safe(latest_ind_data.get('rev_yoy', 0), 0),
             
             # 估值指标
-            'pb_percentile': latest_ind_data.get('pb_percentile', 50),
-            'pe_percentile': latest_ind_data.get('pe_percentile', 50),
+            'pb_percentile': _safe(latest_ind_data.get('pb_percentile', 50), 50),
+            'pe_percentile': _safe(latest_ind_data.get('pe_percentile', 50), 50),
             
             # 市场情绪指标
-            'turnover_rate': latest_ind_data.get('turnover_rate', 0.02),
-            'rps_120': latest_ind_data.get('rps_120', 50),
+            'turnover_rate': _safe(latest_ind_data.get('turnover_rate', 0.02), 0.02),
+            'rps_120': _safe(latest_ind_data.get('rps_120', 50), 50),
             
             # 宏观指标
-            'credit_growth': latest_macro.get('credit_growth', None),
-            'pmi': latest_macro.get('pmi', None),
-            'cpi_yoy': latest_macro.get('cpi_yoy', None),
-            'yield_10y': latest_macro.get('yield_10y', None)
+            'credit_growth': _safe(latest_macro.get('credit_growth', None), None),
+            'pmi': _safe(latest_macro.get('pmi', None), None),
+            'cpi_yoy': _safe(latest_macro.get('cpi_yoy', None), None),
+            'yield_10y': _safe(latest_macro.get('yield_10y', None), None)
         }
         
         # 北向资金信号
@@ -328,6 +342,8 @@ class MacroPredictor:
         Returns:
             float: 变化值
         """
+        if column not in df.columns:
+            return 0
         if len(df) < periods + 1:
             return 0
         
