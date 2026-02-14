@@ -176,7 +176,19 @@ def _normalize_rows(rows: List[Dict]) -> pd.DataFrame:
         + df.get("rating", "")
     )
     df = df.dropna(subset=["publish_date", "title"])
-    return df
+    keep_cols = [
+        "publish_date",
+        "title",
+        "industry",
+        "org",
+        "rating",
+        "rating_change",
+        "info_code",
+        "source_name",
+        "source_type",
+        "content",
+    ]
+    return df[[c for c in keep_cols if c in df.columns]].copy()
 
 
 def fetch_reports(cfg: FetchConfig, resume: bool = True) -> pd.DataFrame:
