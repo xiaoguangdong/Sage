@@ -148,6 +148,45 @@ python scripts/data/macro/align_nbs_industrial_data.py \
 
 ## 政策信号管道（MVP）
 
+### 1) 政策数据拉取（Tushare 公告/研报）
+
+脚本：`scripts/data/policy/fetch_tushare_policy.py`
+
+说明：
+- 需要 `.env` 中配置 `TUSHARE_TOKEN`
+- 自动断点续传（`--resume`）
+- 会强制关闭代理环境变量（避免代理导致的访问问题）
+
+示例：
+```bash
+python scripts/data/policy/fetch_tushare_policy.py \
+  --start-date 20200101 --end-date 20251231 \
+  --action all --resume --sleep-seconds 60
+```
+
+默认输出：
+- `data/raw/tushare/policy/tushare_anns.parquet`
+- `data/raw/tushare/policy/tushare_reports.parquet`
+
+### 2) 政策数据拉取（政府网站 RSS/Atom）
+
+脚本：`scripts/data/policy/fetch_gov_policy.py`
+
+说明：
+- 先在 `config/policy_sources.yaml` 填写官方 RSS/Atom 地址
+- 输出汇总到 `gov_notices.parquet`
+
+示例：
+```bash
+python scripts/data/policy/fetch_gov_policy.py
+```
+
+默认输出：
+- `data/raw/policy/gov_notices.parquet`
+- `data/raw/policy/gov_notices_summary.json`
+
+### 3) 政策信号管道
+
 脚本：`scripts/data/policy/policy_signal_pipeline.py`
 
 输入文件（放在 `data/raw/policy/` 或 `data/raw/tushare/policy/`）：

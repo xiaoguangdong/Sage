@@ -1,0 +1,23 @@
+settings:
+  request_timeout: 20
+  sleep_seconds: 1.0
+  user_agent: "SagePolicyBot/0.1"
+  max_items_per_source: 2000
+
+sources:
+  - name: "国家发展改革委"
+    tag: "ndrc"
+    type: "rss"
+    url: ""
+  - name: "工业和信息化部"
+    tag: "miit"
+    type: "rss"
+    url: ""
+  - name: "国务院"
+    tag: "state_council"
+    type: "rss"
+    url: ""
+  - name: "部委综合"
+    tag: "ministries"
+    type: "rss"
+    url: ""

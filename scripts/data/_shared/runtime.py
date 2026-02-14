@@ -140,6 +140,21 @@ def setup_logger(name: str, module: str = "data", level: int = logging.INFO) -> 
     return logger
 
 
+def disable_proxy() -> None:
+    keys = [
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "all_proxy",
+    ]
+    for key in keys:
+        os.environ.pop(key, None)
+    os.environ["NO_PROXY"] = "*"
+    os.environ["no_proxy"] = "*"
+
+
 def get_tushare_token(explicit: Optional[str] = None) -> str:
     load_env_file()
     token = (explicit or os.getenv("TUSHARE_TOKEN") or os.getenv("TS_TOKEN") or "").strip()
