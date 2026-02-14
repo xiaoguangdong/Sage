@@ -39,6 +39,7 @@ class NBSIndustrialDataAligner:
         """
         self.data_dir = Path(data_dir) if data_dir else Path(MACRO_DIR)
         self._mapping_cache = None
+        self._nbs_industry_cache = None
         
         # 工业品到申万行业的映射（简化版，需要完善）
         self.product_to_sw_industry = {
@@ -100,6 +101,11 @@ class NBSIndustrialDataAligner:
             (['原盐', '磷矿石'], '基础化工'),
             (['乳制品', '成品糖', '白酒', '植物油', '饲料', '鲜、冷藏肉'], '食品饮料'),
         ]
+        self.nbs_industry_aliases = {
+            "石油开采": "石油和天然气开采业",
+            "天然气开采": "石油和天然气开采业",
+            "煤炭开采": "煤炭开采和洗选业",
+        }
 
     def _normalize_product_name(self, name: str) -> str:
         if not isinstance(name, str):
@@ -110,6 +116,79 @@ class NBSIndustrialDataAligner:
                 value = value[: -len(suffix)]
         value = value.replace("（", "(").replace("）", ")").replace(" ", "")
         return value
+
+    def _normalize_nbs_indicator_name(self, name: str) -> str:
+        if not isinstance(name, str):
+            return ""
+        value = name.strip()
+        value = value.replace("（", "(").replace("）", ")").replace(" ", "")
+        value = re.sub(r"\(.*?\)", "", value)
+        for marker in [
+            "固定资产投资额",
+            "工业生产者出厂价格指数",
+            "工业生产者购进价格指数",
+        ]:
+            if marker in value:
+                value = value.split(marker)[0]
+        value = re.sub(r"(累计增长|同比增长|累计|增长|指数).*?$", "", value)
+        value = re.sub(r"[_-].*$", "", value)
+        return value.strip()
+
+    def _load_nbs_industry_mapping(self):
+        if self._nbs_industry_cache is not None:
+            return self._nbs_industry_cache
+
+        mapping_path = PROJECT_ROOT / "config" / "sw_nbs_mapping.yaml"
+        nbs_to_sw = {}
+        nbs_weights = {}
+        nbs_names = []
+
+        if mapping_path.exists():
+            try:
+                import yaml  # type: ignore
+
+                cfg = yaml.safe_load(mapping_path.read_text(encoding="utf-8")) or {}
+                sw_to_nbs = cfg.get("sw_to_nbs") or {}
+                for sw_name, items in sw_to_nbs.items():
+                    if not items:
+                        continue
+                    for item in items:
+                        nbs_name = (item or {}).get("nbs_industry")
+                        weight = float((item or {}).get("weight", 0) or 0)
+                        if not nbs_name:
+                            continue
+                        if nbs_name not in nbs_to_sw or weight > nbs_weights.get(nbs_name, -1):
+                            nbs_to_sw[nbs_name] = sw_name
+                            nbs_weights[nbs_name] = weight
+                nbs_names = sorted(nbs_to_sw.keys(), key=len, reverse=True)
+            except Exception:
+                pass
+
+        self._nbs_industry_cache = (nbs_to_sw, nbs_names)
+        return self._nbs_industry_cache
+
+    def _map_by_nbs_industry(self, name: str) -> Optional[str]:
+        if not name:
+            return None
+        nbs_to_sw, nbs_names = self._load_nbs_industry_mapping()
+        if not nbs_to_sw:
+            return None
+
+        normalized = self._normalize_nbs_indicator_name(name)
+        if not normalized:
+            return None
+
+        if normalized in nbs_to_sw:
+            return nbs_to_sw[normalized]
+
+        alias = self.nbs_industry_aliases.get(normalized)
+        if alias and alias in nbs_to_sw:
+            return nbs_to_sw[alias]
+
+        for nbs_name in nbs_names:
+            if nbs_name in normalized or normalized in nbs_name:
+                return nbs_to_sw[nbs_name]
+        return None
 
     def _load_mapping_config(self):
         if self._mapping_cache is not None:
@@ -218,7 +297,7 @@ class NBSIndustrialDataAligner:
         
         return df
     
-    def assign_sw_industry(self, df: pd.DataFrame) -> pd.DataFrame:
+    def assign_sw_industry(self, df: pd.DataFrame, use_nbs_industry: bool = False) -> pd.DataFrame:
         """
         为产品数据添加申万行业映射（不丢弃未匹配项）
         """
@@ -245,6 +324,11 @@ class NBSIndustrialDataAligner:
             for keywords, industry in keyword_rules:
                 if any(k in name_norm for k in keywords):
                     return industry, "keyword"
+
+            if use_nbs_industry:
+                nbs_sw = self._map_by_nbs_industry(name)
+                if nbs_sw:
+                    return nbs_sw, "nbs_industry"
             return None, None
 
         mapped = df.apply(_map_row, axis=1, result_type="expand")
@@ -252,13 +336,13 @@ class NBSIndustrialDataAligner:
         df["sw_map_source"] = mapped[1]
         return df
 
-    def align_to_sw_industry(self, df: pd.DataFrame) -> pd.DataFrame:
+    def align_to_sw_industry(self, df: pd.DataFrame, use_nbs_industry: bool = False) -> pd.DataFrame:
         """
         对齐到申万行业（仅保留可映射项）
         """
         if len(df) == 0:
             return pd.DataFrame()
-        df = self.assign_sw_industry(df)
+        df = self.assign_sw_industry(df, use_nbs_industry=use_nbs_industry)
         return df[df['sw_industry'].notna()]
 
     def _infer_industry_by_name(self, name: str) -> Optional[str]:
@@ -428,18 +512,27 @@ class NBSIndustrialDataAligner:
         if len(df) == 0:
             return pd.DataFrame()
         
+        agg_spec = {}
+        if 'yoy' in df.columns:
+            agg_spec['yoy'] = 'mean'
+        if 'mom' in df.columns:
+            agg_spec['mom'] = 'mean'
+        if 'value' in df.columns:
+            agg_spec['value'] = 'sum'
+        if not agg_spec:
+            return pd.DataFrame()
+
         # 按行业和日期分组，计算平均值
-        industry_df = df.groupby(['sw_industry', 'date']).agg({
-            'yoy': 'mean',
-            'mom': 'mean',
-            'value': 'sum'
-        }).reset_index()
+        industry_df = df.groupby(['sw_industry', 'date']).agg(agg_spec).reset_index()
         
-        # 重命名列
-        industry_df = industry_df.rename(columns={
-            'yoy': 'output_yoy',
-            'mom': 'output_mom'
-        })
+        # 重命名列（仅存在时）
+        rename_map = {}
+        if 'yoy' in industry_df.columns:
+            rename_map['yoy'] = 'output_yoy'
+        if 'mom' in industry_df.columns:
+            rename_map['mom'] = 'output_mom'
+        if rename_map:
+            industry_df = industry_df.rename(columns=rename_map)
         
         return industry_df
     
@@ -480,10 +573,10 @@ class NBSIndustrialDataAligner:
             output_df = self.calculate_growth_rate(output_df)
 
             # 产品级（保留全部产品）
-            product_level_df = self.assign_sw_industry(output_df)
+            product_level_df = self.assign_sw_industry(output_df, use_nbs_industry=False)
 
             # 对齐到申万行业（行业代理）
-            output_df = self.align_to_sw_industry(output_df)
+            output_df = self.align_to_sw_industry(output_df, use_nbs_industry=False)
             print(f"  对齐后: {len(output_df)}条记录")
 
             # 聚合到行业级别
@@ -507,7 +600,7 @@ class NBSIndustrialDataAligner:
             fai_df = self.calculate_growth_rate(fai_df)
             
             # 对齐到申万行业
-            fai_df = self.align_to_sw_industry(fai_df)
+            fai_df = self.align_to_sw_industry(fai_df, use_nbs_industry=True)
             print(f"  对齐后: {len(fai_df)}条记录")
             
             # 聚合到行业级别
@@ -530,7 +623,7 @@ class NBSIndustrialDataAligner:
             price_df['yoy'] = price_df['value'] - 100  # 转换为百分比形式
             
             # 对齐到申万行业
-            price_df = self.align_to_sw_industry(price_df)
+            price_df = self.align_to_sw_industry(price_df, use_nbs_industry=True)
             print(f"  对齐后: {len(price_df)}条记录")
             
             # 聚合到行业级别
