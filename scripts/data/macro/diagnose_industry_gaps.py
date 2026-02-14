@@ -25,6 +25,7 @@ from scripts.data.macro.clean_macro_data import MacroDataProcessor
 
 
 DEFAULT_FIELDS = ["rev_yoy", "sw_ppi_yoy", "inventory_yoy"]
+INDUSTRIAL_ONLY_FIELDS = {"sw_ppi_yoy", "inventory_yoy", "output_yoy", "fai_yoy"}
 
 
 def _ensure_processed_exists(processed_dir: Path) -> Path:
@@ -61,15 +62,21 @@ def diagnose(fields: List[str] | None = None) -> Dict:
             results[col] = {"missing": "column_not_found"}
             continue
 
-        missing_mask = df[col].isna()
+        df_use = df
+        eligible_ratio = 1.0
+        if "industry_scope" in df.columns and col in INDUSTRIAL_ONLY_FIELDS:
+            df_use = df[df["industry_scope"] == "industrial"]
+            eligible_ratio = float(len(df_use) / len(df)) if len(df) else 0.0
+
+        missing_mask = df_use[col].isna()
         by_industry = (
-            df.assign(missing=missing_mask)
+            df_use.assign(missing=missing_mask)
             .groupby("sw_industry")["missing"]
             .mean()
             .sort_values(ascending=False)
         )
         by_date = (
-            df.assign(missing=missing_mask)
+            df_use.assign(missing=missing_mask)
             .groupby("date")["missing"]
             .mean()
             .sort_values(ascending=False)
@@ -77,6 +84,7 @@ def diagnose(fields: List[str] | None = None) -> Dict:
 
         results[col] = {
             "missing_ratio": float(missing_mask.mean()),
+            "eligible_ratio": eligible_ratio,
             "missing_by_industry": by_industry.head(30).round(6).to_dict(),
             "missing_by_date": {k.strftime("%Y-%m-%d"): float(v) for k, v in by_date.head(30).items()},
         }

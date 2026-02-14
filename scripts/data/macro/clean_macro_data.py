@@ -799,10 +799,27 @@ class MacroDataProcessor:
             industry_final.loc[no_output_mask, 'inventory_yoy'] = np.nan
             industry_final.loc[no_output_mask, 'inventory_yoy_source'] = None
 
+        # 标记行业口径：非工业行业直接标记为N/A
+        non_industrial_list = {
+            "银行", "非银金融", "房地产", "交通运输", "公用事业",
+            "商贸零售", "社会服务", "传媒", "通信", "计算机",
+            "综合", "美容护理", "农林牧渔", "建筑装饰"
+        }
+        industry_final["industry_scope"] = "industrial"
+        industry_final.loc[industry_final["sw_industry"].isin(non_industrial_list), "industry_scope"] = "non_industrial"
+
+        # 非工业行业：明确不计算工业口径字段
+        non_ind_mask = industry_final["industry_scope"] == "non_industrial"
+        for col in ["output_yoy", "sw_ppi_yoy", "fai_yoy", "inventory_yoy"]:
+            if col in industry_final.columns:
+                industry_final.loc[non_ind_mask, col] = np.nan
+        if "inventory_yoy_source" in industry_final.columns:
+            industry_final.loc[non_ind_mask, "inventory_yoy_source"] = None
+
         required_cols = [
             'sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
             'pb_percentile', 'pe_percentile', 'turnover_rate', 'rps_120',
-            'inventory_yoy', 'rev_yoy', 'inventory_yoy_source'
+            'inventory_yoy', 'rev_yoy', 'inventory_yoy_source', 'industry_scope'
         ]
         for col in required_cols:
             if col not in industry_final.columns:
@@ -858,31 +875,44 @@ def main():
                 null_ratio[col] = float(df[col].isna().mean())
         return {"missing": missing, "null_ratio": null_ratio}
 
+    industry_required = [
+        'sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
+        'pb_percentile', 'pe_percentile', 'turnover_rate', 'rps_120',
+        'inventory_yoy', 'rev_yoy', 'inventory_yoy_source', 'industry_scope'
+    ]
+    industry_report = _coverage(data['industry'], industry_required)
+
+    industrial_only_cols = ['sw_ppi_yoy', 'fai_yoy', 'output_yoy', 'inventory_yoy']
+    if 'industry_scope' in data['industry'].columns:
+        industrial_mask = data['industry']['industry_scope'] == 'industrial'
+        eligible_null = {}
+        for col in industrial_only_cols:
+            if col in data['industry'].columns:
+                eligible_null[col] = float(data['industry'].loc[industrial_mask, col].isna().mean()) if industrial_mask.any() else 1.0
+        industry_report["eligible_ratio"] = float(industrial_mask.mean())
+        industry_report["eligible_null_ratio"] = eligible_null
+
     report = {
         "macro": _coverage(data['macro'], ['date', 'credit_growth', 'pmi', 'cpi_yoy', 'yield_10y']),
-        "industry": _coverage(
-            data['industry'],
-            ['sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
-             'pb_percentile', 'pe_percentile', 'turnover_rate', 'rps_120',
-             'inventory_yoy', 'rev_yoy', 'inventory_yoy_source']
-        ),
+        "industry": industry_report,
         "northbound": _coverage(data['northbound'], ['sw_industry', 'trade_date', 'northbound_signal', 'industry_ratio']),
-    "causes": {
-        "macro": {
-            "credit_growth": "社融存量同比口径，前12个月无法计算。",
-            "pmi": "依赖tushare_pmi.parquet，缺失或未同步到raw目录。",
-            "cpi_yoy": "依赖tushare_cpi.parquet，缺失或未同步到raw目录。",
-            "yield_10y": "依赖tushare_yield_10y.parquet或yield_10y.parquet，早期日期可能为空。"
-        },
-        "industry": {
-            "sw_ppi_yoy": "行业PPI月度数据缺口或映射缺失；若仅由rev_yoy季度行扩展，则该字段为空。",
+        "causes": {
+            "macro": {
+                "credit_growth": "社融存量同比口径，前12个月无法计算。",
+                "pmi": "依赖tushare_pmi.parquet，缺失或未同步到raw目录。",
+                "cpi_yoy": "依赖tushare_cpi.parquet，缺失或未同步到raw目录。",
+                "yield_10y": "依赖tushare_yield_10y.parquet或yield_10y.parquet，早期日期可能为空。"
+            },
+            "industry": {
+            "sw_ppi_yoy": "仅工业行业口径；非工业行业直接标记为N/A。",
+            "fai_yoy": "仅工业行业口径；非工业行业直接标记为N/A。",
             "pb_percentile": "依赖sw_valuation行业估值，早期或行业缺口；rev_yoy季度行扩展会产生额外空值。",
             "pe_percentile": "依赖sw_valuation行业估值，早期或行业缺口；rev_yoy季度行扩展会产生额外空值。",
             "turnover_rate": "依赖sw_daily_all的amount/float_mv，缺口或行业未覆盖；rev_yoy季度行扩展会产生额外空值。",
             "rps_120": "需要120个交易日收益率，样本初期为空；rev_yoy季度行扩展会产生额外空值。",
             "rev_yoy": "依赖fina_indicator并映射到行业，财报缺口或映射覆盖不足。",
             "inventory_yoy": "仅在output_yoy存在时计算；主口径为output_yoy - rev_yoy，缺失时备用口径为output_yoy - sw_ppi_yoy/ppi_yoy。"
-        },
+            },
             "northbound": {
                 "northbound_signal": "依赖northbound行业流数据，若行业或日期缺口则为空。",
                 "industry_ratio": "来自北向行业占比，原始vol/ratio缺口会导致缺失。"
