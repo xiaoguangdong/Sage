@@ -65,67 +65,67 @@ products:
   product_name: 铁矿石原矿量
   gb_industry: 黑色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 钢铁
   map_source: keyword_rule
 - product_code: 00629
   product_name: 铜选矿产品含铜量
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '00660'
   product_name: 铅选矿产品含铅量
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '00674'
   product_name: 锌选矿产品含锌量
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '00740'
   product_name: 锡选矿产品含锡量
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '00754'
   product_name: 锑选矿产品含锑量
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: 00951
   product_name: 钨精矿折含量（折三氧化钨６５%）
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: 00975
   product_name: 钼精矿折含量（折纯钼４５%）
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '01161'
   product_name: 硫铁矿石（折含硫35%）
   gb_industry: 黑色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 钢铁
   map_source: keyword_rule
 - product_code: 01185
   product_name: 磷矿石（折含五氧化二磷30%）
   gb_industry: 非金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 建筑材料
   map_source: keyword_rule
 - product_code: '01210'
   product_name: 原盐
   gb_industry: 非金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 建筑材料
   map_source: keyword_rule
 - product_code: '01432'
   product_name: 发电量
@@ -731,7 +731,7 @@ products:
   product_name: 木杆铅笔
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: 09130
   product_name: 原油加工量
@@ -743,19 +743,19 @@ products:
   product_name: 汽油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: 09265
   product_name: 煤油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: 09307
   product_name: 柴油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: 09376
   product_name: 润滑油
@@ -767,7 +767,7 @@ products:
   product_name: 燃料油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: 09710
   product_name: 石脑油
@@ -791,7 +791,7 @@ products:
   product_name: 石油焦
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: 09796
   product_name: 石油沥青
@@ -803,19 +803,19 @@ products:
   product_name: 液化石油气
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '10040'
   product_name: 焦炭
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '10057'
   product_name: 机械化焦炉生产的焦炭
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '10168'
   product_name: 煤气生产量（煤气）
@@ -839,7 +839,7 @@ products:
   product_name: 盐酸（含量３１%以上）
   gb_industry: 非金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 建筑材料
   map_source: keyword_rule
 - product_code: '10335'
   product_name: 氢氧化钠（烧碱）（折１００%）
@@ -1277,7 +1277,7 @@ products:
   product_name: 石膏板
   gb_industry: 非金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 建筑材料
   map_source: keyword_rule
 - product_code: '22305'
   product_name: 沥青和改性沥青防水卷材
@@ -1523,19 +1523,19 @@ products:
   product_name: 镀锌板（带）
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '25467'
   product_name: 镀锡板（带）
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '25500'
   product_name: 涂层板（带）
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '25501'
   product_name: 电工钢板（带）
@@ -1601,25 +1601,25 @@ products:
   product_name: 铅
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '26288'
   product_name: 锌
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '26313'
   product_name: 电解镍（镍）
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '26344'
   product_name: 锡
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '26368'
   product_name: 锑
@@ -2285,13 +2285,13 @@ products:
   product_name: 铅酸蓄电池
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '41534'
   product_name: 碱性蓄电池（镉镍.氢镍等）
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '41535'
   product_name: 锂离子电池
@@ -2729,7 +2729,7 @@ products:
   product_name: 铁矿石原矿量
   gb_industry: 黑色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 钢铁
   map_source: keyword_rule
 - product_code: '10408'
   product_name: 碳酸钠（纯碱）
@@ -2741,7 +2741,7 @@ products:
   product_name: 硫铁矿石（折含S 35%）
   gb_industry: 黑色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 钢铁
   map_source: keyword_rule
 - product_code: '11392'
   product_name: 碳化钙（电石）（折 300升／千克）
@@ -2753,7 +2753,7 @@ products:
   product_name: 磷矿石（折含P2O5 30%）
   gb_industry: 非金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 建筑材料
   map_source: keyword_rule
 - product_code: '11601'
   product_name: 合成氨
@@ -2765,7 +2765,7 @@ products:
   product_name: 原盐
   gb_industry: 非金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 建筑材料
   map_source: keyword_rule
 - product_code: '11809'
   product_name: 农用氮磷钾化学肥料总计（折纯）
@@ -3077,7 +3077,7 @@ products:
   product_name: 汽油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '24684'
   product_name: 大型型钢
@@ -3089,7 +3089,7 @@ products:
   product_name: 煤油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '24726'
   product_name: 中小型型钢
@@ -3101,7 +3101,7 @@ products:
   product_name: 柴油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '24727'
   product_name: 棒材
@@ -3125,7 +3125,7 @@ products:
   product_name: 燃料油
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '25127'
   product_name: 盘条（线材）
@@ -3137,7 +3137,7 @@ products:
   product_name: 焦炭
   gb_industry: 石油、煤炭及其他燃料加工业
   gb_code: null
-  sw_industry: null
+  sw_industry: 石油石化
   map_source: keyword_rule
 - product_code: '25173'
   product_name: 厚钢板
@@ -3293,7 +3293,7 @@ products:
   product_name: 铅
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '42244'
   product_name: 微波炉
@@ -3305,7 +3305,7 @@ products:
   product_name: 锌
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '42282'
   product_name: 电饭锅
@@ -3317,7 +3317,7 @@ products:
   product_name: 锡
   gb_industry: 有色金属矿采选业
   gb_code: null
-  sw_industry: null
+  sw_industry: 有色金属
   map_source: keyword_rule
 - product_code: '43232'
   product_name: 程控交换机

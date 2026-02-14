@@ -82,14 +82,19 @@ def load_sw_mapping(path: Path) -> Dict[str, str]:
         return {}
     data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     sw_to_nbs = data.get("sw_to_nbs") or {}
-    mapping = {}
+    mapping: Dict[str, str] = {}
+    weights: Dict[str, float] = {}
     for sw_name, items in sw_to_nbs.items():
         if not items:
             continue
-        best = max(items, key=lambda x: x.get("weight", 0))
-        nbs_name = best.get("nbs_industry")
-        if nbs_name:
-            mapping[nbs_name] = sw_name
+        for item in items:
+            nbs_name = item.get("nbs_industry")
+            weight = float(item.get("weight", 0) or 0)
+            if not nbs_name:
+                continue
+            if nbs_name not in mapping or weight > weights.get(nbs_name, -1):
+                mapping[nbs_name] = sw_name
+                weights[nbs_name] = weight
     return mapping
 
 
