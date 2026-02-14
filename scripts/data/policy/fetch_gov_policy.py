@@ -349,10 +349,23 @@ def fetch_sources(sources: List[SourceConfig], cfg: FetchConfig) -> pd.DataFrame
             logger.warning(f"暂不支持的来源类型: {source.source_type} ({source.name})")
             continue
         logger.info(f"拉取 {source.name} ({source.url})")
+        content = None
         try:
             content = _fetch_url(source.url, cfg)
         except Exception as exc:
             logger.warning(f"{source.name} 拉取失败: {exc}")
+
+        if content is None:
+            cache_dir = cfg.dump_dir or (cfg.output_dir / "raw_html")
+            safe = re.sub(r"[^a-zA-Z0-9_\\-]+", "_", source.tag or source.name)
+            for ext in [".html", ".htm", ".xml", ".txt"]:
+                cache_path = cache_dir / f"{safe}{ext}"
+                if cache_path.exists():
+                    content = cache_path.read_text(encoding="utf-8", errors="ignore")
+                    logger.info(f"{source.name} 使用缓存HTML: {cache_path}")
+                    break
+        if content is None:
+            logger.warning(f"{source.name} 无可用内容，跳过")
             continue
         if cfg.dump_html and cfg.dump_dir:
             safe = re.sub(r"[^a-zA-Z0-9_\\-]+", "_", source.tag or source.name)
