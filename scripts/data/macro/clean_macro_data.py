@@ -788,11 +788,16 @@ class MacroDataProcessor:
             industry_final.loc[mask, 'inventory_yoy_source'] = f'proxy_output_minus_{proxy_col}'
 
         # 前向填充并标记来源
-        if 'inventory_yoy' in industry_final.columns:
+        if 'inventory_yoy' in industry_final.columns and 'output_yoy' in industry_final.columns:
             before_ffill = industry_final['inventory_yoy'].copy()
             industry_final['inventory_yoy'] = industry_final.groupby("sw_industry")['inventory_yoy'].ffill()
-            filled_mask = before_ffill.isna() & industry_final['inventory_yoy'].notna()
+            filled_mask = before_ffill.isna() & industry_final['inventory_yoy'].notna() & industry_final['output_yoy'].notna()
             industry_final.loc[filled_mask, 'inventory_yoy_source'] = 'ffill'
+
+            # 对于没有output_yoy的行，明确不计算inventory_yoy
+            no_output_mask = industry_final['output_yoy'].isna()
+            industry_final.loc[no_output_mask, 'inventory_yoy'] = np.nan
+            industry_final.loc[no_output_mask, 'inventory_yoy_source'] = None
 
         required_cols = [
             'sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
@@ -876,7 +881,7 @@ def main():
             "turnover_rate": "依赖sw_daily_all的amount/float_mv，缺口或行业未覆盖；rev_yoy季度行扩展会产生额外空值。",
             "rps_120": "需要120个交易日收益率，样本初期为空；rev_yoy季度行扩展会产生额外空值。",
             "rev_yoy": "依赖fina_indicator并映射到行业，财报缺口或映射覆盖不足。",
-            "inventory_yoy": "主口径为output_yoy - rev_yoy，rev_yoy为空则缺失；备用口径为output_yoy - sw_ppi_yoy/ppi_yoy。"
+            "inventory_yoy": "仅在output_yoy存在时计算；主口径为output_yoy - rev_yoy，缺失时备用口径为output_yoy - sw_ppi_yoy/ppi_yoy。"
         },
             "northbound": {
                 "northbound_signal": "依赖northbound行业流数据，若行业或日期缺口则为空。",
