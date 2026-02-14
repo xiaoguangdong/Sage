@@ -34,6 +34,9 @@ class MainlineLogicSystem:
         self.data_dir = data_dir or str(get_tushare_root())
         self.factors_dir = str(get_data_path("processed", "factors", ensure=True))
         self.sectors_dir = os.path.join(self.data_dir, 'sectors')
+        self.sw_dir = os.path.join(self.data_dir, 'sw_industry')
+        self.signals_dir = str(get_data_path("signals", ensure=True))
+        self.concept_processed_dir = str(get_data_path("processed", "concepts", ensure=True))
         
         os.makedirs(self.factors_dir, exist_ok=True)
         os.makedirs(self.sectors_dir, exist_ok=True)
@@ -57,6 +60,10 @@ class MainlineLogicSystem:
         }
         
         print("主线逻辑识别系统已初始化")
+
+        # 概念偏置权重（用于行业得分调整）
+        self.concept_bias_weight = 0.15
+        self.concept_overheat_penalty = 0.10
     
     def load_data(self):
         """加载数据"""
@@ -105,24 +112,69 @@ class MainlineLogicSystem:
     def load_sector_data(self):
         """加载板块数据"""
         print("\n加载板块数据...")
-        
-        # 加载行业成分股
-        industry_members_file = os.path.join(self.sectors_dir, 'all_index_members.csv')
-        if os.path.exists(industry_members_file):
-            self.industry_members = pd.read_csv(industry_members_file)
+
+        # 加载行业成分股（申万L1）
+        industry_members_file = os.path.join(self.sw_dir, 'sw_index_member.parquet')
+        industry_l1_file = os.path.join(self.sw_dir, 'sw_industry_l1.parquet')
+        if os.path.exists(industry_members_file) and os.path.exists(industry_l1_file):
+            members = pd.read_parquet(industry_members_file)
+            l1 = pd.read_parquet(industry_l1_file)
+            name_col = "industry_name" if "industry_name" in l1.columns else "index_name"
+            l1 = l1.rename(columns={name_col: "industry_name"})
+            members = members.rename(columns={"con_code": "ts_code"})
+            self.industry_members = members.merge(
+                l1[["index_code", "industry_name"]],
+                on="index_code",
+                how="left"
+            ).dropna(subset=["industry_name", "ts_code"])
             print(f"  ✓ 行业成分股: {len(self.industry_members)} 条记录")
         else:
-            print("  ! 行业成分股数据不存在，请先运行 tushare_downloader.py --task tushare_concept_list")
+            print("  ! 行业成分股数据不存在，请先运行 tushare_downloader.py --task sw_industry_classify + sw_index_member")
             self.industry_members = None
-        
+
         # 加载概念成分股
-        concept_details_file = os.path.join(self.sectors_dir, 'all_concept_details.csv')
+        concept_details_file = os.path.join(self.sectors_dir, 'concept_detail.parquet')
         if os.path.exists(concept_details_file):
-            self.concept_details = pd.read_csv(concept_details_file)
+            self.concept_details = pd.read_parquet(concept_details_file)
             print(f"  ✓ 概念成分股: {len(self.concept_details)} 条记录")
         else:
             print("  ! 概念成分股数据不存在，请先运行 tushare_downloader.py --task tushare_concept_detail")
             self.concept_details = None
+
+    def build_concept_bias(self, date):
+        """
+        基于概念信号构建行业偏置
+        返回: {sw_industry: (bias_strength, overheat_rate)}
+        """
+        signal_path = os.path.join(self.signals_dir, "concept_signals.parquet")
+        mapping_path = os.path.join(self.concept_processed_dir, "concept_industry_primary.parquet")
+        if not os.path.exists(signal_path) or not os.path.exists(mapping_path):
+            return {}
+
+        signals = pd.read_parquet(signal_path)
+        if signals.empty:
+            return {}
+        signals["trade_date"] = pd.to_datetime(signals["trade_date"])
+        signals = signals[signals["trade_date"] == pd.to_datetime(date)]
+        if signals.empty:
+            return {}
+
+        signals["rank_pct"] = signals["concept_heat_score"].rank(pct=True)
+        mapping = pd.read_parquet(mapping_path)
+        merged = signals.merge(mapping, left_on="concept_code", right_on="concept_code", how="inner")
+        if merged.empty:
+            return {}
+
+        grouped = merged.groupby("sw_industry").agg(
+            mean_rank_pct=("rank_pct", "mean"),
+            overheat_rate=("overheat_flag", "mean"),
+        ).reset_index()
+
+        bias_map = {}
+        for _, row in grouped.iterrows():
+            bias_strength = (row["mean_rank_pct"] - 0.5) * 2  # [-1,1]
+            bias_map[row["sw_industry"]] = (bias_strength, row["overheat_rate"])
+        return bias_map
     
     def calculate_sector_leadership(self, sector_stocks, date):
         """
@@ -291,7 +343,7 @@ class MainlineLogicSystem:
         
         return crowding_score
     
-    def calculate_sector_score(self, sector_stocks, date, sector_name):
+    def calculate_sector_score(self, sector_stocks, date, sector_name, concept_bias=None):
         """
         计算板块综合评分
         
@@ -319,6 +371,14 @@ class MainlineLogicSystem:
             confirmation * self.sector_weights['confirmation'] -
             crowding * self.sector_weights['crowding']
         )
+
+        bias_strength = 0
+        overheat_rate = 0
+        if concept_bias:
+            bias_strength, overheat_rate = concept_bias
+            sector_score = sector_score * (1 + self.concept_bias_weight * bias_strength)
+            if overheat_rate >= 0.3:
+                sector_score = sector_score * (1 - self.concept_overheat_penalty)
         
         details = {
             'sector_name': sector_name,
@@ -327,6 +387,8 @@ class MainlineLogicSystem:
             'persistence': persistence,
             'confirmation': confirmation,
             'crowding': crowding,
+            'concept_bias': bias_strength,
+            'concept_overheat_rate': overheat_rate,
             'total_score': sector_score
         }
         
@@ -346,6 +408,8 @@ class MainlineLogicSystem:
         print(f"\n计算板块评分 ({date})...")
         
         sector_scores = []
+
+        concept_bias_map = self.build_concept_bias(date)
         
         # 如果有行业成分股数据
         if self.industry_members is not None:
@@ -353,7 +417,8 @@ class MainlineLogicSystem:
             for industry_name, group in self.industry_members.groupby('industry_name'):
                 stocks = group['con_code'].tolist()
                 
-                score, details = self.calculate_sector_score(stocks, date, industry_name)
+                bias = concept_bias_map.get(industry_name)
+                score, details = self.calculate_sector_score(stocks, date, industry_name, concept_bias=bias)
                 sector_scores.append(details)
                 
                 print(f"  {industry_name}: {score:.2f}")
