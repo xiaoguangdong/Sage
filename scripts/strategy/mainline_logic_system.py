@@ -141,12 +141,15 @@ class MainlineLogicSystem:
             print("  ! 概念成分股数据不存在，请先运行 tushare_downloader.py --task tushare_concept_detail")
             self.concept_details = None
 
-    def build_concept_bias(self, date):
+    def build_concept_bias(self, date, top_k: int | None = 10):
         """
         基于概念信号构建行业偏置
         返回: {sw_industry: (bias_strength, overheat_rate)}
         """
-        signal_path = os.path.join(self.signals_dir, "concept_signals.parquet")
+        if top_k:
+            signal_path = os.path.join(self.signals_dir, f"concept_signals_top{top_k}.parquet")
+        else:
+            signal_path = os.path.join(self.signals_dir, "concept_signals.parquet")
         mapping_path = os.path.join(self.concept_processed_dir, "concept_industry_primary.parquet")
         if not os.path.exists(signal_path) or not os.path.exists(mapping_path):
             return {}

@@ -75,6 +75,7 @@ def main() -> None:
     parser.add_argument("--input-path", type=str, default=None)
     parser.add_argument("--index-path", type=str, default=None)
     parser.add_argument("--output-dir", type=str, default=None)
+    parser.add_argument("--top-k", type=int, default=None, help="仅保留每个交易日热度TopK概念")
     args = parser.parse_args()
 
     input_path = Path(args.input_path) if args.input_path else get_data_path("raw", "tushare", "concepts") / "ths_daily.parquet"
@@ -99,7 +100,13 @@ def main() -> None:
         "vol_20d": "concept_vol_20d",
     })
 
-    output_path = output_dir / "concept_signals.parquet"
+    if args.top_k:
+        signals = signals.sort_values(["trade_date", "concept_heat_score"], ascending=[True, False])
+        signals = signals.groupby("trade_date").head(args.top_k).reset_index(drop=True)
+        output_path = output_dir / f"concept_signals_top{args.top_k}.parquet"
+    else:
+        output_path = output_dir / "concept_signals.parquet"
+
     signals.to_parquet(output_path, index=False)
     print(f"已保存: {output_path}")
 
