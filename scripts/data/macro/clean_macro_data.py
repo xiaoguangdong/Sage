@@ -264,7 +264,11 @@ class MacroDataProcessor:
             df = pd.read_parquet(processed_path)
             if 'date' in df.columns:
                 df['date'] = pd.to_datetime(df['date'])
-            return df
+            ppi_ok = True
+            if 'ppi_yoy' in df.columns:
+                ppi_ok = df['ppi_yoy'].notna().mean() >= 0.2
+            if len(df) >= 100 and ppi_ok:
+                return df
 
         # fallback: 合并ppi/fai/output
         ppi_path = os.path.join(self.data_dir, 'sw_l1_ppi_yoy_202512.csv')
@@ -278,6 +282,11 @@ class MacroDataProcessor:
             if 'sw_ppi_yoy' in ppi_df.columns:
                 ppi_df = ppi_df.rename(columns={'sw_ppi_yoy': 'ppi_yoy'})
             dfs.append(ppi_df[['sw_industry', 'date', 'ppi_yoy']])
+        # 若ppi数据过少，尝试用NBS行业PPI补齐
+        if not dfs or len(dfs[0]) < 100:
+            ppi_from_nbs = self._build_sw_ppi_from_nbs()
+            if not ppi_from_nbs.empty:
+                dfs = [ppi_from_nbs]
 
         if os.path.exists(fai_path):
             fai_df = pd.read_parquet(fai_path)
@@ -301,6 +310,90 @@ class MacroDataProcessor:
         for df in dfs[1:]:
             merged = merged.merge(df, on=['sw_industry', 'date'], how='outer')
         return merged.sort_values(['sw_industry', 'date']).reset_index(drop=True)
+
+    def _build_sw_ppi_from_nbs(self) -> pd.DataFrame:
+        """
+        基于NBS行业PPI(上月=100)重建申万行业PPI同比
+        """
+        nbs_path = os.path.join(self.data_dir, 'nbs_ppi_industry_2020.csv')
+        if not os.path.exists(nbs_path):
+            legacy = PROJECT_ROOT / "data" / "tushare" / "macro" / "nbs_ppi_industry_2020.csv"
+            if legacy.exists():
+                nbs_path = str(legacy)
+            else:
+                return pd.DataFrame()
+
+        df = pd.read_csv(nbs_path)
+        if df.empty or 'industry' not in df.columns:
+            return pd.DataFrame()
+
+        df['date'] = pd.to_datetime(df['date'])
+        df['ppi_mom'] = pd.to_numeric(df.get('ppi_mom'), errors='coerce')
+
+        def _normalize(name: str) -> str:
+            if not isinstance(name, str):
+                return ''
+            value = name.strip()
+            value = value.replace("（", "(").replace("）", ")").replace(" ", "")
+            value = value.replace("工业生产者出厂价格指数", "")
+            value = value.replace("(上月=100)", "")
+            value = value.replace("(上年同期=100)", "")
+            value = value.replace("指数", "")
+            return value
+
+        df['industry_norm'] = df['industry'].apply(_normalize)
+        df = df.sort_values(['industry_norm', 'date'])
+
+        # 由环比指数构建链式指数，再计算同比
+        df['ppi_index'] = df.groupby('industry_norm')['ppi_mom'].apply(
+            lambda s: (s / 100.0).cumprod() * 100.0
+        ).reset_index(level=0, drop=True)
+        df['ppi_yoy'] = df.groupby('industry_norm')['ppi_index'].pct_change(12) * 100
+
+        # 加载申万-NBS映射
+        mapping_path = PROJECT_ROOT / "config" / "sw_nbs_mapping.yaml"
+        if not mapping_path.exists():
+            return pd.DataFrame()
+        try:
+            import yaml  # type: ignore
+            cfg = yaml.safe_load(mapping_path.read_text(encoding='utf-8')) or {}
+        except Exception:
+            return pd.DataFrame()
+
+        sw_to_nbs = cfg.get('sw_to_nbs') or {}
+        nbs_groups = df.groupby('industry_norm')
+
+        rows = []
+        for sw, items in sw_to_nbs.items():
+            if not items:
+                continue
+            series_list = []
+            for item in items:
+                nbs_name = _normalize((item or {}).get('nbs_industry') or '')
+                weight = float((item or {}).get('weight', 0) or 0)
+                if not nbs_name or weight <= 0:
+                    continue
+                if nbs_name not in nbs_groups.indices:
+                    continue
+                part = nbs_groups.get_group(nbs_name)[['date', 'ppi_yoy']].copy()
+                part['weight'] = weight
+                series_list.append(part)
+
+            if not series_list:
+                continue
+            combined = pd.concat(series_list, ignore_index=True)
+            combined = combined.dropna(subset=['ppi_yoy'])
+            if combined.empty:
+                continue
+            grouped = combined.groupby('date').apply(
+                lambda g: (g['ppi_yoy'] * g['weight']).sum() / g['weight'].sum()
+            ).reset_index(name='ppi_yoy')
+            grouped['sw_industry'] = sw
+            rows.append(grouped[['sw_industry', 'date', 'ppi_yoy']])
+
+        if not rows:
+            return pd.DataFrame()
+        return pd.concat(rows, ignore_index=True).sort_values(['sw_industry', 'date']).reset_index(drop=True)
 
     def load_sw_industry(self) -> pd.DataFrame:
         """
@@ -904,7 +997,7 @@ def main():
                 "yield_10y": "依赖tushare_yield_10y.parquet或yield_10y.parquet，早期日期可能为空。"
             },
             "industry": {
-            "sw_ppi_yoy": "仅工业行业口径；非工业行业直接标记为N/A。",
+            "sw_ppi_yoy": "仅工业行业口径；非工业行业直接标记为N/A。工业行业PPI由NBS环比指数链式构建，同比需12个月窗口，早期月份为空。",
             "fai_yoy": "仅工业行业口径；非工业行业直接标记为N/A。",
             "pb_percentile": "依赖sw_valuation行业估值，早期或行业缺口；rev_yoy季度行扩展会产生额外空值。",
             "pe_percentile": "依赖sw_valuation行业估值，早期或行业缺口；rev_yoy季度行扩展会产生额外空值。",
