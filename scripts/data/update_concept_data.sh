@@ -16,22 +16,19 @@ source venv/bin/activate
 # 执行脚本
 case "$1" in
     init)
-        echo "=== 初始化：获取基准概念成分股数据 ==="
-        python scripts/data/tushare_suite.py --action concept_update_tushare --mode init
+        echo "=== 初始化：获取概念列表与成分 ==="
+        python scripts/data/tushare_downloader.py --task tushare_concept_list
+        python scripts/data/tushare_downloader.py --task tushare_concept_detail
         ;;
     update)
-        echo "=== 周度更新：获取最新数据并计算 ==="
-        python scripts/data/tushare_suite.py --action concept_update_tushare --mode update \
-            --start-date 20240924 \
-            --end-date 20241231 \
-            --min-stock-count 10
+        echo "=== 周度更新：获取概念列表与成分 ==="
+        python scripts/data/tushare_downloader.py --task tushare_concept_list
+        python scripts/data/tushare_downloader.py --task tushare_concept_detail
         ;;
     calc)
-        echo "=== 计算概念表现 ==="
-        python scripts/data/tushare_suite.py --action concept_update_tushare --mode calculate \
-            --start-date 20240924 \
-            --end-date 20241231 \
-            --min-stock-count 10
+        echo "=== 计算概念表现（当前未实现，先更新概念成分） ==="
+        python scripts/data/tushare_downloader.py --task tushare_concept_list
+        python scripts/data/tushare_downloader.py --task tushare_concept_detail
         ;;
     *)
         echo "使用方法："

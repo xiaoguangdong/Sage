@@ -40,11 +40,6 @@ python scripts/data/tushare_downloader.py --task dc_index \
 > 说明：理想版统一入口以 `config/tushare_tasks.yaml` 为唯一任务清单，
 > 后续新增接口只需追加配置，不再新增脚本。
 
-## 旧版统一脚本（待淘汰）
-
-脚本：`scripts/data/tushare_suite.py`  
-说明：后续会逐步迁移到理想版入口，不再新增功能。
-
 ## Akshare 统一脚本
 
 脚本：`scripts/data/akshare_suite.py`
@@ -177,20 +172,21 @@ python3 scripts/data/policy/fetch_eastmoney_industry_reports.py \
 
 ### 2.6.1) 同花顺板块指数（ths_index / ths_daily）
 
-脚本：`scripts/data/macro/fetch_ths_index.py`
+脚本：`scripts/data/tushare_downloader.py`
 
 说明：
 - `ths_index`：板块指数列表（单次全量）
-- `ths_daily`：板块指数行情（按指数代码/日期循环）
+- `ths_daily`：板块指数行情（按月分页）
 
 示例：
 ```bash
-python3 scripts/data/macro/fetch_ths_index.py --start-date 20230101 --end-date 20251231
+python3 scripts/data/tushare_downloader.py --task ths_index
+python3 scripts/data/tushare_downloader.py --task ths_daily --start-date 20230101 --end-date 20251231 --resume
 ```
 
 输出：
-- `data/tushare/concepts/ths_index.parquet`
-- `data/tushare/concepts/ths_daily.parquet`
+- `data/raw/tushare/concepts/ths_index.parquet`
+- `data/raw/tushare/concepts/ths_daily.parquet`
 
 ### 3) 政策信号管道
 

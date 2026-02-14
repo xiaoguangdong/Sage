@@ -48,12 +48,12 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f) or {}
 
 
-def _parse_date(value: str) -> datetime:
-    return datetime.strptime(value, "%Y%m%d")
+def _parse_date(value: str, fmt: str = "%Y%m%d") -> datetime:
+    return datetime.strptime(value, fmt)
 
 
-def _format_date(value: datetime) -> str:
-    return value.strftime("%Y%m%d")
+def _format_date(value: datetime, fmt: str = "%Y%m%d") -> str:
+    return value.strftime(fmt)
 
 
 def _month_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
@@ -127,6 +127,16 @@ class TaskConfig:
     limit: int = 3000
     dedup_keys: Optional[List[str]] = None
     params: Optional[Dict[str, Any]] = None
+    date_format: str = "%Y%m%d"
+    list_file: Optional[str] = None
+    list_format: Optional[str] = None
+    list_column: Optional[str] = None
+    list_columns: Optional[List[str]] = None
+    list_items: Optional[List[Any]] = None
+    list_param: Optional[str] = None
+    quarters: Optional[List[str]] = None
+    start_year: Optional[int] = None
+    end_year: Optional[int] = None
 
     @classmethod
     def from_dict(cls, name: str, payload: Dict[str, Any]) -> "TaskConfig":
@@ -143,6 +153,16 @@ class TaskConfig:
             limit=int(payload.get("limit", 3000)),
             dedup_keys=list(payload.get("dedup_keys", [])) or None,
             params=payload.get("params") or {},
+            date_format=payload.get("date_format", "%Y%m%d"),
+            list_file=payload.get("list_file"),
+            list_format=payload.get("list_format"),
+            list_column=payload.get("list_column"),
+            list_columns=payload.get("list_columns"),
+            list_items=payload.get("list_items"),
+            list_param=payload.get("list_param"),
+            quarters=payload.get("quarters"),
+            start_year=payload.get("start_year"),
+            end_year=payload.get("end_year"),
         )
 
 
@@ -204,19 +224,67 @@ def _resolve_state(path_str: Optional[str]) -> Optional[Path]:
     return path
 
 
-def _iter_windows(mode: str, split: Optional[str], start: datetime, end: datetime) -> Iterable[tuple[str, str]]:
+def _iter_windows(
+    mode: str,
+    split: Optional[str],
+    start: datetime,
+    end: datetime,
+    date_format: str,
+) -> Iterable[tuple[str, str]]:
     if mode == "single":
-        yield _format_date(start), _format_date(end)
+        yield _format_date(start, date_format), _format_date(end, date_format)
         return
     if split == "day":
         for s, e in _daily_windows(start, end):
-            yield _format_date(s), _format_date(e)
+            yield _format_date(s, date_format), _format_date(e, date_format)
         return
     if split == "month":
         for s, e in _month_windows(start, end):
-            yield _format_date(s), _format_date(e)
+            yield _format_date(s, date_format), _format_date(e, date_format)
+        return
+    if split == "year":
+        for s, e in _year_windows(start, end):
+            yield _format_date(s, date_format), _format_date(e, date_format)
         return
     yield _format_date(start), _format_date(end)
+
+
+def _load_list_items(task: TaskConfig, project_root: Path) -> List[Any]:
+    if task.list_items:
+        return task.list_items
+    if not task.list_file:
+        return []
+    list_path = Path(task.list_file)
+    if not list_path.is_absolute():
+        list_path = project_root / list_path
+    if not list_path.exists():
+        raise FileNotFoundError(f"列表文件不存在: {list_path}")
+
+    fmt = (task.list_format or list_path.suffix.replace(".", "")).lower()
+    if fmt in ("csv", "txt"):
+        df = pd.read_csv(list_path)
+    elif fmt in ("parquet", "pq"):
+        df = pd.read_parquet(list_path)
+    else:
+        df = pd.read_csv(list_path)
+
+    columns = task.list_columns or ([task.list_column] if task.list_column else [])
+    for col in columns:
+        if col and col in df.columns:
+            return df[col].dropna().astype(str).unique().tolist()
+
+    raise ValueError(f"列表文件缺少列: {columns}")
+
+
+def _iter_quarters(task: TaskConfig) -> List[str]:
+    start_year = task.start_year or datetime.now().year
+    end_year = task.end_year or start_year
+    quarters = task.quarters or ["0331", "0630", "0930", "1231"]
+    periods: List[str] = []
+    for year in range(start_year, end_year + 1):
+        for q in quarters:
+            periods.append(f"{year}{q}")
+    return periods
 
 
 def run_task(
@@ -231,22 +299,35 @@ def run_task(
     output_path = _resolve_output(task.output, output_root)
     state_path = _resolve_state(task.state) if task.state else None
 
+    project_root = add_project_root()
+
+    start_dt = datetime.now()
+    end_dt = start_dt
+
     if task.mode == "single":
-        start_date = start_date or datetime.now().strftime("%Y%m%d")
+        start_date = start_date or datetime.now().strftime(task.date_format)
         end_date = end_date or start_date
-    else:
+        start_dt = _parse_date(start_date, task.date_format)
+        end_dt = _parse_date(end_date, task.date_format)
+    elif task.mode == "date_range":
         if not start_date or not end_date:
             raise ValueError("该任务需要 --start-date 与 --end-date（YYYYMMDD）")
-
-    start_dt = _parse_date(start_date)
-    end_dt = _parse_date(end_date)
+        start_dt = _parse_date(start_date, task.date_format)
+        end_dt = _parse_date(end_date, task.date_format)
+    elif task.mode == "list":
+        if start_date and end_date:
+            start_dt = _parse_date(start_date, task.date_format)
+            end_dt = _parse_date(end_date, task.date_format)
 
     last_end = None
     if resume and state_path:
         state = _load_state(state_path)
         last_end = state.get("last_end")
 
-    windows = list(_iter_windows(task.mode, task.split, start_dt, end_dt))
+    if task.mode in ("year_quarters",) or (task.mode == "list" and not start_date and not end_date):
+        windows = [("", "")]
+    else:
+        windows = list(_iter_windows(task.mode, task.split, start_dt, end_dt, task.date_format))
     if last_end:
         windows = [win for win in windows if win[1] > last_end]
 
@@ -257,36 +338,54 @@ def run_task(
     client = TushareClient(sleep_seconds=sleep_seconds)
 
     existing = pd.read_parquet(output_path) if output_path.exists() else pd.DataFrame()
-    for idx, (win_start, win_end) in enumerate(windows, start=1):
-        params = dict(task.params or {})
-        if task.start_field:
-            params[task.start_field] = win_start
-        if task.end_field:
-            params[task.end_field] = win_end
-        print(f"[{idx}/{len(windows)}] {task.name} {win_start} ~ {win_end} ...")
-        if task.pagination == "offset":
-            df = client.request_paged(task.api, params, limit=task.limit)
-        else:
-            df = client.request(task.api, params)
 
-        if df is None or df.empty:
-            print("  无数据")
+    list_items = _load_list_items(task, project_root) if task.mode == "list" else [None]
+    if task.mode == "list" and not list_items:
+        raise ValueError(f"{task.name} 缺少 list_items 或 list_file")
+
+    if task.mode == "year_quarters":
+        list_items = _iter_quarters(task)
+
+    total_steps = len(windows) * len(list_items)
+    step = 0
+    for item in list_items:
+        for win_start, win_end in windows:
+            step += 1
+            params = dict(task.params or {})
+            if task.start_field:
+                params[task.start_field] = win_start
+            if task.end_field:
+                params[task.end_field] = win_end
+            if item is not None:
+                if isinstance(item, dict):
+                    params.update(item)
+                elif task.list_param:
+                    params[task.list_param] = item
+
+            print(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
+            if task.pagination == "offset":
+                df = client.request_paged(task.api, params, limit=task.limit)
+            else:
+                df = client.request(task.api, params)
+
+            if df is None or df.empty:
+                print("  无数据")
+                if state_path:
+                    _save_state(state_path, {"last_end": win_end})
+                continue
+
+            if existing.empty:
+                combined = df
+            else:
+                combined = pd.concat([existing, df], ignore_index=True)
+                if task.dedup_keys:
+                    combined = combined.drop_duplicates(subset=task.dedup_keys)
+
+            _safe_to_parquet(combined, output_path)
+            existing = combined
+
             if state_path:
                 _save_state(state_path, {"last_end": win_end})
-            continue
-
-        if existing.empty:
-            combined = df
-        else:
-            combined = pd.concat([existing, df], ignore_index=True)
-            if task.dedup_keys:
-                combined = combined.drop_duplicates(subset=task.dedup_keys)
-
-        _safe_to_parquet(combined, output_path)
-        existing = combined
-
-        if state_path:
-            _save_state(state_path, {"last_end": win_end})
 
     if output_path.exists():
         print(f"✅ 输出: {output_path}")
@@ -330,3 +429,11 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+def _year_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
+    current = datetime(start.year, 1, 1)
+    while current.year <= end.year:
+        year_end = datetime(current.year, 12, 31)
+        if year_end > end:
+            year_end = end
+        yield current, year_end
+        current = datetime(current.year + 1, 1, 1)

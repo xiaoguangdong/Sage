@@ -1,8 +1,8 @@
-# 概念成分股数据更新和计算系统
+# 概念成分股数据更新系统（理想版统一入口）
 
 ## 概述
 
-这个系统用于定期更新概念板块的成分股数据，并计算概念表现评分。系统解决了概念成分股经常变动的问题，通过定期更新来确保数据的准确性。
+这个系统用于定期更新概念板块的成分股数据。当前统一由 `tushare_downloader.py` 入口完成，后续评分与表现计算再独立接入。
 
 ## 功能特点
 
@@ -21,20 +21,9 @@
 # 激活虚拟环境
 source venv/bin/activate
 
-# 初始化：获取基准数据（如2024年9月）
-python scripts/data/tushare_suite.py --action concept_update_tushare --mode init
-
-# 周度更新：获取最新数据并计算表现
-python scripts/data/tushare_suite.py --action concept_update_tushare --mode update \
-    --start-date 20240924 \
-    --end-date 20241231 \
-    --min-stock-count 10
-
-# 只计算表现（使用已有的概念数据）
-python scripts/data/tushare_suite.py --action concept_update_tushare --mode calculate \
-    --start-date 20240924 \
-    --end-date 20241231 \
-    --min-stock-count 10
+# 初始化/更新：获取概念列表与成分
+python scripts/data/tushare_downloader.py --task tushare_concept_list
+python scripts/data/tushare_downloader.py --task tushare_concept_detail
 ```
 
 ### 方法2：使用Shell脚本
@@ -54,36 +43,16 @@ python scripts/data/tushare_suite.py --action concept_update_tushare --mode calc
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--action` | 动作（固定：`concept_update_tushare`） | - |
-| `--mode` | `init/update/calculate` | update |
-| `--start-date` | 开始日期（YYYYMMDD） | 20240101 |
-| `--end-date` | 结束日期（YYYYMMDD） | 20240105 |
-| `--min-stock-count` | 最小成分股数 | 10 |
+| `--task` | 任务名（`tushare_concept_list`/`tushare_concept_detail`） | - |
 
 ## 工作流程
 
-### 初始化流程（mode=init）
+### 概念更新流程
 
-1. 获取879个概念列表
-2. 逐个获取每个概念的成分股（30秒超时）
-3. 记录失败和超时的概念
-4. 保存为基准数据（`all_concept_details_base.csv`）
+1. 拉取概念列表（`tushare_concept_list`）
+2. 按概念逐个拉取成分股（`tushare_concept_detail`）
 
-### 周度更新流程（mode=update）
-
-1. 获取最新的概念列表和成分股
-2. 加载个股数据
-3. 计算概念表现（涨幅、回撤、波动率等）
-4. 计算周度上榜次数
-5. 计算综合评分
-6. 保存结果（带时间戳）
-
-### 计算流程（mode=calculate）
-
-1. 加载已有的概念数据
-2. 加载个股数据
-3. 计算概念表现和评分
-4. 保存结果
+> 概念表现/评分计算将作为独立模块接入，不在下载器内处理。
 
 ## 评分指标
 
@@ -107,14 +76,13 @@ python scripts/data/tushare_suite.py --action concept_update_tushare --mode calc
 
 ### 输出文件
 
-- `data/raw/tushare/sectors/all_concept_details_YYYYMMDD.csv` - 带时间戳的概念成分股数据
-- `data/raw/tushare/sectors/all_concept_details.csv` - 最新概念成分股数据
-- `data/raw/tushare/sectors/concept_performance_YYYYMMDD.csv` - 概念表现和评分
-- `logs/data/YYYYMMDD_NNN_tushare_suite.log` - 更新日志
+- `data/raw/tushare/sectors/concepts.parquet` - 概念列表
+- `data/raw/tushare/sectors/concept_detail.parquet` - 概念成分
+- `logs/data/YYYYMMDD_NNN_tushare_downloader.log` - 更新日志
 
 ## 日志记录
 
-所有操作都会记录到 `logs/data/YYYYMMDD_NNN_tushare_suite.log` 文件中，包括：
+所有操作都会记录到 `logs/data/YYYYMMDD_NNN_tushare_downloader.log` 文件中，包括：
 
 - 获取的概念数量
 - 成功/失败/超时的概念列表

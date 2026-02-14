@@ -11,8 +11,8 @@ mkdir -p "$LOG_DIR"
 
 # 运行下载脚本
 cd "$PROJECT_DIR"
-nohup venv/bin/python scripts/data/tushare_suite.py --action daily_basic --resume > "$LOG_DIR/tushare_daily_basic.log" 2>&1 &
-nohup venv/bin/python scripts/data/tushare_suite.py --action margin --resume > "$LOG_DIR/tushare_margin.log" 2>&1 &
+nohup venv/bin/python scripts/data/tushare_downloader.py --task daily_basic --resume > "$LOG_DIR/tushare_daily_basic.log" 2>&1 &
+nohup venv/bin/python scripts/data/tushare_downloader.py --task margin --resume > "$LOG_DIR/tushare_margin.log" 2>&1 &
 
 echo "Tushare下载任务已启动"
 echo "日志文件: $LOG_DIR/tushare_daily_basic.log, $LOG_DIR/tushare_margin.log"

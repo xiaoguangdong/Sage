@@ -17,7 +17,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.models.label_hs300_daily_weekly import HS300Labeler
-from scripts.data.tushare_suite import download_index_ohlc
 
 
 def download_index_data(start_date, end_date):
@@ -32,29 +31,34 @@ def download_index_data(start_date, end_date):
     print(f"下载指数数据: {start_date} 至 {end_date}")
     print("=" * 80)
     
-    # 使用统一下载入口
-    output_root = download_index_ohlc(
-        start_date=start_date,
-        end_date=end_date,
-        output_dir=None,
-        indices=[("000300.SH", "沪深300")],
-        sleep_seconds=1,
-    )
-
-    src_file = output_root / "index_000300_SH_ohlc.parquet"
-    if not src_file.exists():
+    start_fmt = start_date.replace("-", "")
+    end_fmt = end_date.replace("-", "")
+    cmd = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "data" / "tushare_downloader.py"),
+        "--task",
+        "index_ohlc",
+        "--start-date",
+        start_fmt,
+        "--end-date",
+        end_fmt,
+        "--sleep-seconds",
+        "1",
+    ]
+    result = os.system(" ".join(cmd))
+    if result != 0:
         print("✗ 数据下载失败")
         return False
 
-    legacy_dir = PROJECT_ROOT / "data" / "raw" / "tushare" / "index"
-    legacy_dir.mkdir(parents=True, exist_ok=True)
-    output_file = legacy_dir / "index_000300_SH_ohlc.parquet"
-    shutil.copy2(src_file, output_file)
+    output_file = PROJECT_ROOT / "data" / "raw" / "tushare" / "index" / "index_ohlc.parquet"
+    if not output_file.exists():
+        print("✗ 数据文件不存在")
+        return False
 
     df = pd.read_parquet(output_file)
     print(f"✓ 成功获取 {len(df)} 条记录")
-    if not df.empty and "date" in df.columns:
-        print(f"  日期范围: {df['date'].min()} 至 {df['date'].max()}")
+    if not df.empty and "trade_date" in df.columns:
+        print(f"  日期范围: {df['trade_date'].min()} 至 {df['trade_date'].max()}")
     print(f"✓ 数据已保存: {output_file}")
     return True
 
