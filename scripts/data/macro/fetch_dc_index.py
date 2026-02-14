@@ -15,28 +15,8 @@ from datetime import datetime, timedelta
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data.macro.tushare_auth import get_tushare_token
-from scripts.data._shared.runtime import disable_proxy
+from scripts.data._shared.tushare_helpers import get_pro, request_with_retry
 from scripts.data.macro.paths import CONCEPTS_DIR
-
-
-def get_with_retry(pro, api_name, params, max_retries=3, sleep_time=40):
-    """带重试机制的API请求"""
-    for attempt in range(max_retries):
-        try:
-            api_func = getattr(pro, api_name)
-            df = api_func(**params)
-            time.sleep(sleep_time)
-            return df
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 30
-                print(f"  请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
-                print(f"  等待 {wait_time} 秒后重试...")
-                time.sleep(wait_time)
-            else:
-                print(f"  请求失败，已达到最大重试次数: {e}")
-                return None
 
 
 def fetch_concept_index(pro, output_dir, start_date='20200101', end_date=None):
@@ -101,11 +81,11 @@ def fetch_concept_index(pro, output_dir, start_date='20200101', end_date=None):
 
         while True:
             print(f"  第{page}页获取 (offset={offset})...", end=' ')
-            df = get_with_retry(
+            df = request_with_retry(
                 pro, 'dc_index',
                 {'start_date': start_str, 'end_date': end_str, 'offset': offset},
                 max_retries=3,
-                sleep_time=40
+                sleep_seconds=40
             )
 
             if df is not None and not df.empty:
@@ -179,9 +159,7 @@ def main():
     print("=" * 80)
 
     # 设置Tushare token
-    disable_proxy()
-    token = get_tushare_token()
-    pro = ts.pro_api(token)
+    pro = get_pro()
 
     # 输出目录
     output_dir = Path(CONCEPTS_DIR)

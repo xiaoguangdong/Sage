@@ -23,27 +23,8 @@ import tushare as ts
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import disable_proxy
+from scripts.data._shared.tushare_helpers import get_pro, request_with_retry
 from scripts.data.macro.paths import CONCEPTS_DIR
-from scripts.data.macro.tushare_auth import get_tushare_token
-
-
-def get_with_retry(pro, api_name, params, max_retries=3, sleep_time=60):
-    for attempt in range(max_retries):
-        try:
-            api_func = getattr(pro, api_name)
-            df = api_func(**params)
-            time.sleep(sleep_time)
-            return df
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 30
-                print(f"  请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
-                print(f"  等待 {wait_time} 秒后重试...")
-                time.sleep(wait_time)
-            else:
-                print(f"  请求失败，已达到最大重试次数: {e}")
-                return None
 
 
 def fetch_ths_index(pro, output_dir: Path):
@@ -52,7 +33,7 @@ def fetch_ths_index(pro, output_dir: Path):
     print("=" * 80)
 
     output_file = output_dir / "ths_index.parquet"
-    df = get_with_retry(pro, "ths_index", {}, max_retries=3, sleep_time=1)
+    df = request_with_retry(pro, "ths_index", {}, max_retries=3, sleep_seconds=1)
     if df is None or df.empty:
         print("  获取失败或无数据")
         return
@@ -106,12 +87,12 @@ def fetch_ths_daily(pro, output_dir: Path, start_date: str, end_date: str, sleep
             page = 1
             while True:
                 print(f"  第{page}页获取 (offset={offset})...", end=" ")
-                df = get_with_retry(
+                df = request_with_retry(
                     pro,
                     "ths_daily",
                     {"start_date": start_str, "end_date": end_str, "offset": offset},
                     max_retries=3,
-                    sleep_time=sleep_seconds,
+                    sleep_seconds=sleep_seconds,
                 )
                 if df is not None and not df.empty:
                     print(f"成功获取 {len(df)} 条")
@@ -158,12 +139,12 @@ def fetch_ths_daily(pro, output_dir: Path, start_date: str, end_date: str, sleep
             if code == last_code and last_month and end_str <= last_month:
                 continue
 
-            df = get_with_retry(
+            df = request_with_retry(
                 pro,
                 "ths_daily",
                 {"ts_code": code, "start_date": start_str, "end_date": end_str},
                 max_retries=3,
-                sleep_time=sleep_seconds,
+                sleep_seconds=sleep_seconds,
             )
             if df is not None and not df.empty:
                 combined = pd.concat([existing, df], ignore_index=True)
@@ -187,9 +168,7 @@ def main():
     parser.add_argument("--all-by-month", action="store_true", help="按月全量分页拉取（不输入指数）")
     args = parser.parse_args()
 
-    disable_proxy()
-    token = get_tushare_token()
-    pro = ts.pro_api(token)
+    pro = get_pro()
 
     output_dir = Path(CONCEPTS_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)

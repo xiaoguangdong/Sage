@@ -10,35 +10,18 @@
 import pandas as pd
 import tushare as ts
 import time
+import sys
 from pathlib import Path
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro, request_with_retry
 from scripts.data.macro.paths import CONCEPTS_DIR
 
 
 def get_data_with_retry(pro, func_name, max_retries=3, **kwargs):
-    """获取数据，带重试机制"""
-    for attempt in range(max_retries):
-        try:
-            if func_name == 'dc_index':
-                df = pro.dc_index(**kwargs)
-            elif func_name == 'dc_member':
-                df = pro.dc_member(**kwargs)
-            elif func_name == 'dc_daily':
-                df = pro.dc_daily(**kwargs)
-            else:
-                return None
-            time.sleep(45)
-            return df
-        except Exception as e:
-            if attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 30
-                print(f"  请求失败 (尝试 {attempt + 1}/{max_retries}): {e}")
-                print(f"  等待 {wait_time} 秒后重试...")
-                time.sleep(wait_time)
-            else:
-                print(f"  请求失败，已达到最大重试次数: {e}")
-                return None
+    return request_with_retry(pro, func_name, kwargs, max_retries=max_retries, sleep_seconds=45)
 
 
 def fetch_concept_data_new():
@@ -48,8 +31,7 @@ def fetch_concept_data_new():
     print("=" * 80)
 
     # 设置Tushare token
-    token = get_tushare_token()
-    pro = ts.pro_api(token)
+    pro = get_pro()
 
     # 创建输出目录
     output_dir = Path(CONCEPTS_DIR)
