@@ -45,7 +45,7 @@ class FetchConfig:
     rating: str = "*"
     rating_change: str = "*"
     output_dir: Path = get_data_path("raw", "policy", ensure=True)
-    state_path: Path = get_data_path("states", "eastmoney_hyyb.json", ensure=True)
+    state_path: Path = get_data_path("states", ensure=True) / "eastmoney_hyyb.json"
 
 
 def _jsonp_to_json(text: str) -> Dict:
