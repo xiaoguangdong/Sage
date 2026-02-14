@@ -705,7 +705,14 @@ class MacroDataProcessor:
                                   on=['sw_industry', 'date'], how='outer')
             result = base
         else:
-            result = industry_df.copy()
+            base = industry_df[['sw_industry', 'date']].drop_duplicates()
+            if not rev_yoy_df.empty:
+                base = base.merge(
+                    rev_yoy_df[['sw_industry', 'date']].drop_duplicates(),
+                    on=['sw_industry', 'date'],
+                    how='outer'
+                )
+            result = base.merge(industry_df, on=['sw_industry', 'date'], how='left')
 
         if not valuation_df.empty:
             result = result.merge(valuation_df, on=['sw_industry', 'date'], how='left')
@@ -855,22 +862,22 @@ def main():
              'inventory_yoy', 'rev_yoy', 'inventory_yoy_source']
         ),
         "northbound": _coverage(data['northbound'], ['sw_industry', 'trade_date', 'northbound_signal', 'industry_ratio']),
-        "causes": {
-            "macro": {
-                "credit_growth": "社融存量同比口径，前12个月无法计算。",
-                "pmi": "依赖tushare_pmi.parquet，缺失或未同步到raw目录。",
-                "cpi_yoy": "依赖tushare_cpi.parquet，缺失或未同步到raw目录。",
-                "yield_10y": "依赖tushare_yield_10y.parquet或yield_10y.parquet，早期日期可能为空。"
-            },
-            "industry": {
-                "sw_ppi_yoy": "行业PPI月度数据缺口或映射缺失。",
-                "pb_percentile": "依赖sw_valuation行业估值，早期或行业缺口。",
-                "pe_percentile": "依赖sw_valuation行业估值，早期或行业缺口。",
-                "turnover_rate": "依赖sw_daily_all的amount/float_mv，缺口或行业未覆盖。",
-                "rps_120": "需要120个交易日收益率，样本初期为空。",
-                "rev_yoy": "依赖fina_indicator并映射到行业，财报缺口或映射覆盖不足。",
-                "inventory_yoy": "主口径为output_yoy - rev_yoy，rev_yoy为空则缺失；备用口径为output_yoy - sw_ppi_yoy/ppi_yoy。"
-            },
+    "causes": {
+        "macro": {
+            "credit_growth": "社融存量同比口径，前12个月无法计算。",
+            "pmi": "依赖tushare_pmi.parquet，缺失或未同步到raw目录。",
+            "cpi_yoy": "依赖tushare_cpi.parquet，缺失或未同步到raw目录。",
+            "yield_10y": "依赖tushare_yield_10y.parquet或yield_10y.parquet，早期日期可能为空。"
+        },
+        "industry": {
+            "sw_ppi_yoy": "行业PPI月度数据缺口或映射缺失；若仅由rev_yoy季度行扩展，则该字段为空。",
+            "pb_percentile": "依赖sw_valuation行业估值，早期或行业缺口；rev_yoy季度行扩展会产生额外空值。",
+            "pe_percentile": "依赖sw_valuation行业估值，早期或行业缺口；rev_yoy季度行扩展会产生额外空值。",
+            "turnover_rate": "依赖sw_daily_all的amount/float_mv，缺口或行业未覆盖；rev_yoy季度行扩展会产生额外空值。",
+            "rps_120": "需要120个交易日收益率，样本初期为空；rev_yoy季度行扩展会产生额外空值。",
+            "rev_yoy": "依赖fina_indicator并映射到行业，财报缺口或映射覆盖不足。",
+            "inventory_yoy": "主口径为output_yoy - rev_yoy，rev_yoy为空则缺失；备用口径为output_yoy - sw_ppi_yoy/ppi_yoy。"
+        },
             "northbound": {
                 "northbound_signal": "依赖northbound行业流数据，若行业或日期缺口则为空。",
                 "industry_ratio": "来自北向行业占比，原始vol/ratio缺口会导致缺失。"
