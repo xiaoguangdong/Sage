@@ -184,6 +184,7 @@ def map_industries(
     raw: str,
     l2_to_l1: Dict[str, str],
     l1_set: set,
+    alias_map: Dict[str, str],
 ) -> List[str]:
     if not raw:
         return []
@@ -193,6 +194,14 @@ def map_industries(
         name = part.strip()
         if not name:
             continue
+        alias = alias_map.get(name)
+        if alias:
+            if alias in l1_set:
+                results.append(alias)
+                continue
+            if alias in l2_to_l1:
+                results.append(l2_to_l1[alias])
+                continue
         if name in l1_set:
             results.append(name)
             continue
@@ -236,6 +245,7 @@ def aggregate_signals(
     negative: List[str],
     source_weights: Dict[str, float],
     l2_to_l1: Dict[str, str],
+    alias_map: Dict[str, str],
 ) -> pd.DataFrame:
     if texts.empty:
         return pd.DataFrame()
@@ -247,7 +257,7 @@ def aggregate_signals(
         industries = []
         industry_raw = row.get("industry_raw", "") if isinstance(row, dict) else row.get("industry_raw", "")
         if industry_raw:
-            industries = map_industries(str(industry_raw), l2_to_l1, l1_set)
+            industries = map_industries(str(industry_raw), l2_to_l1, l1_set, alias_map)
         if not industries:
             industries = extract_industries(text, industry_keywords)
         if not industries:
@@ -314,7 +324,9 @@ def main():
         return
 
     l2_to_l1 = load_sw_l2_to_l1_map()
-    signals = aggregate_signals(texts, industry_keywords, positive, negative, source_weights, l2_to_l1)
+    alias_cfg = load_yaml(PROJECT_ROOT / "config" / "policy_industry_alias.yaml")
+    alias_map = (alias_cfg.get("aliases") or {}) if isinstance(alias_cfg, dict) else {}
+    signals = aggregate_signals(texts, industry_keywords, positive, negative, source_weights, l2_to_l1, alias_map)
     if signals.empty:
         print("未提取到有效行业政策信号")
         return
