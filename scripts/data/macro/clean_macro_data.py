@@ -148,6 +148,13 @@ class MacroDataProcessor:
             credit = pd.read_parquet(credit_path)
             if 'date' in credit.columns:
                 credit['date'] = pd.to_datetime(credit['date'])
+            elif 'month' in credit.columns:
+                credit['date'] = pd.to_datetime(credit['month'].astype(str), format='%Y%m', errors='coerce')
+
+            if 'credit_growth' not in credit.columns and 'stk_endval' in credit.columns:
+                credit = credit.sort_values('date')
+                credit['credit_growth'] = pd.to_numeric(credit['stk_endval'], errors='coerce').pct_change(12) * 100
+
             if 'credit_growth' in credit.columns:
                 macro = macro.merge(credit[['date', 'credit_growth']], on='date', how='left')
         
@@ -156,6 +163,9 @@ class MacroDataProcessor:
             money = pd.read_parquet(money_path)
             if 'date' in money.columns:
                 money['date'] = pd.to_datetime(money['date'])
+            elif 'month' in money.columns:
+                money['date'] = pd.to_datetime(money['month'].astype(str), format='%Y%m', errors='coerce')
+
             if 'm1_yoy' in money.columns and 'm2_yoy' in money.columns:
                 money['m1_m2_spread'] = money['m1_yoy'] - money['m2_yoy']
                 macro = macro.merge(money[['date', 'm1_yoy', 'm2_yoy', 'm1_m2_spread']], on='date', how='left')

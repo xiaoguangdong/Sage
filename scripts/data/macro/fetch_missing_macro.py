@@ -68,21 +68,21 @@ class MissingMacroDataFetcher:
         print("\n=== 获取货币供应量数据 ===")
         
         try:
-            # 获取M2数据
-            df_m2 = self.pro.shibor(
-                start_date=start_date,
-                end_date=end_date
-            )
+            start_m = pd.to_datetime(start_date).strftime('%Y%m')
+            end_m = pd.to_datetime(end_date).strftime('%Y%m')
 
-            # 尝试获取M1数据（可能需要其他接口）
-            # Tushare的m2接口可能不直接提供，需要从其他数据源获取
-
-            if df_m2 is not None and len(df_m2) > 0:
+            df_m = self.pro.cn_m(start_m=start_m, end_m=end_m)
+            if df_m is not None and len(df_m) > 0:
+                df_m['date'] = pd.to_datetime(df_m['month'].astype(str), format='%Y%m')
+                df_m = df_m.rename(columns={
+                    'm1_yoy': 'm1_yoy',
+                    'm2_yoy': 'm2_yoy'
+                })
                 filepath = os.path.join(self.output_dir, 'money_supply.parquet')
-                df_m2.to_parquet(filepath, index=False)
-                print(f"✓ 货币供应量数据已保存: {filepath} ({len(df_m2)}行)")
+                df_m.to_parquet(filepath, index=False)
+                print(f"✓ 货币供应量数据已保存: {filepath} ({len(df_m)}行)")
 
-                return df_m2
+                return df_m
         except Exception as e:
             print(f"获取货币供应量数据失败: {e}")
 
@@ -97,14 +97,17 @@ class MissingMacroDataFetcher:
         print("\n=== 获取信用数据（社融存量）===")
         
         try:
-            # Tushare可能没有直接的社融接口
-            # 尝试使用shibor作为替代指标
-            df = self.pro.shibor(
-                start_date=start_date,
-                end_date=end_date
-            )
+            start_m = pd.to_datetime(start_date).strftime('%Y%m')
+            end_m = pd.to_datetime(end_date).strftime('%Y%m')
 
+            df = self.pro.sf_month(start_m=start_m, end_m=end_m)
             if df is not None and len(df) > 0:
+                df['month'] = df['month'].astype(str)
+                df = df.sort_values('month')
+                df['date'] = pd.to_datetime(df['month'], format='%Y%m')
+                df['stk_endval'] = pd.to_numeric(df['stk_endval'], errors='coerce')
+                df['credit_growth'] = df['stk_endval'].pct_change(12) * 100
+
                 filepath = os.path.join(self.output_dir, 'credit_data.parquet')
                 df.to_parquet(filepath, index=False)
                 print(f"✓ 信用数据已保存: {filepath} ({len(df)}行)")
