@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.tushare_helpers import get_pro, request_with_retry
+from scripts.data._shared.tushare_helpers import get_pro, PagedDownloader
 from scripts.data.macro.paths import CONCEPTS_DIR
 
 
@@ -75,33 +75,9 @@ def fetch_concept_index(pro, output_dir, start_date='20200101', end_date=None):
 
         print(f"\n[{i+1}/{total_months}] 获取 {start_str} ~ {end_str} 的概念指数数据...")
 
-        offset = 0
-        page = 1
-        page_data = []
-
-        while True:
-            print(f"  第{page}页获取 (offset={offset})...", end=' ')
-            df = request_with_retry(
-                pro, 'dc_index',
-                {'start_date': start_str, 'end_date': end_str, 'offset': offset},
-                max_retries=3,
-                sleep_seconds=40
-            )
-
-            if df is not None and not df.empty:
-                print(f"成功获取 {len(df)} 条记录")
-                page_data.append(df)
-                offset += len(df)
-                page += 1
-                if len(df) < 5000:
-                    print(f"  {start_str} ~ {end_str} 数据获取完成")
-                    break
-            else:
-                print("失败或无数据")
-                break
-
-        if page_data:
-            month_df = pd.concat(page_data, ignore_index=True)
+        downloader = PagedDownloader(pro, "dc_index", limit=5000, sleep_seconds=40)
+        month_df = downloader.fetch_pages({"start_date": start_str, "end_date": end_str})
+        if month_df is not None and not month_df.empty:
             all_index.append(month_df)
 
             if len(all_index) >= 6:

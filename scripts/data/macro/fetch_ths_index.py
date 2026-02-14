@@ -23,7 +23,7 @@ import tushare as ts
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.tushare_helpers import get_pro, request_with_retry
+from scripts.data._shared.tushare_helpers import get_pro, request_with_retry, PagedDownloader
 from scripts.data.macro.paths import CONCEPTS_DIR
 
 
@@ -83,30 +83,13 @@ def fetch_ths_daily(pro, output_dir: Path, start_date: str, end_date: str, sleep
                 continue
 
             print(f"[{i}/{len(months)}] 获取 {start_str} ~ {end_str} 全量行情...")
-            offset = 0
-            page = 1
-            while True:
-                print(f"  第{page}页获取 (offset={offset})...", end=" ")
-                df = request_with_retry(
-                    pro,
-                    "ths_daily",
-                    {"start_date": start_str, "end_date": end_str, "offset": offset},
-                    max_retries=3,
-                    sleep_seconds=sleep_seconds,
-                )
-                if df is not None and not df.empty:
-                    print(f"成功获取 {len(df)} 条")
-                    offset += len(df)
-                    page += 1
-                    combined = pd.concat([existing, df], ignore_index=True)
-                    combined = combined.drop_duplicates(subset=["ts_code", "trade_date"])
-                    combined.to_parquet(output_file, index=False)
-                    existing = combined
-                    if len(df) < 3000:
-                        break
-                else:
-                    print("无数据或获取失败")
-                    break
+            downloader = PagedDownloader(pro, "ths_daily", limit=3000, sleep_seconds=sleep_seconds)
+            df = downloader.fetch_pages({"start_date": start_str, "end_date": end_str})
+            if df is not None and not df.empty:
+                combined = pd.concat([existing, df], ignore_index=True)
+                combined = combined.drop_duplicates(subset=["ts_code", "trade_date"])
+                combined.to_parquet(output_file, index=False)
+                existing = combined
 
             progress_file.write_text(f"ALL,{end_str}", encoding="utf-8")
         return
