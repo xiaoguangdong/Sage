@@ -151,6 +151,25 @@ def fetch_concept_index(pro, output_dir, start_date='20200101'):
             print(f"概念数量: {final_df['ts_code'].nunique()}")
 
 
+def find_start_date_from_2023(pro, start_year=2023) -> str | None:
+    """从2023年起每年1月尝试，找到第一个有数据的交易日"""
+    current_year = datetime.now().year
+    for year in range(start_year, current_year + 1):
+        print(f"\n检测 {year} 年1月是否有数据...")
+        for day in range(1, 32):
+            date_str = f"{year}01{day:02d}"
+            try:
+                df = pro.dc_index(trade_date=date_str)
+                if df is not None and not df.empty:
+                    print(f"  ✓ 找到起始数据日期: {date_str}")
+                    return date_str
+            except Exception as e:
+                print(f"  {date_str} 请求失败: {e}")
+            time.sleep(1)
+        print(f"  {year} 年1月无数据，跳过")
+    return None
+
+
 def main():
     print("=" * 80)
     print("获取东方财富概念指数历史数据")
@@ -166,7 +185,11 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 获取概念指数历史数据
-    fetch_concept_index(pro, output_dir, start_date='20200101')
+    start_date = find_start_date_from_2023(pro, start_year=2023)
+    if not start_date:
+        print("未找到可用的起始日期，停止下载")
+        return
+    fetch_concept_index(pro, output_dir, start_date=start_date)
 
     print("\n" + "=" * 80)
     print("概念指数数据获取完成")
