@@ -179,6 +179,7 @@ class _AnchorParser(HTMLParser):
 
 _DATE_PATTERN = re.compile(r"(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})")
 _DATE_PATTERN_CN = re.compile(r"(20\\d{2})年(\\d{1,2})月(\\d{1,2})日")
+_IGNORE_TITLES = {"查看详细", "查看更多", "更多", "上一页", "下一页", "返回", ">>", "更多>>"}
 
 
 def _normalize_date(raw: str) -> Optional[str]:
@@ -202,6 +203,8 @@ def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, s
         title = token.get("text", "").strip()
         if not title or title.lower() == "image":
             continue
+        if title in _IGNORE_TITLES:
+            continue
         href = token.get("href", "").strip()
         url = urljoin(base_url or "", href) if href else ""
         date_text = _normalize_date(title)
@@ -210,6 +213,13 @@ def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, s
                 if next_token.get("type") != "text":
                     continue
                 date_text = _normalize_date(next_token.get("text", ""))
+                if date_text:
+                    break
+        if not date_text:
+            for prev_token in tokens[max(0, idx - 8): idx]:
+                if prev_token.get("type") != "text":
+                    continue
+                date_text = _normalize_date(prev_token.get("text", ""))
                 if date_text:
                     break
         if not date_text:
