@@ -222,6 +222,23 @@ python scripts/data/policy/policy_signal_pipeline.py
 python3 scripts/data/policy/policy_signal_enhanced.py
 ```
 
+## 概念→行业映射（数据与映射层）
+
+脚本：`scripts/data/concepts/build_concept_industry_mapping.py`
+
+说明：
+- 基于概念成分股 + 申万L1成分股，生成概念→行业覆盖率与主行业
+
+示例：
+```bash
+python3 scripts/data/concepts/build_concept_industry_mapping.py --min-ratio 0.2
+```
+
+输出：
+- `data/processed/concepts/concept_industry_coverage.parquet`
+- `data/processed/concepts/concept_industry_primary.parquet`
+- `data/processed/concepts/concept_industry_unmapped.parquet`
+
 输出：
 - `data/processed/policy/policy_signals_enhanced.parquet`
 - `data/processed/policy/policy_signals_enhanced_summary.json`
