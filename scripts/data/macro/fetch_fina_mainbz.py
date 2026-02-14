@@ -13,8 +13,13 @@ import time
 import os
 from datetime import datetime
 import logging
+import sys
+from pathlib import Path
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR
 # 配置日志
 logging.basicConfig(
@@ -27,7 +32,7 @@ logger = logging.getLogger(__name__)
 class FinaMainbzFetcher:
     """主营业务分部数据获取器"""
 
-    def __init__(self, token, batch_limit=8000):
+    def __init__(self, token=None, batch_limit=8000):
         """
         初始化获取器
 
@@ -35,7 +40,7 @@ class FinaMainbzFetcher:
             token: Tushare API token
             batch_limit: 每次分页获取的记录数限制
         """
-        self.pro = ts.pro_api(token)
+        self.pro = get_pro(token)
         self.batch_limit = batch_limit  # 每次获取8000条
         self.base_delay = 30  # 基础延迟30秒
         self.quarter_delay = 60  # 季度间延迟60秒
@@ -169,13 +174,8 @@ class FinaMainbzFetcher:
 
 def main():
     """主函数"""
-    # Tushare token（项目中已有的token）
-    token = get_tushare_token()
-
-    logger.info(f"使用Tushare Token: {token}")
-
     # 创建获取器
-    fetcher = FinaMainbzFetcher(token)
+    fetcher = FinaMainbzFetcher()
 
     # 获取所有数据（按季度下载全部股票）
     fetcher.fetch_all_periods(

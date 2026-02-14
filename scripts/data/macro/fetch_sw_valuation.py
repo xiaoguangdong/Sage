@@ -13,8 +13,12 @@ import time
 import os
 from datetime import datetime
 from pathlib import Path
+import sys
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR
 
 
@@ -104,8 +108,7 @@ def fetch_sw_valuation_data():
     print("=" * 80)
 
     # 设置Tushare token
-    token = get_tushare_token()
-    pro = ts.pro_api(token)
+    pro = get_pro()
 
     # 创建输出目录
     output_dir = Path(MACRO_DIR)

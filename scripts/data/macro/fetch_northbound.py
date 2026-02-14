@@ -16,14 +16,19 @@ import tushare as ts
 from datetime import datetime, timedelta
 import os
 import time
+import sys
+from pathlib import Path
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import NORTHBOUND_DIR
 class NorthboundDataFetcher:
     """北向资金数据获取器"""
     
-    def __init__(self, token):
-        self.pro = ts.pro_api(token)
+    def __init__(self, token=None):
+        self.pro = get_pro(token)
         self.output_dir = str(NORTHBOUND_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         self.api_delay = 30  # API请求间隔30秒
@@ -119,9 +124,7 @@ def main():
         end_date = args.end_date
     
     # Tushare token
-    token = get_tushare_token()
-    
-    fetcher = NorthboundDataFetcher(token)
+    fetcher = NorthboundDataFetcher()
     data = fetcher.fetch_all(start_date, end_date)
     
     print(f"\n=== 数据获取完成 ===")

@@ -13,11 +13,12 @@ import os
 import time
 import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from tushare_auth import get_tushare_token
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '../../..'))
-sys.path.insert(0, PROJECT_ROOT)
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR
 
 def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='20251231', output_dir=None):
@@ -33,7 +34,7 @@ def fetch_yield(token=None, curve_term=10, start_date='20200101', end_date='2025
         start_date: 开始日期
         end_date: 结束日期
     """
-    pro = ts.pro_api(get_tushare_token(token))
+    pro = get_pro(token)
 
     all_data = []
     offset = 0

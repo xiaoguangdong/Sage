@@ -18,14 +18,19 @@ import pandas as pd
 import os
 import time
 from datetime import datetime
+import sys
+from pathlib import Path
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR
 
 
 class TushareMacroDataFetcher:
-    def __init__(self, token):
-        self.pro = ts.pro_api(token)
+    def __init__(self, token=None):
+        self.pro = get_pro(token)
         self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         self.max_retries = 3  # 最大重试次数
@@ -334,11 +339,8 @@ def main():
     if args.end_date is None:
         args.end_date = datetime.now().strftime('%Y-%m-%d')
     
-    # 使用token
-    token = get_tushare_token()
-    
     # 创建fetcher
-    fetcher = TushareMacroDataFetcher(token)
+    fetcher = TushareMacroDataFetcher()
     
     # 获取数据
     data = fetcher.fetch_all(args.start_date, args.end_date)

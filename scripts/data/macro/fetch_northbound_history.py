@@ -14,8 +14,13 @@ import pandas as pd
 import os
 import time
 from datetime import datetime, timedelta
+import sys
+from pathlib import Path
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import NORTHBOUND_DIR
 
 
@@ -28,7 +33,7 @@ def fetch_northbound_flow(token=None, start_date='20200101', end_date='20251231'
         start_date: 开始日期
         end_date: 结束日期
     """
-    pro = ts.pro_api(get_tushare_token(token))
+    pro = get_pro(token)
 
     all_data = []
     offset = 0
@@ -148,7 +153,7 @@ def fetch_northbound_hold(token=None, start_date='20200101', end_date='20251231'
         start_date: 开始日期
         end_date: 结束日期
     """
-    pro = ts.pro_api(get_tushare_token(token))
+    pro = get_pro(token)
 
     all_data = []
     offset = 0
@@ -274,7 +279,7 @@ def fetch_northbound_top10(token=None, start_date='20200101', end_date='20251231
         start_date: 开始日期
         end_date: 结束日期
     """
-    pro = ts.pro_api(get_tushare_token(token))
+    pro = get_pro(token)
 
     all_data = []
     offset = 0

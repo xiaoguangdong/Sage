@@ -22,13 +22,12 @@ from datetime import datetime, timedelta
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data.macro.tushare_auth import get_tushare_token
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR, NORTHBOUND_DIR
 
 class MissingMacroDataFetcher:
     def __init__(self, token=None):
-        self.token = get_tushare_token(token)
-        self.pro = ts.pro_api(self.token)
+        self.pro = get_pro(token)
         self.output_dir = str(MACRO_DIR)
         self.northbound_dir = str(NORTHBOUND_DIR)
         
