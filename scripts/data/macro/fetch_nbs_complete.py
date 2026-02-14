@@ -23,8 +23,13 @@ import tushare as ts
 import time
 import os
 from datetime import datetime, timedelta
+import sys
+from pathlib import Path
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR
 
 class CompleteNBSDataFetcher:
@@ -34,8 +39,7 @@ class CompleteNBSDataFetcher:
         os.makedirs(self.output_dir, exist_ok=True)
         
         # Tushare用于获取PMI数据
-        self.tushare_token = get_tushare_token(tushare_token)
-        self.pro = ts.pro_api(self.tushare_token)
+        self.pro = get_pro(tushare_token)
         
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",

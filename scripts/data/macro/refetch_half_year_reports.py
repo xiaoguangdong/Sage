@@ -11,8 +11,13 @@ import pandas as pd
 import time
 import os
 import logging
+import sys
+from pathlib import Path
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR
 # 配置日志
 logging.basicConfig(
@@ -25,7 +30,7 @@ logger = logging.getLogger(__name__)
 class HalfYearReportFetcher:
     """半年报和年报数据重新获取器"""
 
-    def __init__(self, token, batch_limit=8000, api_delay=45):
+    def __init__(self, token=None, batch_limit=8000, api_delay=45):
         """
         初始化获取器
 
@@ -34,7 +39,7 @@ class HalfYearReportFetcher:
             batch_limit: 每次分页获取的记录数限制
             api_delay: 每次API请求之间的延迟（秒）
         """
-        self.pro = ts.pro_api(token)
+        self.pro = get_pro(token)
         self.batch_limit = batch_limit
         self.api_delay = api_delay
         self.max_retries = 3  # 最大重试次数
@@ -185,11 +190,8 @@ class HalfYearReportFetcher:
 
 def main():
     """主函数"""
-    # Tushare token
-    TUSHARE_TOKEN = get_tushare_token()
-
     # 创建获取器（batch_limit=8000, api_delay=45）
-    fetcher = HalfYearReportFetcher(token=TUSHARE_TOKEN, batch_limit=8000, api_delay=45)
+    fetcher = HalfYearReportFetcher(token=None, batch_limit=8000, api_delay=45)
 
     # 获取所有半年报和年报数据
     fetcher.fetch_all_half_year_reports(

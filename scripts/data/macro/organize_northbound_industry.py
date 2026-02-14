@@ -14,8 +14,12 @@ import tushare as ts
 import time
 from pathlib import Path
 from datetime import datetime
+import sys
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import NORTHBOUND_DIR
 
 
@@ -111,8 +115,7 @@ def main():
     print("=" * 80)
     
     # 设置Tushare token
-    token = get_tushare_token()
-    pro = ts.pro_api(token)
+    pro = get_pro()
     
     # 创建输出目录
     output_dir = Path(NORTHBOUND_DIR)
