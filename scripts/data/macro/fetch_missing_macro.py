@@ -15,9 +15,14 @@
 import tushare as ts
 import pandas as pd
 import os
+import sys
+from pathlib import Path
 from datetime import datetime, timedelta
 
-from tushare_auth import get_tushare_token
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from scripts.data.macro.tushare_auth import get_tushare_token
 from scripts.data.macro.paths import MACRO_DIR, NORTHBOUND_DIR
 
 class MissingMacroDataFetcher:
