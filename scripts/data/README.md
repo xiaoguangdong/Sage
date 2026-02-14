@@ -223,6 +223,23 @@ python3 scripts/data/policy/fetch_eastmoney_industry_reports.py \
 默认输出（进入 `policy_signal_pipeline`）：
 - `data/raw/policy/eastmoney_industry_reports.parquet`
 
+### 2.6.1) 同花顺板块指数（ths_index / ths_daily）
+
+脚本：`scripts/data/macro/fetch_ths_index.py`
+
+说明：
+- `ths_index`：板块指数列表（单次全量）
+- `ths_daily`：板块指数行情（按指数代码/日期循环）
+
+示例：
+```bash
+python3 scripts/data/macro/fetch_ths_index.py --start-date 20230101 --end-date 20251231
+```
+
+输出：
+- `data/tushare/concepts/ths_index.parquet`
+- `data/tushare/concepts/ths_daily.parquet`
+
 ### 3) 政策信号管道
 
 脚本：`scripts/data/policy/policy_signal_pipeline.py`
