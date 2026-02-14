@@ -14,6 +14,7 @@ NBS工业品数据对齐脚本
 import pandas as pd
 import json
 import os
+import re
 import sys
 from typing import Dict, List, Optional
 from datetime import datetime
@@ -338,6 +339,81 @@ class NBSIndustrialDataAligner:
         df['mom'] = df.groupby('product_code')['value'].pct_change() * 100
         
         return df
+
+    def build_mapping_audit(self, df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+        """
+        构建映射审计报告（覆盖率/行业统计/未映射清单）
+        """
+        if df is None or len(df) == 0:
+            return {}
+
+        work = df.copy()
+        if "product_name" not in work.columns:
+            return {}
+
+        work["product_name_norm"] = work["product_name"].apply(self._normalize_product_name)
+        work = work[work["product_name_norm"].notna()]
+
+        total_rows = len(work)
+        total_products = work["product_name_norm"].nunique()
+
+        mapped = work[work["sw_industry"].notna()]
+        unmapped = work[work["sw_industry"].isna()]
+
+        mapped_rows = len(mapped)
+        mapped_products = mapped["product_name_norm"].nunique()
+        unmapped_products = unmapped["product_name_norm"].nunique()
+        coverage = mapped_products / total_products if total_products else 0.0
+
+        summary = pd.DataFrame(
+            [
+                {"metric": "total_rows", "value": total_rows},
+                {"metric": "unique_products", "value": total_products},
+                {"metric": "mapped_rows", "value": mapped_rows},
+                {"metric": "mapped_unique_products", "value": mapped_products},
+                {"metric": "unmapped_unique_products", "value": unmapped_products},
+                {"metric": "coverage_unique_products", "value": round(coverage, 6)},
+            ]
+        )
+
+        by_industry = (
+            mapped.groupby("sw_industry")
+            .agg(
+                product_count=("product_name_norm", "nunique"),
+                row_count=("sw_industry", "size"),
+            )
+            .reset_index()
+            .sort_values(["product_count", "row_count"], ascending=False)
+        )
+
+        if "date" in work.columns:
+            unmatched = (
+                unmapped.groupby(["product_name_norm", "product_code"], dropna=False)
+                .agg(
+                    row_count=("product_name_norm", "size"),
+                    start_date=("date", "min"),
+                    end_date=("date", "max"),
+                )
+                .reset_index()
+                .rename(columns={"product_name_norm": "product_name"})
+            )
+        else:
+            unmatched = (
+                unmapped.groupby(["product_name_norm", "product_code"], dropna=False)
+                .size()
+                .reset_index(name="row_count")
+                .rename(columns={"product_name_norm": "product_name"})
+            )
+
+        unmatched["has_chinese"] = unmatched["product_name"].apply(
+            lambda x: bool(re.search(r"[\u4e00-\u9fff]", str(x)))
+        )
+
+        return {
+            "summary": summary,
+            "by_industry": by_industry,
+            "unmatched": unmatched.sort_values(["has_chinese", "row_count"], ascending=False),
+        }
     
     def aggregate_to_industry_level(self, df: pd.DataFrame) -> pd.DataFrame:
         """
@@ -558,6 +634,25 @@ def main():
             product_file = os.path.join(output_dir, 'nbs_output_product_level.parquet')
             product_df.to_parquet(product_file, index=False)
             print(f"\n产品级产量数据已保存到: {product_file}")
+
+            audit = aligner.build_mapping_audit(product_df)
+            summary_df = audit.get("summary")
+            if summary_df is not None and len(summary_df) > 0:
+                summary_file = os.path.join(output_dir, "nbs_output_mapping_summary.csv")
+                summary_df.to_csv(summary_file, index=False)
+                print(f"映射覆盖率摘要已保存: {summary_file}")
+
+            by_industry_df = audit.get("by_industry")
+            if by_industry_df is not None and len(by_industry_df) > 0:
+                by_industry_file = os.path.join(output_dir, "nbs_output_mapping_by_industry.csv")
+                by_industry_df.to_csv(by_industry_file, index=False)
+                print(f"行业映射统计已保存: {by_industry_file}")
+
+            unmatched_df = audit.get("unmatched")
+            if unmatched_df is not None and len(unmatched_df) > 0:
+                unmatched_file = os.path.join(output_dir, "nbs_output_mapping_unmatched.csv")
+                unmatched_df.to_csv(unmatched_file, index=False)
+                print(f"未映射产品清单已保存: {unmatched_file}")
 
 
 if __name__ == '__main__':

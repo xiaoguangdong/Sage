@@ -120,6 +120,27 @@ python scripts/data/akshare_suite.py --action stock_hist \
 
 默认输出目录（不传 `--output-dir`）：`data/raw/akshare/`
 
+## NBS 工业品对齐（宏观）
+
+脚本：`scripts/data/macro/align_nbs_industrial_data.py`
+
+```bash
+# 默认读取 config/base.yaml 的数据根目录
+python scripts/data/macro/align_nbs_industrial_data.py --output-dir data/processed
+
+# 指定宏观数据目录（可用于临时数据）
+python scripts/data/macro/align_nbs_industrial_data.py \
+  --data-dir /tmp/sage_data/tushare/macro \
+  --output-dir /tmp/sage_data/processed
+```
+
+输出（示例）：
+- `nbs_industrial_aligned.parquet`（行业级汇总特征）
+- `nbs_output_product_level.parquet`（产品级 + 映射结果）
+- `nbs_output_mapping_summary.csv`（覆盖率摘要）
+- `nbs_output_mapping_by_industry.csv`（行业统计）
+- `nbs_output_mapping_unmatched.csv`（未映射产品清单）
+
 ## Legacy 脚本
 
 历史脚本已移动至 `scripts/legacy/data/`，仅保留参考：
