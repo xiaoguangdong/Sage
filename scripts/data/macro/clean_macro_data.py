@@ -803,7 +803,7 @@ class MacroDataProcessor:
         non_industrial_list = {
             "银行", "非银金融", "房地产", "交通运输", "公用事业",
             "商贸零售", "社会服务", "传媒", "通信", "计算机",
-            "综合", "美容护理", "农林牧渔", "建筑装饰"
+            "综合", "美容护理", "农林牧渔", "建筑装饰", "医药生物"
         }
         industry_final["industry_scope"] = "industrial"
         industry_final.loc[industry_final["sw_industry"].isin(non_industrial_list), "industry_scope"] = "non_industrial"
