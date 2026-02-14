@@ -191,6 +191,18 @@ python scripts/data/policy/fetch_gov_policy.py --dump-html
 - `data/raw/policy/gov_notices.parquet`
 - `data/raw/policy/gov_notices_summary.json`
 
+### 2.5) 政策数据拉取（同花顺研报摘要）
+
+脚本：`scripts/data/policy/fetch_10jqka_reports.py`
+
+示例：
+```bash
+python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --dump-html
+```
+
+默认输出：
+- `data/raw/policy/10jqka_reports.parquet`
+
 ### 3) 政策信号管道
 
 脚本：`scripts/data/policy/policy_signal_pipeline.py`

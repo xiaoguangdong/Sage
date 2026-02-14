@@ -47,6 +47,8 @@ DEFAULT_INPUT_NAMES = {
         "tushare_reports.csv",
         "tushare_report.parquet",
         "tushare_report.csv",
+        "10jqka_reports.parquet",
+        "10jqka_reports.csv",
     ],
 }
 
