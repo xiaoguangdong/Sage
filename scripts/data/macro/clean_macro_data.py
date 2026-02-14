@@ -381,28 +381,75 @@ class MacroDataProcessor:
         """
         sectors_dir = self._get_tushare_root() / "sectors"
         members_path = sectors_dir / "all_index_members.csv"
-        l2_path = sectors_dir / "SW2021_L2_classify.csv"
-        l1_path = sectors_dir / "SW2021_L1_classify.csv"
+        l2_paths = [
+            sectors_dir / "SW2021_L2_classify.csv",
+            sectors_dir / "SW_L2_classify.csv",
+        ]
+        l1_paths = [
+            sectors_dir / "SW2021_L1_classify.csv",
+            sectors_dir / "SW_L1_classify.csv",
+        ]
 
-        if not (members_path.exists() and l2_path.exists() and l1_path.exists()):
+        if not members_path.exists():
             return pd.DataFrame()
 
         members = pd.read_csv(members_path)
         if "industry_name" in members.columns:
             members = members.rename(columns={"industry_name": "industry_name_l2"})
-        l2 = pd.read_csv(l2_path)
-        l1 = pd.read_csv(l1_path)
+        l2_frames = []
+        for idx, path in enumerate(l2_paths):
+            if path.exists():
+                df = pd.read_csv(path)
+                df["priority"] = idx
+                l2_frames.append(df)
+        if not l2_frames:
+            return pd.DataFrame()
+        l2 = pd.concat(l2_frames, ignore_index=True)
+        l2 = l2.sort_values("priority").drop_duplicates(subset=["index_code"], keep="first")
+
+        l1_frames = []
+        for idx, path in enumerate(l1_paths):
+            if path.exists():
+                df = pd.read_csv(path)
+                df["priority"] = idx
+                l1_frames.append(df)
+        if not l1_frames:
+            return pd.DataFrame()
+        l1 = pd.concat(l1_frames, ignore_index=True)
+        l1 = l1.sort_values("priority").drop_duplicates(subset=["industry_code"], keep="first")
 
         members["in_date"] = pd.to_datetime(members["in_date"], errors="coerce")
-        l2_map = l2[["index_code", "parent_code"]]
-        l1_map = l1[["industry_code", "industry_name"]].rename(columns={"industry_code": "parent_code"})
+        l2_map = l2[["index_code", "parent_code", "industry_name"]].rename(columns={"industry_name": "industry_name_l2"})
+        l1_map = l1[["industry_code", "industry_name"]].rename(
+            columns={"industry_code": "parent_code", "industry_name": "industry_name_l1"}
+        )
 
-        merged = members.merge(l2_map, on="index_code", how="left")
+        merged = members.merge(l2_map[["index_code", "parent_code"]], on="index_code", how="left")
+
+        if "industry_name_l2" in merged.columns:
+            name_map = l2_map[["industry_name_l2", "parent_code"]].dropna().drop_duplicates(subset=["industry_name_l2"])
+            merged = merged.merge(name_map, on="industry_name_l2", how="left", suffixes=("", "_by_name"))
+            merged["parent_code"] = merged["parent_code"].fillna(merged["parent_code_by_name"])
+            merged = merged.drop(columns=["parent_code_by_name"])
+
         merged = merged.merge(l1_map, on="parent_code", how="left")
 
-        merged = merged.sort_values("in_date").dropna(subset=["industry_name"])
-        latest = merged.groupby("con_code").tail(1)
-        return latest.rename(columns={"con_code": "ts_code", "industry_name": "sw_industry"})[["ts_code", "sw_industry"]]
+        l1_name_set = set(l1_map["industry_name_l1"].dropna().unique())
+        merged["sw_industry"] = merged.get("industry_name_l1")
+        if "industry_name_l2" in merged.columns:
+            mask = merged["sw_industry"].isna() & merged["industry_name_l2"].isin(l1_name_set)
+            merged.loc[mask, "sw_industry"] = merged.loc[mask, "industry_name_l2"]
+
+        merged = merged.sort_values("in_date")
+        def _pick_latest(group: pd.DataFrame) -> pd.Series:
+            valid = group[group["sw_industry"].notna()]
+            if not valid.empty:
+                return valid.iloc[-1]
+            return group.iloc[-1]
+
+        latest = merged.groupby("con_code", as_index=False).apply(_pick_latest).reset_index(drop=True)
+        latest = latest.dropna(subset=["sw_industry"])
+        return latest.rename(columns={"con_code": "ts_code"})[["ts_code", "sw_industry"]]
 
     def load_industry_rev_yoy(self, stock_map: pd.DataFrame) -> pd.DataFrame:
         """
