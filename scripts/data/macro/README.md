@@ -93,7 +93,7 @@ month,markit_pmi,cfl_pmi,manufacture_pmi,non_manufacture_pmi
 ...
 ```
 
-**10年期收益率 (tushare_yield_10y.parquet)**
+**10年期收益率 (yield_10y.parquet)**
 ```
 date,yield_10y
 2026-01-01,2.5
@@ -104,12 +104,12 @@ date,yield_10y
 ### 2.3 北向资金数据文件
 
 #### 文件命名
-- `northbound_daily_flow.parquet`
-- `northbound_hk_hold.parquet`
+- `northbound_flow.parquet`
+- `northbound_hold.parquet`
 
 #### 数据格式
 
-**日度流向 (northbound_daily_flow.parquet)**
+**日度流向 (northbound_flow.parquet)**
 ```
 trade_date,net_amount_in,net_amount_out,net_amount,net_pct_chg
 2026-01-01,500000000,200000000,300000000,0.05
@@ -117,7 +117,7 @@ trade_date,net_amount_in,net_amount_out,net_amount,net_pct_chg
 ...
 ```
 
-**持仓数据 (northbound_hk_hold.parquet)**
+**持仓数据 (northbound_hold.parquet)**
 ```
 trade_date,ts_code,name,hold_amount,hold_ratio,exchange_code
 2026-01-01,600519.SH,贵州茅台,1000000000,15.5,SH
