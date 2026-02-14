@@ -61,16 +61,19 @@ def load_yaml(path: Path) -> Dict:
         return {}
 
 
-def resolve_input_dir(input_dir: Optional[str]) -> Path:
+def resolve_input_dirs(input_dir: Optional[str]) -> List[Path]:
     if input_dir:
         path = Path(input_dir)
-        return path if path.is_absolute() else PROJECT_ROOT / path
-    # 默认：data/raw/policy，其次 data/raw/tushare/policy
-    candidate = get_data_path("raw", "policy")
-    if candidate.exists():
-        return candidate
-    candidate = get_data_path("raw", "tushare", "policy")
-    return candidate
+        return [path if path.is_absolute() else PROJECT_ROOT / path]
+    # 默认：先读 data/raw/policy，再读 data/raw/tushare/policy（若存在）
+    dirs: List[Path] = []
+    raw_policy = get_data_path("raw", "policy")
+    if raw_policy.exists():
+        dirs.append(raw_policy)
+    raw_tushare_policy = get_data_path("raw", "tushare", "policy")
+    if raw_tushare_policy.exists():
+        dirs.append(raw_tushare_policy)
+    return dirs or [raw_policy]
 
 
 def detect_source_files(input_dir: Path) -> Dict[str, Path]:
@@ -126,14 +129,15 @@ def normalize_records(df: pd.DataFrame, source_type: str) -> pd.DataFrame:
     return result
 
 
-def load_policy_texts(input_dir: Path) -> pd.DataFrame:
-    files = detect_source_files(input_dir)
-    if not files:
-        return pd.DataFrame()
+def load_policy_texts(input_dirs: List[Path]) -> pd.DataFrame:
     frames = []
-    for source, path in files.items():
-        df = _read_any(path)
-        frames.append(normalize_records(df, source))
+    for input_dir in input_dirs:
+        files = detect_source_files(input_dir)
+        if not files:
+            continue
+        for source, path in files.items():
+            df = _read_any(path)
+            frames.append(normalize_records(df, source))
     if not frames:
         return pd.DataFrame()
     data = pd.concat(frames, ignore_index=True)
@@ -221,7 +225,7 @@ def main():
     parser.add_argument("--output-dir", type=str, default=None, help="输出目录（默认 data/processed/policy）")
     args = parser.parse_args()
 
-    input_dir = resolve_input_dir(args.input_dir)
+    input_dirs = resolve_input_dirs(args.input_dir)
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("processed", "policy", ensure=True)
     if not output_dir.is_absolute():
         output_dir = PROJECT_ROOT / output_dir
@@ -234,9 +238,9 @@ def main():
     source_weights = keyword_cfg.get("source_weights", {})
     industry_keywords = industry_cfg.get("industry_keywords", {})
 
-    texts = load_policy_texts(input_dir)
+    texts = load_policy_texts(input_dirs)
     if texts.empty:
-        print(f"未发现政策文本文件，目录: {input_dir}")
+        print(f"未发现政策文本文件，目录: {', '.join(str(p) for p in input_dirs)}")
         return
 
     signals = aggregate_signals(texts, industry_keywords, positive, negative, source_weights)
@@ -249,7 +253,7 @@ def main():
 
     # 记录来源摘要
     summary = {
-        "input_dir": str(input_dir),
+        "input_dir": [str(p) for p in input_dirs],
         "rows": int(len(texts)),
         "signals": int(len(signals)),
         "sources": list(texts["source_type"].value_counts().to_dict().items()),
