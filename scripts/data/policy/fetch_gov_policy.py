@@ -375,6 +375,24 @@ def fetch_sources(sources: List[SourceConfig], cfg: FetchConfig) -> pd.DataFrame
             items = parse_html(content, base_url=source.base_url or source.url)
         else:
             items = parse_rss(content)
+
+        if not items:
+            cache_dir = cfg.dump_dir or (cfg.output_dir / "raw_html")
+            safe = re.sub(r"[^a-zA-Z0-9_\\-]+", "_", source.tag or source.name)
+            cache_path = None
+            for ext in [".html", ".htm", ".xml", ".txt"]:
+                candidate = cache_dir / f"{safe}{ext}"
+                if candidate.exists():
+                    cache_path = candidate
+                    break
+            if cache_path:
+                cached = cache_path.read_text(encoding="utf-8", errors="ignore")
+                logger.info(f"{source.name} 使用缓存重新解析: {cache_path}")
+                if source_type == "html":
+                    items = parse_html(cached, base_url=source.base_url or source.url)
+                else:
+                    items = parse_rss(cached)
+
         if not items:
             logger.warning(f"{source.name} 未解析到有效条目")
             continue
