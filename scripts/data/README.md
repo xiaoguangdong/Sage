@@ -242,6 +242,23 @@ python3 scripts/data/policy/fetch_eastmoney_industry_reports.py \
 python scripts/data/policy/policy_signal_pipeline.py
 ```
 
+### 4) 政策信号增强（行业研报 + 申万行业动量）
+
+脚本：`scripts/data/policy/policy_signal_enhanced.py`
+
+说明：
+- 行业研报：使用东方财富行业研报（近7/30日研报数量、评级变动）
+- 行业动量：使用申万行业指数日线（20/60日动量）
+
+示例：
+```bash
+python3 scripts/data/policy/policy_signal_enhanced.py
+```
+
+输出：
+- `data/processed/policy/policy_signals_enhanced.parquet`
+- `data/processed/policy/policy_signals_enhanced_summary.json`
+
 ## Legacy 脚本
 
 历史脚本已移动至 `scripts/legacy/data/`，仅保留参考：
