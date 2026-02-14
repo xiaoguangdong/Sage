@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-同花顺个股页 - 机构评级/研报摘要抓取（标题/评级/日期/机构）
+同花顺个股页 - 机构评级/研报摘要/业绩预告抓取
 
 示例：
 python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988
+python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --section forecast
 """
 from __future__ import annotations
 
@@ -40,6 +41,20 @@ RATING_KEYWORDS = [
 ]
 
 ORG_KEYWORDS = ["证券", "研究院", "有限公司", "股份", "投资", "银行", "基金", "资产"]
+FORECAST_KEYWORDS = [
+    "业绩预告",
+    "业绩预增",
+    "业绩预减",
+    "预增",
+    "预减",
+    "扭亏",
+    "首亏",
+    "续亏",
+    "略增",
+    "略减",
+    "预盈",
+    "预亏",
+]
 
 DATE_PATTERNS = [
     re.compile(r"(20\d{2})[./-](\d{1,2})[./-](\d{1,2})"),
@@ -90,14 +105,19 @@ def _extract_blocks(html: str) -> List[str]:
     return blocks
 
 
-def parse_reports(html: str) -> List[Dict[str, str]]:
+def parse_reports(html: str, section_key: Optional[str] = None) -> List[Dict[str, str]]:
     section = html
-    if "stockreport" in html:
-        idx = html.find("stockreport")
-        section = html[max(0, idx - 20000): idx + 40000]
-    elif "机构评级" in html:
-        idx = html.find("机构评级")
-        section = html[max(0, idx - 20000): idx + 40000]
+    if section_key:
+        idx = html.find(section_key)
+        if idx != -1:
+            section = html[max(0, idx - 20000): idx + 40000]
+    else:
+        if "stockreport" in html:
+            idx = html.find("stockreport")
+            section = html[max(0, idx - 20000): idx + 40000]
+        elif "机构评级" in html:
+            idx = html.find("机构评级")
+            section = html[max(0, idx - 20000): idx + 40000]
 
     rows: List[Dict[str, str]] = []
     for block in _extract_blocks(section):
@@ -119,6 +139,17 @@ def parse_reports(html: str) -> List[Dict[str, str]]:
                 "content": text,
                 "rating": rating,
                 "org": org or "",
+                "report_type": "rating",
+            })
+        elif date and any(k in text for k in FORECAST_KEYWORDS):
+            signal = next((k for k in FORECAST_KEYWORDS if k in text), "")
+            rows.append({
+                "publish_date": date,
+                "title": title,
+                "content": text,
+                "rating": signal or "业绩预告",
+                "org": org or "",
+                "report_type": "forecast",
             })
     return rows
 
@@ -135,13 +166,15 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--symbol", required=True, help="股票代码（如 002988）")
     parser.add_argument("--url", default=None, help="自定义页面URL")
+    parser.add_argument("--section", choices=["stockreport", "forecast"], default="stockreport")
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--timeout", type=int, default=20)
     parser.add_argument("--dump-html", action="store_true")
     args = parser.parse_args()
 
     symbol = args.symbol.strip()
-    url = args.url or f"https://stockpage.10jqka.com.cn/{symbol}/worth/#stockreport"
+    default_path = "worth/#stockreport" if args.section == "stockreport" else "worth/#forecast"
+    url = args.url or f"https://stockpage.10jqka.com.cn/{symbol}/{default_path}"
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("raw", "policy", ensure=True)
     if not output_dir.is_absolute():
         output_dir = PROJECT_ROOT / output_dir
@@ -156,7 +189,7 @@ def main() -> None:
         dump_path.write_text(html, encoding="utf-8", errors="ignore")
         logger.info(f"已保存HTML: {dump_path}")
 
-    rows = parse_reports(html)
+    rows = parse_reports(html, section_key=args.section)
     if not rows:
         logger.warning("未解析到机构评级条目")
         return
@@ -169,7 +202,8 @@ def main() -> None:
     df["source_type"] = "research_report"
     df["url"] = url
 
-    output_path = output_dir / "10jqka_reports.parquet"
+    output_name = "10jqka_reports.parquet" if args.section == "stockreport" else "10jqka_forecast.parquet"
+    output_path = output_dir / output_name
     if output_path.exists():
         old = pd.read_parquet(output_path)
         df = pd.concat([old, df], ignore_index=True)

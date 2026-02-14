@@ -198,10 +198,12 @@ python scripts/data/policy/fetch_gov_policy.py --dump-html
 示例：
 ```bash
 python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --dump-html
+python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --section forecast --dump-html
 ```
 
 默认输出：
 - `data/raw/policy/10jqka_reports.parquet`
+- `data/raw/policy/10jqka_forecast.parquet`
 
 ### 3) 政策信号管道
 
