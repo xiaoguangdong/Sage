@@ -39,8 +39,8 @@ def get_with_retry(pro, api_name, params, max_retries=3, sleep_time=40):
                 return None
 
 
-def fetch_concept_index(pro, output_dir, start_date='20200101'):
-    """获取概念指数历史数据"""
+def fetch_concept_index(pro, output_dir, start_date='20200101', end_date=None):
+    """获取概念指数历史数据（按月分批）"""
     print("\n" + "=" * 80)
     print("获取概念指数历史数据 (dc_index)")
     print("=" * 80)
@@ -71,22 +71,29 @@ def fetch_concept_index(pro, output_dir, start_date='20200101'):
 
     # 生成日期列表
     start_dt = datetime.strptime(start_date, '%Y%m%d')
-    end_dt = datetime.now() - timedelta(days=1)  # 昨天为止
-    date_list = []
-    current_dt = start_dt
+    end_dt = datetime.now() - timedelta(days=1) if end_date is None else datetime.strptime(end_date, '%Y%m%d')
+    months = []
+    current_dt = datetime(start_dt.year, start_dt.month, 1)
     while current_dt <= end_dt:
-        date_str = current_dt.strftime('%Y%m%d')
-        if date_str not in existing_dates:
-            date_list.append(date_str)
-        current_dt += timedelta(days=1)
+        months.append(current_dt)
+        if current_dt.month == 12:
+            current_dt = datetime(current_dt.year + 1, 1, 1)
+        else:
+            current_dt = datetime(current_dt.year, current_dt.month + 1, 1)
 
-    print(f"需要获取 {len(date_list)} 个交易日的概念指数数据")
+    print(f"需要获取 {len(months)} 个月的概念指数数据")
 
     all_index = []
-    total_dates = len(date_list)
+    total_months = len(months)
 
-    for i, trade_date in enumerate(date_list):
-        print(f"\n[{i+1}/{total_dates}] 获取 {trade_date} 的概念指数数据...")
+    for i, month_start in enumerate(months):
+        month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+        if month_end > end_dt:
+            month_end = end_dt
+        start_str = month_start.strftime('%Y%m%d')
+        end_str = month_end.strftime('%Y%m%d')
+
+        print(f"\n[{i+1}/{total_months}] 获取 {start_str} ~ {end_str} 的概念指数数据...")
 
         offset = 0
         page = 1
@@ -96,7 +103,7 @@ def fetch_concept_index(pro, output_dir, start_date='20200101'):
             print(f"  第{page}页获取 (offset={offset})...", end=' ')
             df = get_with_retry(
                 pro, 'dc_index',
-                {'trade_date': trade_date, 'offset': offset},
+                {'start_date': start_str, 'end_date': end_str, 'offset': offset},
                 max_retries=3,
                 sleep_time=40
             )
@@ -106,34 +113,30 @@ def fetch_concept_index(pro, output_dir, start_date='20200101'):
                 page_data.append(df)
                 offset += len(df)
                 page += 1
-
-                # dc_index单次最大5000条
                 if len(df) < 5000:
-                    print(f"  {trade_date} 数据获取完成")
+                    print(f"  {start_str} ~ {end_str} 数据获取完成")
                     break
             else:
-                print(f"失败或无数据")
+                print("失败或无数据")
                 break
 
         if page_data:
-            date_df = pd.concat(page_data, ignore_index=True)
-            all_index.append(date_df)
-            existing_dates.add(trade_date)
+            month_df = pd.concat(page_data, ignore_index=True)
+            all_index.append(month_df)
 
-            # 定期保存（每10天）
-            if len(all_index) >= 10:
+            if len(all_index) >= 6:
                 new_data = pd.concat(all_index, ignore_index=True)
                 combined = pd.concat([existing_data, new_data], ignore_index=True)
+                combined = combined.drop_duplicates(subset=['trade_date','ts_code'])
                 combined.to_parquet(output_file, index=False)
                 print(f"  已保存到 {output_file}")
                 existing_data = combined
                 all_index = []
 
-            # 更新进度
             with open(progress_file, 'w') as f:
-                f.write(trade_date)
+                f.write(end_str)
         else:
-            print(f"  {trade_date} 未获取到数据")
+            print(f"  {start_str} ~ {end_str} 未获取到数据")
 
     # 保存剩余数据
     if all_index:
@@ -185,11 +188,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # 获取概念指数历史数据
-    start_date = find_start_date_from_2023(pro, start_year=2023)
-    if not start_date:
-        print("未找到可用的起始日期，停止下载")
-        return
-    fetch_concept_index(pro, output_dir, start_date=start_date)
+    fetch_concept_index(pro, output_dir, start_date='20200101')
 
     print("\n" + "=" * 80)
     print("概念指数数据获取完成")
