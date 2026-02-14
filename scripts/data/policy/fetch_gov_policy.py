@@ -178,12 +178,15 @@ class _AnchorParser(HTMLParser):
 
 
 _DATE_PATTERN = re.compile(r"(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})")
+_DATE_PATTERN_CN = re.compile(r"(20\\d{2})年(\\d{1,2})月(\\d{1,2})日")
 
 
 def _normalize_date(raw: str) -> Optional[str]:
     match = _DATE_PATTERN.search(raw)
     if not match:
-        return None
+        match = _DATE_PATTERN_CN.search(raw)
+        if not match:
+            return None
     year, month, day = match.groups()
     return f"{year}-{int(month):02d}-{int(day):02d}"
 
