@@ -555,124 +555,124 @@ products:
   map_source: keyword_rule
 - product_code: 02086
   product_name: 水生动物冷冻品
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 水产品冷冻加工
+  gb_code: '1361'
+  sw_industry: 食品饮料
+  map_source: manual_gov
 - product_code: '02372'
   product_name: 速冻米面食品
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 速冻食品制造
+  gb_code: '1432'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03154'
   product_name: 液体乳
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 液体乳制造
+  gb_code: '1441'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '02517'
   product_name: 罐头
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 罐头食品制造
+  gb_code: '145'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '50000'
   product_name: 番茄酱罐头
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 蔬菜、水果罐头制造
+  gb_code: '1453'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '02673'
   product_name: 味精
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 味精制造
+  gb_code: '1461'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '02715'
   product_name: 酱油
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 酱油、食醋及类似制品制造
+  gb_code: '1462'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: 02951
   product_name: 发酵酒精（折96度，商品量）
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 酒精制造
+  gb_code: '1511'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: 02982
   product_name: 饮料酒
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 其他酒制造
+  gb_code: '1519'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: 02999
   product_name: 白酒（折65度，商品量）
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 白酒制造
+  gb_code: '1512'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03012'
   product_name: 啤酒
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 啤酒制造
+  gb_code: '1513'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03030'
   product_name: 黄酒
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 黄酒制造
+  gb_code: '1514'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03036'
   product_name: 葡萄酒
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 葡萄酒制造
+  gb_code: '1515'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03067'
   product_name: 软饮料
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 茶饮料及其他饮料制造
+  gb_code: '1529'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03074'
   product_name: 碳酸饮料
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 碳酸饮料制造
+  gb_code: '1521'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03076'
   product_name: 果汁及果汁饮料
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 果菜汁及果菜汁饮料制造
+  gb_code: '1523'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: 03299
   product_name: 瓶（罐）装饮用水
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 瓶（罐）装饮用水制造
+  gb_code: '1522'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: 03192
   product_name: 冷冻饮品
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 冷冻饮品及食用冰制造
+  gb_code: '1493'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03227'
   product_name: 精制茶
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 精制茶加工
+  gb_code: '1530'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03321'
   product_name: 卷烟
-  gb_industry: null
-  gb_code: null
-  sw_industry: null
-  map_source: null
+  gb_industry: 卷烟制造
+  gb_code: '1620'
+  sw_industry: 食品饮料
+  map_source: manual_gbt
 - product_code: '03456'
   product_name: 化纤浆粕
   gb_industry: null
