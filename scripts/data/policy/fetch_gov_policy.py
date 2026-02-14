@@ -180,8 +180,8 @@ class _AnchorParser(HTMLParser):
             })
 
 
-_DATE_PATTERN = re.compile(r"(20\\d{2})[./-](\\d{1,2})[./-](\\d{1,2})")
-_DATE_PATTERN_CN = re.compile(r"(20\\d{2})年(\\d{1,2})月(\\d{1,2})日")
+_DATE_PATTERN = re.compile(r"(20\d{2})[./-](\d{1,2})[./-](\d{1,2})")
+_DATE_PATTERN_CN = re.compile(r"(20\d{2})年(\d{1,2})月(\d{1,2})日")
 _IGNORE_TITLES = {"查看详细", "查看更多", "更多", "上一页", "下一页", "返回", ">>", "更多>>"}
 
 
