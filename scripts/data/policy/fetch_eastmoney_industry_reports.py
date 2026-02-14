@@ -153,7 +153,7 @@ def _normalize_rows(rows: List[Dict]) -> pd.DataFrame:
             rating_change_col = cand
             break
     if rating_change_col:
-        df["rating_change"] = df[rating_change_col].astype(str)
+        df["rating_change"] = df[rating_change_col].astype(str).replace("nan", "")
     info_col = None
     for cand in ["infoCode", "InfoCode", "reportId", "ReportID"]:
         if cand in df.columns:
@@ -161,6 +161,9 @@ def _normalize_rows(rows: List[Dict]) -> pd.DataFrame:
             break
     if info_col:
         df["info_code"] = df[info_col].astype(str)
+    for col in ["rating", "rating_change", "org", "industry", "title"]:
+        if col in df.columns:
+            df[col] = df[col].astype(str)
     df["source_name"] = "东方财富行业研报"
     df["source_type"] = "research_report"
     df["content"] = (
