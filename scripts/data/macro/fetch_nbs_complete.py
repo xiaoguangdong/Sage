@@ -36,7 +36,6 @@ class CompleteNBSDataFetcher:
         self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         
-        self._tushare_token = tushare_token
         
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
@@ -45,19 +44,6 @@ class CompleteNBSDataFetcher:
         self.session = requests.session()
         self.api_delay = 3  # NBS API请求间隔3秒
 
-    def _run_downloader(self, task: str, start_m: str, end_m: str) -> int:
-        cmd = [
-            sys.executable,
-            str(PROJECT_ROOT / "scripts" / "data" / "tushare_downloader.py"),
-            "--task",
-            task,
-            "--start-date",
-            start_m,
-            "--end-date",
-            end_m,
-            "--resume",
-        ]
-        return os.system(" ".join(cmd))
     
     def fetch_from_nbs(self, dbcode, rowcode, colcode, zb_code, sj_code="LAST24"):
         """
@@ -431,10 +417,7 @@ class CompleteNBSDataFetcher:
         filepath = os.path.join(self.output_dir, "tushare_pmi.parquet")
         if os.path.exists(filepath):
             return pd.read_parquet(filepath)
-        code = self._run_downloader("cn_pmi", start_m, end_m)
-        if code == 0 and os.path.exists(filepath):
-            return pd.read_parquet(filepath)
-        print("✗ PMI数据未获取成功，请先运行统一下载器")
+        print("✗ PMI数据缺失，请先运行：python3 scripts/data/tushare_downloader.py --task cn_pmi --start-date 202001 --end-date YYYYMM --resume")
         return None
     
     def fetch_tushare_cpi(self, start_m='202001', end_m='202512'):
@@ -449,10 +432,7 @@ class CompleteNBSDataFetcher:
         filepath = os.path.join(self.output_dir, "tushare_cpi.parquet")
         if os.path.exists(filepath):
             return pd.read_parquet(filepath)
-        code = self._run_downloader("cn_cpi", start_m, end_m)
-        if code == 0 and os.path.exists(filepath):
-            return pd.read_parquet(filepath)
-        print("✗ CPI数据未获取成功，请先运行统一下载器")
+        print("✗ CPI数据缺失，请先运行：python3 scripts/data/tushare_downloader.py --task cn_cpi --start-date 202001 --end-date YYYYMM --resume")
         return None
     
     def fetch_tushare_ppi(self, start_m='202001', end_m='202512'):
@@ -467,10 +447,7 @@ class CompleteNBSDataFetcher:
         filepath = os.path.join(self.output_dir, "tushare_ppi.parquet")
         if os.path.exists(filepath):
             return pd.read_parquet(filepath)
-        code = self._run_downloader("cn_ppi", start_m, end_m)
-        if code == 0 and os.path.exists(filepath):
-            return pd.read_parquet(filepath)
-        print("✗ PPI数据未获取成功，请先运行统一下载器")
+        print("✗ PPI数据缺失，请先运行：python3 scripts/data/tushare_downloader.py --task cn_ppi --start-date 202001 --end-date YYYYMM --resume")
         return None
     
     def fetch_all(self, start_date='20200101', end_date='20251231'):
