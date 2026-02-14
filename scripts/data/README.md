@@ -191,7 +191,7 @@ python scripts/data/policy/fetch_gov_policy.py --dump-html
 - `data/raw/policy/gov_notices.parquet`
 - `data/raw/policy/gov_notices_summary.json`
 
-### 2.5) 政策数据拉取（同花顺研报摘要）
+### 2.5) 研报/个股摘要（仅供个股模型，非政策信号输入）
 
 脚本：`scripts/data/policy/fetch_10jqka_reports.py`
 
@@ -201,7 +201,7 @@ python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --dump-html
 python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --section forecast --dump-html
 ```
 
-默认输出：
+默认输出（不进入 `policy_signal_pipeline`）：
 - `data/raw/policy/10jqka_reports.parquet`
 - `data/raw/policy/10jqka_forecast.parquet`
 
