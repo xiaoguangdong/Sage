@@ -213,3 +213,91 @@ def run_ths_daily(
                 combined.to_parquet(output_file, index=False)
                 existing = combined
             progress_file.write_text(f"{code},{end_str}", encoding="utf-8")
+
+
+def run_concept_data_full(
+    start_date: str = "20200101",
+    end_date: Optional[str] = None,
+    sleep_seconds: int = 40,
+    output_dir: Optional[Path] = None,
+) -> None:
+    """获取概念指数/成分/日线（较完整版本）"""
+    pro = get_pro()
+    output_dir = output_dir or Path(CONCEPTS_DIR)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    def _fetch_with_paging(api_name: str, params: dict, limit: int, progress_path: Path, key: str):
+        offset = 0
+        page = 1
+        frames = []
+        while True:
+            print(f"  第{page}页获取 (offset={offset})...", end=" ")
+            df = request_with_retry(
+                pro,
+                api_name,
+                {**params, "offset": offset},
+                max_retries=3,
+                sleep_seconds=sleep_seconds,
+            )
+            if df is not None and not df.empty:
+                print(f"成功获取 {len(df)} 条")
+                frames.append(df)
+                offset += len(df)
+                page += 1
+                if len(df) < limit:
+                    break
+            else:
+                print("无数据或获取失败")
+                break
+        if frames:
+            progress_path.write_text(key, encoding="utf-8")
+            return pd.concat(frames, ignore_index=True)
+        return None
+
+    print("\n" + "=" * 80)
+    print("步骤1: 获取概念指数历史数据")
+    print("=" * 80)
+    index_file = output_dir / "dc_index.parquet"
+    index_progress = output_dir / "dc_index_progress.txt"
+    df_index = _fetch_with_paging(
+        "dc_index",
+        {"start_date": start_date, "end_date": end_date or datetime.now().strftime("%Y%m%d")},
+        limit=5000,
+        progress_path=index_progress,
+        key=(end_date or datetime.now().strftime("%Y%m%d")),
+    )
+    if df_index is not None and not df_index.empty:
+        df_index.to_parquet(index_file, index=False)
+        print(f"  已保存到 {index_file}")
+
+    print("\n" + "=" * 80)
+    print("步骤2: 获取概念成分股历史数据")
+    print("=" * 80)
+    member_file = output_dir / "dc_member.parquet"
+    member_progress = output_dir / "dc_member_progress.txt"
+    df_member = _fetch_with_paging(
+        "dc_member",
+        {},
+        limit=5000,
+        progress_path=member_progress,
+        key="done",
+    )
+    if df_member is not None and not df_member.empty:
+        df_member.to_parquet(member_file, index=False)
+        print(f"  已保存到 {member_file}")
+
+    print("\n" + "=" * 80)
+    print("步骤3: 获取概念成分股日线数据")
+    print("=" * 80)
+    daily_file = output_dir / "dc_daily.parquet"
+    daily_progress = output_dir / "dc_daily_progress.txt"
+    df_daily = _fetch_with_paging(
+        "dc_daily",
+        {"start_date": start_date, "end_date": end_date or datetime.now().strftime("%Y%m%d")},
+        limit=5000,
+        progress_path=daily_progress,
+        key=(end_date or datetime.now().strftime("%Y%m%d")),
+    )
+    if df_daily is not None and not df_daily.empty:
+        df_daily.to_parquet(daily_file, index=False)
+        print(f"  已保存到 {daily_file}")
