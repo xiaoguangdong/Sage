@@ -63,7 +63,8 @@ product,output_yoy,year,month,date
 - `tushare_cpi.parquet`
 - `tushare_ppi.parquet`
 - `tushare_pmi.parquet`
-- `tushare_yield_10y.parquet`
+- `yield_10y.parquet`
+- `yield_2y.parquet`
 - `tushare_shibor.parquet`
 
 #### 数据格式
