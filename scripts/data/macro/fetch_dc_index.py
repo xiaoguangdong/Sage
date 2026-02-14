@@ -15,7 +15,8 @@ from datetime import datetime, timedelta
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from tushare_auth import get_tushare_token
+from scripts.data.macro.tushare_auth import get_tushare_token
+from scripts.data._shared.runtime import disable_proxy
 from scripts.data.macro.paths import CONCEPTS_DIR
 
 
@@ -156,6 +157,7 @@ def main():
     print("=" * 80)
 
     # 设置Tushare token
+    disable_proxy()
     token = get_tushare_token()
     pro = ts.pro_api(token)
 
