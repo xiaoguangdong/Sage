@@ -2,7 +2,7 @@ tasks:
   ths_index:
     api: ths_index
     mode: single
-    output: "raw/tushare/concepts/ths_index.parquet"
+    output: "concepts/ths_index.parquet"
 
   ths_daily:
     api: ths_daily
@@ -14,7 +14,7 @@ tasks:
     limit: 3000
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/ths_daily.json"
-    output: "raw/tushare/concepts/ths_daily.parquet"
+    output: "concepts/ths_daily.parquet"
 
   dc_index:
     api: dc_index
@@ -26,7 +26,7 @@ tasks:
     limit: 5000
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/dc_index.json"
-    output: "raw/tushare/concepts/dc_index.parquet"
+    output: "concepts/dc_index.parquet"
 
   daily_basic:
     api: daily_basic
@@ -38,7 +38,7 @@ tasks:
     limit: 6000
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/daily_basic.json"
-    output: "raw/tushare/daily_basic.parquet"
+    output: "daily_basic.parquet"
 
   margin:
     api: margin
@@ -50,7 +50,7 @@ tasks:
     limit: 4000
     dedup_keys: ["trade_date", "exchange_id"]
     state: "data/states/margin.json"
-    output: "raw/tushare/margin.parquet"
+    output: "margin.parquet"
 
   daily_kline:
     api: daily
@@ -60,7 +60,7 @@ tasks:
     split: day
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/daily_kline.json"
-    output: "raw/tushare/daily.parquet"
+    output: "daily.parquet"
 
   index_ohlc:
     api: daily
@@ -72,7 +72,7 @@ tasks:
     split: month
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/index_ohlc.json"
-    output: "raw/tushare/index/index_ohlc.parquet"
+    output: "index/index_ohlc.parquet"
 
   hs300_constituents:
     api: index_weight
@@ -84,7 +84,7 @@ tasks:
       index_code: "000300.SH"
     dedup_keys: ["con_code", "trade_date"]
     state: "data/states/hs300_constituents.json"
-    output: "raw/tushare/constituents/hs300_constituents_all.parquet"
+    output: "constituents/hs300_constituents_all.parquet"
 
   hs300_moneyflow:
     api: moneyflow
@@ -97,7 +97,7 @@ tasks:
     split: month
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/hs300_moneyflow.json"
-    output: "raw/tushare/moneyflow/moneyflow_all.parquet"
+    output: "moneyflow/moneyflow_all.parquet"
 
   sw_industry_classify:
     api: index_classify
@@ -105,7 +105,7 @@ tasks:
     params:
       level: "L1"
       src: "SW2021"
-    output: "raw/tushare/sw_industry/sw_industry_l1.parquet"
+    output: "sw_industry/sw_industry_l1.parquet"
 
   sw_industry_daily:
     api: daily
@@ -118,7 +118,17 @@ tasks:
     split: month
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/sw_industry_daily.json"
-    output: "raw/tushare/sw_industry/sw_industry_daily.parquet"
+    output: "sw_industry/sw_industry_daily.parquet"
+
+  sw_index_member:
+    api: index_member
+    mode: list
+    list_file: "data/raw/tushare/sw_industry/sw_industry_l1.parquet"
+    list_column: "index_code"
+    list_param: index_code
+    dedup_keys: ["index_code", "con_code"]
+    state: "data/states/sw_index_member.json"
+    output: "sw_industry/sw_index_member.parquet"
 
   opt_daily:
     api: opt_daily
@@ -132,7 +142,7 @@ tasks:
       calender: "natural"
     dedup_keys: ["ts_code", "trade_date", "exchange"]
     state: "data/states/opt_daily.json"
-    output: "raw/tushare/options/opt_daily.parquet"
+    output: "options/opt_daily.parquet"
 
   fina_indicator:
     api: fina_indicator
@@ -144,7 +154,7 @@ tasks:
     end_field: end_date
     split: year
     state: "data/states/fina_indicator.json"
-    output: "raw/tushare/fina_indicator/fina_indicator_all.parquet"
+    output: "fina_indicator/fina_indicator_all.parquet"
 
   fina_indicator_vip:
     api: fina_indicator_vip
@@ -154,12 +164,12 @@ tasks:
     end_year: 2025
     quarters: ["0331", "0630", "0930", "1231"]
     state: "data/states/fina_indicator_vip.json"
-    output: "raw/tushare/fina_indicator_vip/fina_indicator_vip_all.parquet"
+    output: "fina_indicator_vip/fina_indicator_vip_all.parquet"
 
   tushare_concept_list:
     api: concept
     mode: single
-    output: "raw/tushare/sectors/concepts.parquet"
+    output: "sectors/concepts.parquet"
 
   tushare_concept_detail:
     api: concept_detail
@@ -167,7 +177,7 @@ tasks:
     list_file: "data/raw/tushare/sectors/concepts.parquet"
     list_column: "code"
     list_param: id
-    output: "raw/tushare/sectors/concept_detail.parquet"
+    output: "sectors/concept_detail.parquet"
 
   northbound_flow:
     api: moneyflow_hsgt
@@ -177,7 +187,7 @@ tasks:
     split: month
     dedup_keys: ["trade_date"]
     state: "data/states/northbound_flow.json"
-    output: "raw/tushare/northbound/northbound_flow.parquet"
+    output: "northbound/northbound_flow.parquet"
 
   northbound_hold:
     api: hk_hold
@@ -187,7 +197,19 @@ tasks:
     split: month
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/northbound_hold.json"
-    output: "raw/tushare/northbound/northbound_hold.parquet"
+    output: "northbound/northbound_hold.parquet"
+
+  northbound_top10:
+    api: hsgt_top10
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    pagination: offset
+    limit: 5000
+    dedup_keys: ["trade_date", "ts_code"]
+    state: "data/states/northbound_top10.json"
+    output: "northbound/northbound_top10.parquet"
 
   yield_10y:
     api: yc_cb
@@ -198,7 +220,7 @@ tasks:
       curve_term: 10
     dedup_keys: ["trade_date", "curve_term"]
     state: "data/states/yield_10y.json"
-    output: "raw/tushare/macro/yield_10y.parquet"
+    output: "macro/yield_10y.parquet"
 
   yield_2y:
     api: yc_cb
@@ -209,4 +231,85 @@ tasks:
       curve_term: 2
     dedup_keys: ["trade_date", "curve_term"]
     state: "data/states/yield_2y.json"
-    output: "raw/tushare/macro/yield_2y.parquet"
+    output: "macro/yield_2y.parquet"
+
+  cn_cpi:
+    api: cn_cpi
+    mode: date_range
+    date_format: "%Y%m"
+    start_field: start_m
+    end_field: end_m
+    split: month
+    dedup_keys: ["month"]
+    state: "data/states/cn_cpi.json"
+    output: "macro/tushare_cpi.parquet"
+
+  cn_ppi:
+    api: cn_ppi
+    mode: date_range
+    date_format: "%Y%m"
+    start_field: start_m
+    end_field: end_m
+    split: month
+    dedup_keys: ["month"]
+    state: "data/states/cn_ppi.json"
+    output: "macro/tushare_ppi.parquet"
+
+  cn_pmi:
+    api: cn_pmi
+    mode: date_range
+    date_format: "%Y%m"
+    start_field: start_m
+    end_field: end_m
+    split: month
+    dedup_keys: ["month"]
+    state: "data/states/cn_pmi.json"
+    output: "macro/tushare_pmi.parquet"
+
+  sw_valuation:
+    api: sw_daily
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    pagination: offset
+    limit: 3000
+    dedup_keys: ["trade_date", "index_code"]
+    state: "data/states/sw_valuation.json"
+    output: "macro/sw_valuation.parquet"
+
+  fina_mainbz_vip:
+    api: fina_mainbz_vip
+    mode: year_quarters
+    list_param: period
+    start_year: 2020
+    end_year: 2026
+    quarters: ["0331", "0630", "0930", "1231"]
+    pagination: offset
+    limit: 8000
+    state: "data/states/fina_mainbz_vip.json"
+    output: "macro/segments/fina_mainbz_vip.parquet"
+
+  tushare_anns:
+    api: anns_d
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    pagination: offset
+    limit: 2000
+    dedup_keys: ["ann_date", "ts_code", "title", "url"]
+    state: "data/states/tushare_anns.json"
+    output: "policy/tushare_anns.parquet"
+
+  tushare_reports:
+    api: research_report
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    pagination: offset
+    limit: 1000
+    dedup_keys: ["trade_date", "title", "ts_code", "inst_csname"]
+    state: "data/states/tushare_reports.json"
+    output: "policy/tushare_reports.parquet"

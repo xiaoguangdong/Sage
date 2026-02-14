@@ -97,7 +97,7 @@ python scripts/data/macro/align_nbs_industrial_data.py \
 
 ### 1) 政策数据拉取（Tushare 公告/研报）
 
-脚本：`scripts/data/policy/fetch_tushare_policy.py`
+脚本：`scripts/data/tushare_downloader.py`
 
 说明：
 - 需要 `.env` 中配置 `TUSHARE_TOKEN`
@@ -106,9 +106,11 @@ python scripts/data/macro/align_nbs_industrial_data.py \
 
 示例：
 ```bash
-python scripts/data/policy/fetch_tushare_policy.py \
-  --start-date 20200101 --end-date 20251231 \
-  --action all --resume --sleep-seconds 60
+python scripts/data/tushare_downloader.py --task tushare_anns \
+  --start-date 20200101 --end-date 20251231 --resume
+
+python scripts/data/tushare_downloader.py --task tushare_reports \
+  --start-date 20200101 --end-date 20251231 --resume
 ```
 
 默认输出：

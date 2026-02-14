@@ -10,8 +10,6 @@
 """
 
 import pandas as pd
-import tushare as ts
-import time
 from pathlib import Path
 from datetime import datetime
 import sys
@@ -19,69 +17,60 @@ import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import NORTHBOUND_DIR
 
 
-def get_sw_industry_constituents(pro):
-    """获取申万行业成分股列表"""
-    print("获取申万行业成分股列表...")
-    
-    # 获取所有申万一级行业
-    industries = pro.index_classify(level='L1', src='SW2021')
-    industries_l1 = industries[industries['index_code'].str.startswith('801')]
-    
-    print(f"  获取到 {len(industries_l1)} 个申万一级行业")
-    
-    constituents_list = []
-    for i, row in industries_l1.iterrows():
-        if (i + 1) % 5 == 0:
-            print(f"  进度: {i + 1}/{len(industries_l1)}")
-        
-        try:
-            df = pro.index_member(index_code=row['index_code'])
-            if not df.empty:
-                df['industry_code'] = row['industry_code']
-                df['industry_name'] = row['industry_name']
-                constituents_list.append(df)
-            time.sleep(0.5)
-        except Exception as e:
-            print(f"  获取 {row['industry_name']} 成分股失败: {e}")
-    
-    if constituents_list:
-        all_constituents = pd.concat(constituents_list, ignore_index=True)
-        print(f"  共获取 {len(all_constituents)} 条成分股记录")
-        return all_constituents
-    else:
+def get_sw_industry_constituents():
+    """读取申万行业成分股列表（来自统一下载器输出）"""
+    print("读取申万行业成分股列表...")
+
+    tushare_root = Path(NORTHBOUND_DIR).parent
+    l1_path = tushare_root / "sw_industry" / "sw_industry_l1.parquet"
+    member_path = tushare_root / "sw_industry" / "sw_index_member.parquet"
+
+    if not l1_path.exists():
+        print("  缺少 sw_industry_l1，请先运行 tushare_downloader.py --task sw_industry_classify")
+        return None
+    if not member_path.exists():
+        print("  缺少 sw_index_member，请先运行 tushare_downloader.py --task sw_index_member")
         return None
 
-
-def get_stock_northbound_holding(pro, ts_codes, start_date, end_date):
-    """获取个股北向资金持仓数据"""
-    print(f"\n获取个股北向资金持仓 ({start_date} ~ {end_date})...")
-    
-    holdings_list = []
-    total = len(ts_codes)
-    
-    for i, ts_code in enumerate(ts_codes):
-        if (i + 1) % 50 == 0:
-            print(f"  进度: {i + 1}/{total}")
-        
-        try:
-            df = pro.hk_hold(ts_code=ts_code, start_date=start_date, end_date=end_date)
-            if not df.empty:
-                holdings_list.append(df)
-            time.sleep(0.3)
-        except Exception as e:
-            if (i + 1) % 100 == 0:
-                print(f"  获取 {ts_code} 失败: {e}")
-    
-    if holdings_list:
-        all_holdings = pd.concat(holdings_list, ignore_index=True)
-        print(f"  共获取 {len(all_holdings)} 条持仓记录")
-        return all_holdings
-    else:
+    industries = pd.read_parquet(l1_path)
+    members = pd.read_parquet(member_path)
+    if industries.empty or members.empty:
+        print("  行业分类或成分股数据为空")
         return None
+
+    name_col = "industry_name" if "industry_name" in industries.columns else "index_name"
+    industries = industries.rename(columns={name_col: "industry_name"})
+
+    members = members.rename(columns={"con_code": "ts_code"})
+    merged = members.merge(
+        industries[["index_code", "industry_name", "industry_code"]] if "industry_code" in industries.columns else industries[["index_code", "industry_name"]],
+        on="index_code",
+        how="left",
+    )
+    print(f"  共读取 {len(merged)} 条成分股记录")
+    return merged
+
+
+def get_stock_northbound_holding(ts_codes, start_date, end_date):
+    """读取个股北向资金持仓数据（来自统一下载器输出）"""
+    print(f"\n读取个股北向资金持仓 ({start_date} ~ {end_date})...")
+    hold_path = Path(NORTHBOUND_DIR) / "northbound_hold.parquet"
+    if not hold_path.exists():
+        print("  缺少 northbound_hold，请先运行 tushare_downloader.py --task northbound_hold")
+        return None
+
+    df = pd.read_parquet(hold_path)
+    if df.empty:
+        print("  northbound_hold 数据为空")
+        return None
+
+    df = df[df["ts_code"].isin(ts_codes)]
+    df = df[(df["trade_date"] >= start_date) & (df["trade_date"] <= end_date)]
+    print(f"  共读取 {len(df)} 条持仓记录")
+    return df
 
 
 def calculate_industry_northbound_flow(holdings_df, constituents_df):
@@ -114,15 +103,12 @@ def main():
     print("整理北向资金行业数据")
     print("=" * 80)
     
-    # 设置Tushare token
-    pro = get_pro()
-    
     # 创建输出目录
     output_dir = Path(NORTHBOUND_DIR)
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # 1. 获取申万行业成分股列表
-    constituents_df = get_sw_industry_constituents(pro)
+    constituents_df = get_sw_industry_constituents()
     if constituents_df is not None:
         constituents_file = output_dir / 'sw_constituents.parquet'
         constituents_df.to_parquet(constituents_file, index=False)
@@ -136,10 +122,10 @@ def main():
     start_date = (datetime.now().replace(day=1) - pd.DateOffset(months=3)).strftime('%Y%m%d')
     
     # 获取所有成分股代码
-    unique_stocks = constituents_df['ts_code'].unique()
+    unique_stocks = constituents_df['ts_code'].dropna().unique()
     print(f"\n需要获取 {len(unique_stocks)} 只股票的北向资金持仓数据")
     
-    holdings_df = get_stock_northbound_holding(pro, unique_stocks, start_date, end_date)
+    holdings_df = get_stock_northbound_holding(unique_stocks, start_date, end_date)
     if holdings_df is not None:
         holdings_file = output_dir / 'stock_holdings.parquet'
         holdings_df.to_parquet(holdings_file, index=False)

@@ -24,12 +24,11 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-import tushare as ts
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_tushare_token, setup_logger, get_tushare_root
+from scripts.data._shared.runtime import setup_logger, get_tushare_root
 
 logger = setup_logger(Path(__file__).stem, module="strategy")
 
@@ -44,7 +43,6 @@ class ConceptActiveAnalyzer:
     """概念活跃度分析器"""
     
     def __init__(self, token=None, timeout=TIMEOUT):
-        self.pro = ts.pro_api(get_tushare_token(token))
         self.timeout = timeout
         self.data_dir = DATA_DIR
         self.market = 'EB'
@@ -54,50 +52,25 @@ class ConceptActiveAnalyzer:
     
     def fetch_concept_history(self, start_date, end_date):
         """获取概念历史数据"""
-        logger.info(f"获取概念历史数据: {start_date} ~ {end_date}")
-        
-        all_data = []
-        current_date = pd.Timestamp(start_date)
-        end_date_ts = pd.Timestamp(end_date)
-        
-        request_count = 0
-        max_requests = 1000  # 避免触发IP限制
-        
-        while current_date <= end_date_ts and request_count < max_requests:
-            trade_date_str = current_date.strftime('%Y%m%d')
-            
-            try:
-                # 获取该日期的数据
-                data = self.pro.dc_index(market=self.market, trade_date=trade_date_str)
-                
-                if data is not None and len(data) > 0:
-                    all_data.append(data)
-                    logger.info(f"[{request_count+1:4d}] {trade_date_str}: {len(data)} 个概念")
-                else:
-                    logger.info(f"[{request_count+1:4d}] {trade_date_str}: 无数据")
-                
-                request_count += 1
-                
-                # 移动到下一个交易日
-                current_date += timedelta(days=1)
-                while current_date.weekday() >= 5:  # 跳过周末
-                    current_date += timedelta(days=1)
-                
-                # 避免触发频率限制
-                time.sleep(0.3)
-                
-            except Exception as e:
-                logger.warning(f"获取 {trade_date_str} 数据失败: {str(e)}")
-                current_date += timedelta(days=1)
-                time.sleep(1)
-        
-        if all_data:
-            result_df = pd.concat(all_data, ignore_index=True)
-            logger.info(f"总计获取 {len(result_df)} 条记录")
-            return result_df
-        else:
-            logger.error("未能获取任何历史数据")
+        logger.info(f"读取概念历史数据: {start_date} ~ {end_date}")
+
+        data_path = Path(self.data_dir) / "ths_daily.parquet"
+        if not data_path.exists():
+            logger.error("未找到 ths_daily 数据，请先运行 tushare_downloader.py --task ths_daily")
             return None
+
+        df = pd.read_parquet(data_path)
+        if df.empty:
+            logger.error("ths_daily 数据为空")
+            return None
+
+        df = df.copy()
+        df["trade_date"] = df["trade_date"].astype(str)
+        start_str = pd.Timestamp(start_date).strftime("%Y%m%d")
+        end_str = pd.Timestamp(end_date).strftime("%Y%m%d")
+        df = df[(df["trade_date"] >= start_str) & (df["trade_date"] <= end_str)]
+        logger.info(f"过滤后记录数: {len(df)}")
+        return df
     
     def calculate_concept_activity(self, data):
         """计算概念活跃度"""

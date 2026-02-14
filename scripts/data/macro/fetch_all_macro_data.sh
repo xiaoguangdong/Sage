@@ -15,15 +15,20 @@ mkdir -p "$MACRO_DIR"
 echo "步骤1: 获取国家统计局数据..."
 python3 scripts/data/macro/fetch_nbs_data.py
 
-# 获取Tushare数据（最近3个月）
+# 获取Tushare宏观数据（CPI/PPI/PMI/国债收益率）
 echo ""
 echo "步骤2: 获取Tushare宏观数据..."
-python3 scripts/data/macro/fetch_tushare_macro.py
+python3 scripts/data/tushare_downloader.py --task cn_cpi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task cn_ppi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task cn_pmi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task yield_10y --resume
+python3 scripts/data/tushare_downloader.py --task yield_2y --resume
 
 # 获取北上资金数据
 echo ""
 echo "步骤3: 获取北上资金数据..."
-python3 scripts/data/macro/fetch_northbound.py
+python3 scripts/data/tushare_downloader.py --task northbound_flow --start-date 20200101 --end-date $(date +%Y%m%d) --resume
+python3 scripts/data/tushare_downloader.py --task northbound_hold --start-date 20200101 --end-date $(date +%Y%m%d) --resume
 
 # 映射NBS数据到申万行业（一级+二级）
 echo ""

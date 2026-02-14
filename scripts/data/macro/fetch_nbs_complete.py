@@ -19,7 +19,6 @@
 
 import requests
 import pandas as pd
-import tushare as ts
 import time
 import os
 from datetime import datetime, timedelta
@@ -29,7 +28,6 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.tushare_helpers import get_pro
 from scripts.data.macro.paths import MACRO_DIR
 
 class CompleteNBSDataFetcher:
@@ -38,8 +36,7 @@ class CompleteNBSDataFetcher:
         self.output_dir = str(MACRO_DIR)
         os.makedirs(self.output_dir, exist_ok=True)
         
-        # Tushare用于获取PMI数据
-        self.pro = get_pro(tushare_token)
+        self._tushare_token = tushare_token
         
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36",
@@ -47,6 +44,20 @@ class CompleteNBSDataFetcher:
         }
         self.session = requests.session()
         self.api_delay = 3  # NBS API请求间隔3秒
+
+    def _run_downloader(self, task: str, start_m: str, end_m: str) -> int:
+        cmd = [
+            sys.executable,
+            str(PROJECT_ROOT / "scripts" / "data" / "tushare_downloader.py"),
+            "--task",
+            task,
+            "--start-date",
+            start_m,
+            "--end-date",
+            end_m,
+            "--resume",
+        ]
+        return os.system(" ".join(cmd))
     
     def fetch_from_nbs(self, dbcode, rowcode, colcode, zb_code, sj_code="LAST24"):
         """
@@ -417,20 +428,13 @@ class CompleteNBSDataFetcher:
             end_m: 结束月份（YYYYMM格式）
         """
         print("\n=== 从Tushare获取PMI数据 ===")
-
-        try:
-            df = self.pro.cn_pmi(start_m=start_m, end_m=end_m)
-
-            if df is not None and len(df) > 0:
-                # 保存为Parquet格式
-                filepath = os.path.join(self.output_dir, "tushare_pmi.parquet")
-                df.to_parquet(filepath, index=False)
-                print(f"✓ PMI数据已保存: {filepath} ({len(df)}行)")
-
-                return df
-        except Exception as e:
-            print(f"获取PMI数据失败: {e}")
-
+        filepath = os.path.join(self.output_dir, "tushare_pmi.parquet")
+        if os.path.exists(filepath):
+            return pd.read_parquet(filepath)
+        code = self._run_downloader("cn_pmi", start_m, end_m)
+        if code == 0 and os.path.exists(filepath):
+            return pd.read_parquet(filepath)
+        print("✗ PMI数据未获取成功，请先运行统一下载器")
         return None
     
     def fetch_tushare_cpi(self, start_m='202001', end_m='202512'):
@@ -442,20 +446,13 @@ class CompleteNBSDataFetcher:
             end_m: 结束月份（YYYYMM格式）
         """
         print("\n=== 从Tushare获取CPI数据 ===")
-
-        try:
-            df = self.pro.cn_cpi(start_m=start_m, end_m=end_m)
-
-            if df is not None and len(df) > 0:
-                # 保存为Parquet格式
-                filepath = os.path.join(self.output_dir, "tushare_cpi.parquet")
-                df.to_parquet(filepath, index=False)
-                print(f"✓ CPI数据已保存: {filepath} ({len(df)}行)")
-
-                return df
-        except Exception as e:
-            print(f"获取CPI数据失败: {e}")
-
+        filepath = os.path.join(self.output_dir, "tushare_cpi.parquet")
+        if os.path.exists(filepath):
+            return pd.read_parquet(filepath)
+        code = self._run_downloader("cn_cpi", start_m, end_m)
+        if code == 0 and os.path.exists(filepath):
+            return pd.read_parquet(filepath)
+        print("✗ CPI数据未获取成功，请先运行统一下载器")
         return None
     
     def fetch_tushare_ppi(self, start_m='202001', end_m='202512'):
@@ -467,20 +464,13 @@ class CompleteNBSDataFetcher:
             end_m: 结束月份（YYYYMM格式）
         """
         print("\n=== 从Tushare获取PPI数据 ===")
-
-        try:
-            df = self.pro.cn_ppi(start_m=start_m, end_m=end_m)
-
-            if df is not None and len(df) > 0:
-                # 保存为Parquet格式
-                filepath = os.path.join(self.output_dir, "tushare_ppi.parquet")
-                df.to_parquet(filepath, index=False)
-                print(f"✓ PPI数据已保存: {filepath} ({len(df)}行)")
-
-                return df
-        except Exception as e:
-            print(f"获取PPI数据失败: {e}")
-
+        filepath = os.path.join(self.output_dir, "tushare_ppi.parquet")
+        if os.path.exists(filepath):
+            return pd.read_parquet(filepath)
+        code = self._run_downloader("cn_ppi", start_m, end_m)
+        if code == 0 and os.path.exists(filepath):
+            return pd.read_parquet(filepath)
+        print("✗ PPI数据未获取成功，请先运行统一下载器")
         return None
     
     def fetch_all(self, start_date='20200101', end_date='20251231'):

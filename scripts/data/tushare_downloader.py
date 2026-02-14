@@ -196,6 +196,7 @@ class TushareClient:
         while True:
             page_params = dict(params)
             page_params["offset"] = offset
+            page_params["limit"] = limit
             df = self.request(api, page_params)
             if df is None or df.empty:
                 break

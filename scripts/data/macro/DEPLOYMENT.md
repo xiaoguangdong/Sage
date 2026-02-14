@@ -4,8 +4,7 @@
 
 ### 1. 数据获取脚本
 - `scripts/data/macro/fetch_nbs_data.py` - 国家统计局数据获取
-- `scripts/data/macro/fetch_tushare_macro.py` - Tushare宏观数据获取
-- `scripts/data/macro/fetch_northbound.py` - 北向资金数据获取
+- `scripts/data/tushare_downloader.py` - Tushare统一下载入口
 - `scripts/data/macro/fetch_all_macro_data.sh` - 一键获取所有宏观数据
 - `scripts/data/macro/check_macro_data.sh` - 数据完整性检查
 
@@ -35,14 +34,19 @@ data/raw/tushare/
 python3 scripts/data/macro/fetch_nbs_data.py
 ```
 
-**获取Tushare宏观数据（最近3个月）**
+**获取Tushare宏观数据（CPI/PPI/PMI/国债）**
 ```bash
-python3 scripts/data/macro/fetch_tushare_macro.py
+python3 scripts/data/tushare_downloader.py --task cn_cpi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task cn_ppi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task cn_pmi --start-date 202001 --end-date $(date +%Y%m) --resume
+python3 scripts/data/tushare_downloader.py --task yield_10y --resume
+python3 scripts/data/tushare_downloader.py --task yield_2y --resume
 ```
 
 **获取北向资金数据（最近1个月）**
 ```bash
-python3 scripts/data/macro/fetch_northbound.py
+python3 scripts/data/tushare_downloader.py --task northbound_flow --start-date 20200101 --end-date $(date +%Y%m%d) --resume
+python3 scripts/data/tushare_downloader.py --task northbound_hold --start-date 20200101 --end-date $(date +%Y%m%d) --resume
 ```
 
 **一键获取所有数据**
@@ -80,7 +84,7 @@ crontab -e
 
 ### 4.2 每月10日凌晨2点
 - 更新Tushare月度数据（CPI、PPI等）
-- 命令：`python3 scripts/data/macro/fetch_tushare_macro.py`
+- 命令：`python3 scripts/data/tushare_downloader.py --task cn_cpi ...`
 
 ### 4.3 每月16日凌晨2点
 - 更新国家统计局行业数据（固定资产投资、分行业PPI等）
@@ -88,11 +92,11 @@ crontab -e
 
 ### 4.4 每周五凌晨2点
 - 更新北向资金持仓数据
-- 命令：`python3 scripts/data/macro/fetch_northbound.py`
+- 命令：`python3 scripts/data/tushare_downloader.py --task northbound_hold ...`
 
 ### 4.5 每日凌晨2点15分
 - 更新日度数据（10Y收益率、北向资金流向）
-- 命令：`python3 scripts/data/macro/fetch_tushare_macro.py`
+- 命令：`python3 scripts/data/tushare_downloader.py --task yield_10y ...`
 
 ## 五、当前状态
 
