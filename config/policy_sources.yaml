@@ -60,6 +60,7 @@ sources:
     type: "html"
     url: "https://wap.sasac.gov.cn/n2588025/n2588119/"
     base_url: "https://wap.sasac.gov.cn/"
+    insecure: true
   - name: "部委综合"
     tag: "ministries"
     type: "rss"

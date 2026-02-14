@@ -17,6 +17,7 @@ import json
 import re
 import sys
 import time
+import ssl
 import urllib.request
 import xml.etree.ElementTree as ET
 from html.parser import HTMLParser
@@ -43,6 +44,7 @@ class SourceConfig:
     source_type: str = "rss"
     tag: Optional[str] = None
     base_url: Optional[str] = None
+    insecure: bool = False
 
 
 @dataclass
@@ -80,9 +82,12 @@ def _decode_bytes(raw: bytes, charset: Optional[str]) -> str:
     return raw.decode("utf-8", errors="ignore")
 
 
-def _fetch_url(url: str, cfg: FetchConfig) -> str:
+def _fetch_url(url: str, cfg: FetchConfig, insecure: bool = False) -> str:
     req = urllib.request.Request(url, headers={"User-Agent": cfg.user_agent})
-    with urllib.request.urlopen(req, timeout=cfg.timeout) as resp:
+    context = None
+    if insecure:
+        context = ssl._create_unverified_context()
+    with urllib.request.urlopen(req, timeout=cfg.timeout, context=context) as resp:
         raw = resp.read()
         charset = resp.headers.get_content_charset()
         return _decode_bytes(raw, charset)
@@ -186,7 +191,22 @@ class _AnchorParser(HTMLParser):
 
 _DATE_PATTERN = re.compile(r"(20\d{2})[./-](\d{1,2})[./-](\d{1,2})")
 _DATE_PATTERN_CN = re.compile(r"(20\d{2})年(\d{1,2})月(\d{1,2})日")
-_IGNORE_TITLES = {"查看详细", "查看更多", "更多", "上一页", "下一页", "返回", ">>", "更多>>"}
+_IGNORE_TITLES = {
+    "查看详细",
+    "查看更多",
+    "更多",
+    "上一页",
+    "下一页",
+    "返回",
+    ">>",
+    "更多>>",
+    "首页",
+    "新闻",
+    "新闻报道",
+    "新闻发布",
+    "沟通交流",
+    "高级搜索",
+}
 
 
 def _normalize_date(raw: str) -> Optional[str]:
@@ -200,10 +220,14 @@ def _normalize_date(raw: str) -> Optional[str]:
 
 
 def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, str]]:
+    items = _parse_blocks(content, base_url=base_url)
+    if items:
+        return items
+
     parser = _AnchorParser()
     parser.feed(content)
     tokens = parser.tokens
-    items: List[Dict[str, str]] = []
+    items = []
     for idx, token in enumerate(tokens):
         if token.get("type") != "a":
             continue
@@ -237,9 +261,7 @@ def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, s
             "publish_date": date_text,
             "content": "",
         })
-    if items:
-        return items
-    return _parse_blocks(content, base_url=base_url)
+    return items
 
 
 def _strip_tags(raw: str) -> str:
@@ -317,6 +339,7 @@ def load_sources(config_path: Path) -> List[SourceConfig]:
                 source_type=str(item.get("type") or "rss"),
                 tag=item.get("tag") or item.get("source_tag"),
                 base_url=item.get("base_url"),
+                insecure=bool(item.get("insecure", False)),
             )
         )
     return sources
@@ -351,7 +374,7 @@ def fetch_sources(sources: List[SourceConfig], cfg: FetchConfig) -> pd.DataFrame
         logger.info(f"拉取 {source.name} ({source.url})")
         content = None
         try:
-            content = _fetch_url(source.url, cfg)
+            content = _fetch_url(source.url, cfg, insecure=source.insecure)
         except Exception as exc:
             logger.warning(f"{source.name} 拉取失败: {exc}")
 
