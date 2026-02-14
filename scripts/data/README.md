@@ -182,6 +182,11 @@ python scripts/data/policy/fetch_tushare_policy.py \
 python scripts/data/policy/fetch_gov_policy.py
 ```
 
+排查解析失败可加：
+```bash
+python scripts/data/policy/fetch_gov_policy.py --dump-html
+```
+
 默认输出：
 - `data/raw/policy/gov_notices.parquet`
 - `data/raw/policy/gov_notices_summary.json`

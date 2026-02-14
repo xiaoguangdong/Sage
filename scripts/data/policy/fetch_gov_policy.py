@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import argparse
+import html as html_lib
 import json
 import re
 import time
@@ -47,6 +48,8 @@ class FetchConfig:
     sleep_seconds: float = 1.0
     user_agent: str = "SagePolicyBot/0.1"
     max_items_per_source: Optional[int] = None
+    dump_html: bool = False
+    dump_dir: Optional[Path] = None
 
 
 def load_yaml(path: Path) -> Dict:
@@ -230,6 +233,57 @@ def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, s
             "publish_date": date_text,
             "content": "",
         })
+    if items:
+        return items
+    return _parse_blocks(content, base_url=base_url)
+
+
+def _strip_tags(raw: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", raw)
+    text = html_lib.unescape(text)
+    return re.sub(r"\\s+", " ", text).strip()
+
+
+def _extract_href_and_title(block: str) -> Optional[Dict[str, str]]:
+    match = re.search(r"<a[^>]+href=[\"']([^\"']+)[\"'][^>]*>(.*?)</a>", block, flags=re.S | re.I)
+    if not match:
+        return None
+    href = match.group(1).strip()
+    title = _strip_tags(match.group(2))
+    if not title or title.lower() == "image" or title in _IGNORE_TITLES:
+        return None
+    return {"href": href, "title": title}
+
+
+def _extract_date_from_block(block: str) -> Optional[str]:
+    match = _DATE_PATTERN.search(block)
+    if not match:
+        match = _DATE_PATTERN_CN.search(block)
+        if not match:
+            return None
+    year, month, day = match.groups()
+    return f"{year}-{int(month):02d}-{int(day):02d}"
+
+
+def _parse_blocks(content: str, base_url: Optional[str] = None) -> List[Dict[str, str]]:
+    blocks: List[str] = []
+    for tag in ["li", "tr", "p", "div"]:
+        blocks.extend(re.findall(rf"<{tag}[^>]*>.*?</{tag}>", content, flags=re.S | re.I))
+    items: List[Dict[str, str]] = []
+    for block in blocks:
+        info = _extract_href_and_title(block)
+        if not info:
+            continue
+        date_text = _extract_date_from_block(block)
+        if not date_text:
+            continue
+        url = urljoin(base_url or "", info["href"]) if info["href"] else ""
+        items.append({
+            "title": info["title"],
+            "url": url,
+            "publish_date": date_text,
+            "content": "",
+        })
     return items
 
 
@@ -276,6 +330,7 @@ def build_config(base: Dict, args: argparse.Namespace) -> FetchConfig:
             if args.max_items is not None
             else settings.get("max_items_per_source")
         ),
+        dump_html=bool(args.dump_html or settings.get("dump_html", False)),
     )
 
 
@@ -291,6 +346,10 @@ def fetch_sources(sources: List[SourceConfig], cfg: FetchConfig) -> pd.DataFrame
             continue
         logger.info(f"拉取 {source.name} ({source.url})")
         content = _fetch_url(source.url, cfg)
+        if cfg.dump_html and cfg.dump_dir:
+            safe = re.sub(r"[^a-zA-Z0-9_\\-]+", "_", source.tag or source.name)
+            dump_path = cfg.dump_dir / f"{safe}.html"
+            dump_path.write_text(content, encoding="utf-8", errors="ignore")
         if source_type == "html":
             items = parse_html(content, base_url=source.base_url or source.url)
         else:
@@ -317,6 +376,7 @@ def main():
     parser.add_argument("--sleep-seconds", type=float, default=None)
     parser.add_argument("--user-agent", type=str, default=None)
     parser.add_argument("--max-items", type=int, default=None)
+    parser.add_argument("--dump-html", action="store_true", help="保存原始HTML以便排查")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -332,6 +392,9 @@ def main():
     sources = load_sources(config_path)
     cfg = build_config(payload, args)
     cfg.output_dir = output_dir
+    if cfg.dump_html:
+        cfg.dump_dir = output_dir / "raw_html"
+        cfg.dump_dir.mkdir(parents=True, exist_ok=True)
 
     disable_proxy()
     data = fetch_sources(sources, cfg)
