@@ -8,6 +8,7 @@ import pandas as pd
 
 CODE_CANDIDATES = ("ts_code", "code", "stock")
 DATE_CANDIDATES = ("trade_date", "date", "datetime")
+INDUSTRY_CANDIDATES = ("sw_industry", "industry", "industry_name", "industry_l1")
 
 
 def normalize_ts_code(value: str) -> str:
@@ -68,5 +69,27 @@ def normalize_security_columns(df: pd.DataFrame, inplace: bool = False) -> pd.Da
         target["stock"] = target["ts_code"]
     if "date" not in target.columns and "trade_date" in target.columns:
         target["date"] = target["trade_date"]
+
+    return target
+
+
+def normalize_industry_columns(df: pd.DataFrame, inplace: bool = False) -> pd.DataFrame:
+    """
+    统一行业字段：
+    - 确保 sw_industry 存在
+    - 保留/补齐 industry 与 industry_name 兼容旧代码
+    """
+    target = df if inplace else df.copy()
+
+    if "sw_industry" not in target.columns:
+        for col in INDUSTRY_CANDIDATES:
+            if col in target.columns and col != "sw_industry":
+                target["sw_industry"] = target[col]
+                break
+
+    if "industry_name" not in target.columns and "sw_industry" in target.columns:
+        target["industry_name"] = target["sw_industry"]
+    if "industry" not in target.columns and "sw_industry" in target.columns:
+        target["industry"] = target["sw_industry"]
 
     return target

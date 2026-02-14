@@ -16,6 +16,8 @@ import yaml
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
+from sage_core.utils.column_normalizer import normalize_industry_columns
+
 
 class MacroPredictor:
     """
@@ -28,7 +30,7 @@ class MacroPredictor:
     4. 输出关键指标供选股模型参考
     """
     
-    def __init__(self, config_path: str = 'config/sw_nbs_mapping.yaml'):
+    def __init__(self, config_path: str = 'config/sw_nbs_mapping.yaml', data_delay_days: int = 2):
         """
         初始化预测模型
         
@@ -38,6 +40,7 @@ class MacroPredictor:
         self.config_path = config_path
         self.mapping_config = self._load_mapping()
         self.thresholds = self._get_thresholds()
+        self.data_delay_days = max(0, int(data_delay_days))
     
     def _load_mapping(self) -> Dict:
         """加载行业映射配置"""
@@ -92,6 +95,11 @@ class MacroPredictor:
         Returns:
             Dict: 预测结果
         """
+        macro_data = self._prepare_macro_data(macro_data)
+        industry_data = self._prepare_industry_data(industry_data)
+        if northbound_data is not None:
+            northbound_data = self._prepare_northbound_data(northbound_data)
+
         # 1. 判断全行业衰退（系统风险）
         systemic_scenario = self._check_systemic_recession(macro_data, date)
         
@@ -161,7 +169,7 @@ class MacroPredictor:
             Dict: 包含is_recession和message
         """
         # 获取最近的数据
-        target_date = pd.to_datetime(date)
+        target_date = pd.to_datetime(date) - pd.Timedelta(days=self.data_delay_days)
         
         # 找到最近可用的宏观数据
         recent_data = macro_data[macro_data['date'] <= target_date]
@@ -210,7 +218,7 @@ class MacroPredictor:
         Returns:
             Dict: 行业指标
         """
-        target_date = pd.to_datetime(date)
+        target_date = pd.to_datetime(date) - pd.Timedelta(days=self.data_delay_days)
         
         # 从industry_data中获取该行业的数据
         ind_data = industry_data[industry_data['sw_industry'] == sw_industry]
@@ -259,7 +267,7 @@ class MacroPredictor:
         
         # 北向资金信号
         if northbound_data is not None:
-            nb_data = northbound_data[northbound_data['industry_name'] == sw_industry]
+            nb_data = northbound_data[northbound_data['sw_industry'] == sw_industry]
             nb_data = nb_data[nb_data['trade_date'] <= target_date]
             if len(nb_data) > 0:
                 latest_nb = nb_data.iloc[-1]
@@ -273,6 +281,40 @@ class MacroPredictor:
             metrics['industry_ratio'] = 0
         
         return metrics
+
+    def _prepare_macro_data(self, macro_data: pd.DataFrame) -> pd.DataFrame:
+        if macro_data is None or macro_data.empty:
+            return macro_data
+        data = macro_data.copy()
+        if 'date' not in data.columns:
+            if 'trade_date' in data.columns:
+                data['date'] = pd.to_datetime(data['trade_date'])
+            elif 'month' in data.columns:
+                data['date'] = pd.to_datetime(data['month'], errors='coerce')
+            elif 'datetime' in data.columns:
+                data['date'] = pd.to_datetime(data['datetime'])
+        else:
+            data['date'] = pd.to_datetime(data['date'])
+        return data
+
+    def _prepare_industry_data(self, industry_data: pd.DataFrame) -> pd.DataFrame:
+        if industry_data is None or industry_data.empty:
+            return industry_data
+        data = normalize_industry_columns(industry_data)
+        if 'date' not in data.columns:
+            if 'trade_date' in data.columns:
+                data['date'] = pd.to_datetime(data['trade_date'])
+            elif 'month' in data.columns:
+                data['date'] = pd.to_datetime(data['month'], errors='coerce')
+        else:
+            data['date'] = pd.to_datetime(data['date'])
+        return data
+
+    def _prepare_northbound_data(self, northbound_data: pd.DataFrame) -> pd.DataFrame:
+        data = normalize_industry_columns(northbound_data)
+        if 'trade_date' in data.columns:
+            data['trade_date'] = pd.to_datetime(data['trade_date'])
+        return data
     
     def _calculate_change(self, df: pd.DataFrame, column: str, periods: int) -> float:
         """
