@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -25,7 +26,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_data_path
+from scripts.data._shared.runtime import get_data_path, get_data_root
 
 
 DEFAULT_INPUT_NAMES = {
@@ -126,6 +127,12 @@ def normalize_records(df: pd.DataFrame, source_type: str) -> pd.DataFrame:
         "title": _extract_title(df),
         "content": _extract_text(df),
     })
+    industry_raw = None
+    for col in ["industry", "industry_name", "sw_industry"]:
+        if col in df.columns:
+            industry_raw = df[col].fillna("").astype(str)
+            break
+    result["industry_raw"] = industry_raw if industry_raw is not None else ""
     result["source_type"] = source_type
     result = result.dropna(subset=["publish_date"])
     return result
@@ -146,6 +153,60 @@ def load_policy_texts(input_dirs: List[Path]) -> pd.DataFrame:
     data["publish_date"] = pd.to_datetime(data["publish_date"])
     data = data.dropna(subset=["publish_date"])
     return data
+
+
+def _normalize_industry_name(name: str) -> str:
+    return re.sub(r"[ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+$", "", name or "").strip()
+
+
+def load_sw_l2_to_l1_map() -> Dict[str, str]:
+    data_root = get_data_root()
+    l2_path = data_root / "tushare" / "sectors" / "SW2021_L2_classify.csv"
+    l1_path = data_root / "tushare" / "sectors" / "SW2021_L1_classify.csv"
+    if not l2_path.exists() or not l1_path.exists():
+        return {}
+    l2 = pd.read_csv(l2_path)
+    l1 = pd.read_csv(l1_path)
+    l1_map = dict(zip(l1["industry_code"].astype(str), l1["industry_name"].astype(str)))
+    mapping: Dict[str, str] = {}
+    for _, row in l2.iterrows():
+        name = str(row.get("industry_name", "")).strip()
+        parent = str(row.get("parent_code", "")).strip()
+        if not name or not parent:
+            continue
+        l1_name = l1_map.get(parent)
+        if l1_name:
+            mapping[name] = l1_name
+    return mapping
+
+
+def map_industries(
+    raw: str,
+    l2_to_l1: Dict[str, str],
+    l1_set: set,
+) -> List[str]:
+    if not raw:
+        return []
+    parts = re.split(r"[、,;/|]", raw)
+    results: List[str] = []
+    for part in parts:
+        name = part.strip()
+        if not name:
+            continue
+        if name in l1_set:
+            results.append(name)
+            continue
+        if name in l2_to_l1:
+            results.append(l2_to_l1[name])
+            continue
+        normalized = _normalize_industry_name(name)
+        if normalized in l1_set:
+            results.append(normalized)
+            continue
+        if normalized in l2_to_l1:
+            results.append(l2_to_l1[normalized])
+            continue
+    return list(dict.fromkeys(results))
 
 
 def build_score(text: str, positive: List[str], negative: List[str]) -> float:
@@ -174,14 +235,21 @@ def aggregate_signals(
     positive: List[str],
     negative: List[str],
     source_weights: Dict[str, float],
+    l2_to_l1: Dict[str, str],
 ) -> pd.DataFrame:
     if texts.empty:
         return pd.DataFrame()
 
     rows = []
+    l1_set = set(l2_to_l1.values())
     for _, row in texts.iterrows():
         text = f"{row['title']} {row['content']}"
-        industries = extract_industries(text, industry_keywords)
+        industries = []
+        industry_raw = row.get("industry_raw", "") if isinstance(row, dict) else row.get("industry_raw", "")
+        if industry_raw:
+            industries = map_industries(str(industry_raw), l2_to_l1, l1_set)
+        if not industries:
+            industries = extract_industries(text, industry_keywords)
         if not industries:
             continue
         base_score = build_score(text, positive, negative)
@@ -245,7 +313,8 @@ def main():
         print(f"未发现政策文本文件，目录: {', '.join(str(p) for p in input_dirs)}")
         return
 
-    signals = aggregate_signals(texts, industry_keywords, positive, negative, source_weights)
+    l2_to_l1 = load_sw_l2_to_l1_map()
+    signals = aggregate_signals(texts, industry_keywords, positive, negative, source_weights, l2_to_l1)
     if signals.empty:
         print("未提取到有效行业政策信号")
         return
