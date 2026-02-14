@@ -140,6 +140,8 @@ python scripts/data/macro/align_nbs_industrial_data.py \
 - `nbs_output_mapping_summary.csv`（覆盖率摘要）
 - `nbs_output_mapping_by_industry.csv`（行业统计）
 - `nbs_output_mapping_unmatched.csv`（未映射产品清单）
+- `nbs_fai_mapping_summary.csv` / `nbs_fai_mapping_unmatched.csv`（固定资产投资映射审计）
+- `nbs_price_mapping_summary.csv` / `nbs_price_mapping_unmatched.csv`（价格指数映射审计）
 
 说明：
 - 固定资产投资/价格指数会尝试使用 `config/sw_nbs_mapping.yaml` 将 NBS 行业名映射到申万一级。

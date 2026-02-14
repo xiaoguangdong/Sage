@@ -424,7 +424,7 @@ class NBSIndustrialDataAligner:
         
         return df
 
-    def build_mapping_audit(self, df: pd.DataFrame) -> Dict[str, pd.DataFrame]:
+    def build_mapping_audit(self, df: pd.DataFrame, label: str = "output") -> Dict[str, pd.DataFrame]:
         """
         构建映射审计报告（覆盖率/行业统计/未映射清单）
         """
@@ -497,6 +497,7 @@ class NBSIndustrialDataAligner:
             "summary": summary,
             "by_industry": by_industry,
             "unmatched": unmatched.sort_values(["has_chinese", "row_count"], ascending=False),
+            "label": label,
         }
     
     def aggregate_to_industry_level(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -721,6 +722,27 @@ def main():
         print("\n样例数据:")
         print(results['combined'].head(10))
 
+    def save_audit(audit_result: Dict[str, pd.DataFrame]):
+        label = audit_result.get("label", "output")
+
+        summary_df = audit_result.get("summary")
+        if summary_df is not None and len(summary_df) > 0:
+            summary_file = os.path.join(output_dir, f"nbs_{label}_mapping_summary.csv")
+            summary_df.to_csv(summary_file, index=False)
+            print(f"映射覆盖率摘要已保存: {summary_file}")
+
+        by_industry_df = audit_result.get("by_industry")
+        if by_industry_df is not None and len(by_industry_df) > 0:
+            by_industry_file = os.path.join(output_dir, f"nbs_{label}_mapping_by_industry.csv")
+            by_industry_df.to_csv(by_industry_file, index=False)
+            print(f"行业映射统计已保存: {by_industry_file}")
+
+        unmatched_df = audit_result.get("unmatched")
+        if unmatched_df is not None and len(unmatched_df) > 0:
+            unmatched_file = os.path.join(output_dir, f"nbs_{label}_mapping_unmatched.csv")
+            unmatched_df.to_csv(unmatched_file, index=False)
+            print(f"未映射清单已保存: {unmatched_file}")
+
     if 'output' in results and isinstance(results['output'], dict):
         product_df = results['output'].get('product')
         if product_df is not None and len(product_df) > 0:
@@ -728,24 +750,20 @@ def main():
             product_df.to_parquet(product_file, index=False)
             print(f"\n产品级产量数据已保存到: {product_file}")
 
-            audit = aligner.build_mapping_audit(product_df)
-            summary_df = audit.get("summary")
-            if summary_df is not None and len(summary_df) > 0:
-                summary_file = os.path.join(output_dir, "nbs_output_mapping_summary.csv")
-                summary_df.to_csv(summary_file, index=False)
-                print(f"映射覆盖率摘要已保存: {summary_file}")
+            audit = aligner.build_mapping_audit(product_df, label="output")
+            save_audit(audit)
 
-            by_industry_df = audit.get("by_industry")
-            if by_industry_df is not None and len(by_industry_df) > 0:
-                by_industry_file = os.path.join(output_dir, "nbs_output_mapping_by_industry.csv")
-                by_industry_df.to_csv(by_industry_file, index=False)
-                print(f"行业映射统计已保存: {by_industry_file}")
+    if 'fai' in results and isinstance(results['fai'], dict):
+        fai_df = results['fai'].get('raw')
+        if fai_df is not None and len(fai_df) > 0:
+            audit = aligner.build_mapping_audit(fai_df, label="fai")
+            save_audit(audit)
 
-            unmatched_df = audit.get("unmatched")
-            if unmatched_df is not None and len(unmatched_df) > 0:
-                unmatched_file = os.path.join(output_dir, "nbs_output_mapping_unmatched.csv")
-                unmatched_df.to_csv(unmatched_file, index=False)
-                print(f"未映射产品清单已保存: {unmatched_file}")
+    if 'price' in results and isinstance(results['price'], dict):
+        price_df = results['price'].get('raw')
+        if price_df is not None and len(price_df) > 0:
+            audit = aligner.build_mapping_audit(price_df, label="price")
+            save_audit(audit)
 
 
 if __name__ == '__main__':
