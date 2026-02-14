@@ -15,6 +15,7 @@ import argparse
 import html as html_lib
 import json
 import re
+import sys
 import time
 import urllib.request
 import xml.etree.ElementTree as ET
@@ -25,6 +26,9 @@ from typing import Dict, List, Optional
 from urllib.parse import urljoin
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import disable_proxy, get_data_path, setup_logger
 
@@ -345,7 +349,11 @@ def fetch_sources(sources: List[SourceConfig], cfg: FetchConfig) -> pd.DataFrame
             logger.warning(f"暂不支持的来源类型: {source.source_type} ({source.name})")
             continue
         logger.info(f"拉取 {source.name} ({source.url})")
-        content = _fetch_url(source.url, cfg)
+        try:
+            content = _fetch_url(source.url, cfg)
+        except Exception as exc:
+            logger.warning(f"{source.name} 拉取失败: {exc}")
+            continue
         if cfg.dump_html and cfg.dump_dir:
             safe = re.sub(r"[^a-zA-Z0-9_\\-]+", "_", source.tag or source.name)
             dump_path = cfg.dump_dir / f"{safe}.html"
