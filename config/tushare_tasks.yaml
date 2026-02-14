@@ -1,0 +1,29 @@
+tasks:
+  ths_index:
+    api: ths_index
+    mode: single
+    output: "raw/tushare/concepts/ths_index.parquet"
+
+  ths_daily:
+    api: ths_daily
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    pagination: offset
+    limit: 3000
+    dedup_keys: ["ts_code", "trade_date"]
+    state: "data/states/ths_daily.json"
+    output: "raw/tushare/concepts/ths_daily.parquet"
+
+  dc_index:
+    api: dc_index
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    pagination: offset
+    limit: 5000
+    dedup_keys: ["ts_code", "trade_date"]
+    state: "data/states/dc_index.json"
+    output: "raw/tushare/concepts/dc_index.parquet"

@@ -10,88 +10,40 @@
 - 数据根目录优先从 `config/base.yaml -> data.roots.primary` 读取（如 `/Volumes/SPEED/BizData/Stock/sage_primary`）
 - 可用环境变量覆盖：`SAGE_DATA_ROOT_PRIMARY` / `SAGE_DATA_ROOT_SECONDARY`
 
-## Tushare 统一脚本
+## Tushare 统一脚本（理想版统一入口）
 
-脚本：`scripts/data/tushare_suite.py`
+脚本：`scripts/data/tushare_downloader.py`
+
+配置：`config/tushare_tasks.yaml`
 
 ```bash
-python scripts/data/tushare_suite.py --action daily_basic \
-  --start-date 20200101 --end-date 20241231 \
-  --output-dir /tmp/sage_data --resume
+python scripts/data/tushare_downloader.py --task ths_index
 
-python scripts/data/tushare_suite.py --action margin \
-  --start-date 20200101 --end-date 20241231 \
-  --output-dir /tmp/sage_data --resume
+python scripts/data/tushare_downloader.py --task ths_daily \
+  --start-date 20200101 --end-date 20251231 \
+  --resume --sleep-seconds 40
 ```
 
 输出分片目录：
-- `/tmp/sage_data/tushare/daily_basic/parts/`
-- `/tmp/sage_data/tushare/margin/parts/`
+- `data/raw/tushare/`（默认）
 
-默认输出目录（不传 `--output-dir`）：`data/raw/tushare/`
+默认输出目录（不传 `--output-root`）：`data/raw/tushare/`
 
 ### 其他示例（YYYYMMDD）
 
 ```bash
-# 日线K线
-python scripts/data/tushare_suite.py --action daily_kline \
-  --start-date 20240101 --end-date 20240105 \
-  --output-dir /tmp/sage_data
-
-# 指数OHLC
-python scripts/data/tushare_suite.py --action index_ohlc \
-  --start-date 20240101 --end-date 20240105 \
-  --output-dir /tmp/sage_data
-
-# 沪深300成分
-python scripts/data/tushare_suite.py --action hs300_constituents \
-  --start-year 2020 --end-year 2021 \
-  --output-dir /tmp/sage_data
-
-# 沪深300资金流
-python scripts/data/tushare_suite.py --action hs300_moneyflow \
-  --start-date 20240101 --end-date 20240105 \
-  --output-dir /tmp/sage_data
-
-# 申万行业分类
-python scripts/data/tushare_suite.py --action sw_industry_classify \
-  --output-dir /tmp/sage_data
-
-# 申万行业日线
-python scripts/data/tushare_suite.py --action sw_industry_daily \
-  --start-date 20240101 --end-date 20240105 \
-  --output-dir /tmp/sage_data
-
-# 期权日线
-python scripts/data/tushare_suite.py --action opt_daily \
-  --start-date 20240101 --end-date 20240105 \
-  --output-dir /tmp/sage_data
-
-# 财务指标
-python scripts/data/tushare_suite.py --action fina_indicator \
-  --start-date 20240101 --end-date 20241231 \
-  --stock-list-csv data/raw/tushare/filtered_stocks_list.csv \
-  --output-dir /tmp/sage_data
-
-# 财务指标VIP
-python scripts/data/tushare_suite.py --action fina_indicator_vip \
-  --start-year 2020 --end-year 2021 \
-  --output-dir /tmp/sage_data
-
-# 行业/概念列表
-python scripts/data/tushare_suite.py --action tushare_sectors \
-  --output-dir /tmp/sage_data
-
-# 概念更新（Tushare）
-python scripts/data/tushare_suite.py --action concept_update_tushare \
-  --mode update --start-date 20240924 --end-date 20241231 \
-  --min-stock-count 10 --output-dir /tmp/sage_data
-
-# 概念更新（东财）
-python scripts/data/tushare_suite.py --action concept_update_eastmoney \
-  --mode update --start-date 20240924 --end-date 20241231 \
-  --output-dir /tmp/sage_data
+# 东方财富概念指数（dc_index）
+python scripts/data/tushare_downloader.py --task dc_index \
+  --start-date 20200101 --end-date 20251231 --resume
 ```
+
+> 说明：理想版统一入口以 `config/tushare_tasks.yaml` 为唯一任务清单，
+> 后续新增接口只需追加配置，不再新增脚本。
+
+## 旧版统一脚本（待淘汰）
+
+脚本：`scripts/data/tushare_suite.py`  
+说明：后续会逐步迁移到理想版入口，不再新增功能。
 
 ## Akshare 统一脚本
 
