@@ -60,7 +60,7 @@ def fetch_ths_index(pro, output_dir: Path):
     print(f"  已保存到 {output_file}，行数 {len(df)}")
 
 
-def fetch_ths_daily(pro, output_dir: Path, start_date: str, end_date: str):
+def fetch_ths_daily(pro, output_dir: Path, start_date: str, end_date: str, sleep_seconds: int = 40):
     print("\n" + "=" * 80)
     print("获取同花顺板块指数行情 (ths_daily)")
     print("=" * 80)
@@ -73,11 +73,15 @@ def fetch_ths_daily(pro, output_dir: Path, start_date: str, end_date: str):
     output_file = output_dir / "ths_daily.parquet"
     progress_file = output_dir / "ths_daily_progress.txt"
 
+    last_code = ""
+    last_month = ""
     if progress_file.exists():
-        last_code = progress_file.read_text(encoding="utf-8").strip()
-        print(f"  找到进度文件，上次到: {last_code}")
-    else:
-        last_code = ""
+        content = progress_file.read_text(encoding="utf-8").strip()
+        if content:
+            parts = content.split(",")
+            last_code = parts[0]
+            last_month = parts[1] if len(parts) > 1 else ""
+        print(f"  找到进度文件，上次到: {last_code} {last_month}")
 
     index_df = pd.read_parquet(index_file)
     if "ts_code" not in index_df.columns:
@@ -92,31 +96,53 @@ def fetch_ths_daily(pro, output_dir: Path, start_date: str, end_date: str):
 
     existing = pd.read_parquet(output_file) if output_file.exists() else pd.DataFrame()
 
+    start_dt = datetime.strptime(start_date, "%Y%m%d")
+    end_dt = datetime.strptime(end_date, "%Y%m%d")
+    months = []
+    current_dt = datetime(start_dt.year, start_dt.month, 1)
+    while current_dt <= end_dt:
+        months.append(current_dt)
+        if current_dt.month == 12:
+            current_dt = datetime(current_dt.year + 1, 1, 1)
+        else:
+            current_dt = datetime(current_dt.year, current_dt.month + 1, 1)
+
     for i, code in enumerate(codes[start_idx:], start=start_idx):
         print(f"[{i+1}/{len(codes)}] 获取 {code} 行情...")
-        df = get_with_retry(
-            pro,
-            "ths_daily",
-            {"ts_code": code, "start_date": start_date, "end_date": end_date},
-            max_retries=3,
-            sleep_time=60,
-        )
-        if df is not None and not df.empty:
-            combined = pd.concat([existing, df], ignore_index=True)
-            combined = combined.drop_duplicates(subset=["ts_code", "trade_date"])
-            combined.to_parquet(output_file, index=False)
-            existing = combined
-            print(f"  已累计保存 {len(existing)} 条")
-        else:
-            print("  无数据或获取失败")
+        for month_start in months:
+            month_end = (month_start.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
+            if month_end > end_dt:
+                month_end = end_dt
+            start_str = month_start.strftime("%Y%m%d")
+            end_str = month_end.strftime("%Y%m%d")
 
-        progress_file.write_text(code, encoding="utf-8")
+            if code == last_code and last_month and end_str <= last_month:
+                continue
+
+            df = get_with_retry(
+                pro,
+                "ths_daily",
+                {"ts_code": code, "start_date": start_str, "end_date": end_str},
+                max_retries=3,
+                sleep_time=sleep_seconds,
+            )
+            if df is not None and not df.empty:
+                combined = pd.concat([existing, df], ignore_index=True)
+                combined = combined.drop_duplicates(subset=["ts_code", "trade_date"])
+                combined.to_parquet(output_file, index=False)
+                existing = combined
+                print(f"  {start_str}-{end_str} 已累计保存 {len(existing)} 条")
+            else:
+                print(f"  {start_str}-{end_str} 无数据或获取失败")
+
+            progress_file.write_text(f"{code},{end_str}", encoding="utf-8")
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--start-date", type=str, default="20230101")
+    parser.add_argument("--start-date", type=str, default="20200101")
     parser.add_argument("--end-date", type=str, default=datetime.now().strftime("%Y%m%d"))
+    parser.add_argument("--sleep-seconds", type=int, default=40)
     parser.add_argument("--only-index", action="store_true")
     parser.add_argument("--only-daily", action="store_true")
     args = parser.parse_args()
@@ -131,7 +157,7 @@ def main():
     if not args.only_daily:
         fetch_ths_index(pro, output_dir)
     if not args.only_index:
-        fetch_ths_daily(pro, output_dir, args.start_date, args.end_date)
+        fetch_ths_daily(pro, output_dir, args.start_date, args.end_date, sleep_seconds=args.sleep_seconds)
 
 
 if __name__ == "__main__":
