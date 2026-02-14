@@ -17,6 +17,7 @@ class BacktestConfig:
     max_positions: int = 10
     max_industry_weight: float = 0.40
     t_plus_one: bool = True
+    data_delay_days: int = 2
 
 
 @dataclass

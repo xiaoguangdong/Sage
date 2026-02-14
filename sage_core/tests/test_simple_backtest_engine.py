@@ -18,7 +18,7 @@ def test_simple_engine_basic():
         "ret": [0.01, -0.005, 0.02, 0.01],
     })
 
-    config = BacktestConfig(initial_capital=1000, cost_rate=0.0, max_positions=2)
+    config = BacktestConfig(initial_capital=1000, cost_rate=0.0, max_positions=2, data_delay_days=0)
     engine = SimpleBacktestEngine(config)
     result = engine.run(signals, returns)
 

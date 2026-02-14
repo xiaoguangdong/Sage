@@ -30,6 +30,8 @@ class WalkForwardBacktest:
             'test_weeks': 26,  # 测试周数（约半年）
             'roll_step': 26,  # 滚动步长（约半年）
             'initial_capital': 1000000,  # 初始资金
+            'data_delay_days': 2,  # 信号滞后（T+2）
+            't_plus_one': True,  # 是否T+1
         }
         
         # 合并配置
@@ -215,11 +217,18 @@ class WalkForwardBacktest:
         trades = []
         
         # 获取测试日期
-        dates = df_test['date'].unique()
+        dates = sorted(df_test['date'].unique())
         
         # 获取指数数据（用于趋势判断）
         df_index = df_test[df_test['code'] == '000300.SH'] if '000300.SH' in df_test['code'].values else None
-        
+
+        delay_days = max(0, int(self.config.get('data_delay_days', 0)))
+        t_plus_one = bool(self.config.get('t_plus_one', True))
+
+        pending_portfolios: Dict[pd.Timestamp, Dict[str, pd.DataFrame | pd.Timestamp]] = {}
+        current_portfolio: Optional[pd.DataFrame] = None
+        current_signal_date: Optional[pd.Timestamp] = None
+
         for i, date in enumerate(dates):
             # 获取当日数据
             df_day = df_test[df_test['date'] == date]
@@ -244,42 +253,63 @@ class WalkForwardBacktest:
                 df_ranked['rank_score'] = np.random.rand(len(df_ranked))
                 df_ranked['rank'] = df_ranked['rank_score'].rank(ascending=False)
             
-            # 构建组合
+            # 构建组合（信号日）
             portfolio = portfolio_constructor.construct_portfolio(df_ranked, trend_state)
-            
-            # 风险控制
             portfolio = risk_control.adjust_weights(portfolio)
-            
-            # 计算组合收益
-            if len(portfolio) > 0:
-                # 计算当日收益率
-                portfolio_return = self._calculate_daily_return(portfolio, df_test, date)
+
+            # 计划执行日期（T+2）
+            exec_date = None
+            exec_index = i + delay_days
+            if exec_index < len(dates):
+                exec_date = dates[exec_index]
+                pending_portfolios[exec_date] = {
+                    "portfolio": portfolio,
+                    "signal_date": date,
+                }
+
+            # 计算组合收益（持仓来自上一个执行日）
+            if t_plus_one:
+                portfolio_return = self._calculate_daily_return(current_portfolio, df_test, date)
                 returns.append(portfolio_return)
-                
-                # 记录交易
+            else:
+                # 非T+1：当日直接换仓参与收益
+                if date in pending_portfolios:
+                    current_portfolio = pending_portfolios[date]["portfolio"]
+                    current_signal_date = pending_portfolios[date]["signal_date"]
+                portfolio_return = self._calculate_daily_return(current_portfolio, df_test, date)
+                returns.append(portfolio_return)
+
+            if t_plus_one and date in pending_portfolios:
+                current_portfolio = pending_portfolios[date]["portfolio"]
+                current_signal_date = pending_portfolios[date]["signal_date"]
+
+            # 记录交易
+            if current_portfolio is not None and len(current_portfolio) > 0:
                 trades.append({
                     'date': date,
+                    'signal_date': current_signal_date,
+                    'exec_date': date,
                     'trend_state': trend_state,
-                    'num_positions': len(portfolio),
-                    'total_weight': portfolio['weight'].sum(),
+                    'num_positions': len(current_portfolio),
+                    'total_weight': current_portfolio['weight'].sum(),
                     'return': portfolio_return,
-                    'top_stocks': portfolio.nlargest(3, 'rank_score')['code'].tolist()
+                    'top_stocks': current_portfolio.nlargest(3, 'rank_score')['code'].tolist()
                 })
             else:
-                # 空仓
-                returns.append(0.0)
                 trades.append({
                     'date': date,
+                    'signal_date': current_signal_date,
+                    'exec_date': date,
                     'trend_state': trend_state,
                     'num_positions': 0,
                     'total_weight': 0.0,
-                    'return': 0.0,
+                    'return': portfolio_return,
                     'top_stocks': []
                 })
         
         return returns, trades
     
-    def _calculate_daily_return(self, portfolio: pd.DataFrame, df_test: pd.DataFrame, date) -> float:
+    def _calculate_daily_return(self, portfolio: Optional[pd.DataFrame], df_test: pd.DataFrame, date) -> float:
         """
         计算当日组合收益
         
@@ -291,6 +321,9 @@ class WalkForwardBacktest:
         Returns:
             组合收益率
         """
+        if portfolio is None or len(portfolio) == 0:
+            return 0.0
+
         if 'code' not in df_test.columns and 'stock' in df_test.columns:
             df_test = df_test.rename(columns={'stock': 'code'})
 
