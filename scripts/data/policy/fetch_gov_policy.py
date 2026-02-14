@@ -191,6 +191,7 @@ class _AnchorParser(HTMLParser):
 
 _DATE_PATTERN = re.compile(r"(20\d{2})[./-](\d{1,2})[./-](\d{1,2})")
 _DATE_PATTERN_CN = re.compile(r"(20\d{2})年(\d{1,2})月(\d{1,2})日")
+_DATE_PATTERN_MD = re.compile(r"(?:\[)?(\d{1,2})-(\d{1,2})(?:\])?")
 _IGNORE_TITLES = {
     "查看详细",
     "查看更多",
@@ -214,7 +215,17 @@ def _normalize_date(raw: str) -> Optional[str]:
     if not match:
         match = _DATE_PATTERN_CN.search(raw)
         if not match:
-            return None
+            match = _DATE_PATTERN_MD.search(raw)
+            if not match:
+                return None
+            month, day = match.groups()
+            today = pd.Timestamp.today()
+            month_i = int(month)
+            day_i = int(day)
+            year_i = today.year
+            if (month_i, day_i) > (today.month, today.day):
+                year_i -= 1
+            return f"{year_i}-{month_i:02d}-{day_i:02d}"
     year, month, day = match.groups()
     return f"{year}-{int(month):02d}-{int(day):02d}"
 
@@ -282,13 +293,7 @@ def _extract_href_and_title(block: str) -> Optional[Dict[str, str]]:
 
 
 def _extract_date_from_block(block: str) -> Optional[str]:
-    match = _DATE_PATTERN.search(block)
-    if not match:
-        match = _DATE_PATTERN_CN.search(block)
-        if not match:
-            return None
-    year, month, day = match.groups()
-    return f"{year}-{int(month):02d}-{int(day):02d}"
+    return _normalize_date(block)
 
 
 def _parse_blocks(content: str, base_url: Optional[str] = None) -> List[Dict[str, str]]:
