@@ -47,6 +47,8 @@ DEFAULT_INPUT_NAMES = {
         "tushare_reports.csv",
         "tushare_report.parquet",
         "tushare_report.csv",
+        "eastmoney_industry_reports.parquet",
+        "eastmoney_industry_reports.csv",
     ],
 }
 

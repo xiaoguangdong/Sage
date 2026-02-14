@@ -205,6 +205,24 @@ python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --section fo
 - `data/raw/policy/10jqka_reports.parquet`
 - `data/raw/policy/10jqka_forecast.parquet`
 
+### 2.6) 行业研报（东方财富）
+
+脚本：`scripts/data/policy/fetch_eastmoney_industry_reports.py`
+
+说明：
+- 行业级研报（替代 Tushare 行业研报权限）
+- 可按日期、评级、行业代码过滤
+
+示例：
+```bash
+python3 scripts/data/policy/fetch_eastmoney_industry_reports.py \
+  --begin-date 2024-01-01 --end-date 2024-12-31 \
+  --page-size 50 --sleep-seconds 1.0 --resume
+```
+
+默认输出（进入 `policy_signal_pipeline`）：
+- `data/raw/policy/eastmoney_industry_reports.parquet`
+
 ### 3) 政策信号管道
 
 脚本：`scripts/data/policy/policy_signal_pipeline.py`
@@ -213,6 +231,7 @@ python3 scripts/data/policy/fetch_10jqka_reports.py --symbol 002988 --section fo
 - `tushare_anns.parquet` / `tushare_anns.csv`（公告）
 - `gov_notices.parquet` / `gov_notices.csv`（政府网站）
 - `tushare_reports.parquet` / `tushare_reports.csv`（研报）
+- `eastmoney_industry_reports.parquet` / `eastmoney_industry_reports.csv`（行业研报）
 
 输出：
 - `data/processed/policy/policy_signals.parquet`
