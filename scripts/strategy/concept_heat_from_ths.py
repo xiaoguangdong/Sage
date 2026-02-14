@@ -3,6 +3,7 @@
 """
 基于同花顺板块指数(ths_daily)计算概念/板块热度因子
 输出：data/processed/concepts/concept_heat.parquet
+补充：概念信号输出见 scripts/strategy/concept_signals_from_ths.py
 """
 from __future__ import annotations
 
