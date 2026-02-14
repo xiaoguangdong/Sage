@@ -56,9 +56,7 @@ class MacroDataProcessor:
         if data_dir:
             self.data_dir = data_dir
         else:
-            macro_dir = Path(MACRO_DIR)
-            legacy_dir = PROJECT_ROOT / "data" / "tushare" / "macro"
-            self.data_dir = str(macro_dir if macro_dir.exists() else legacy_dir)
+            self.data_dir = str(Path(MACRO_DIR))
         self.macro_data = None
         self.industry_data = None
         self.northbound_data = None
@@ -317,11 +315,7 @@ class MacroDataProcessor:
         """
         nbs_path = os.path.join(self.data_dir, 'nbs_ppi_industry_2020.csv')
         if not os.path.exists(nbs_path):
-            legacy = PROJECT_ROOT / "data" / "tushare" / "macro" / "nbs_ppi_industry_2020.csv"
-            if legacy.exists():
-                nbs_path = str(legacy)
-            else:
-                return pd.DataFrame()
+            return pd.DataFrame()
 
         df = pd.read_csv(nbs_path)
         if df.empty or 'industry' not in df.columns:
@@ -672,11 +666,7 @@ class MacroDataProcessor:
         """
         industry_path = os.path.join(self.data_dir, '..', 'northbound', 'industry_northbound_flow.parquet')
         if not os.path.exists(industry_path):
-            legacy_path = PROJECT_ROOT / "data" / "tushare" / "northbound" / "industry_northbound_flow.parquet"
-            if legacy_path.exists():
-                industry_path = str(legacy_path)
-            else:
-                return pd.DataFrame()
+            return pd.DataFrame()
 
         df = pd.read_parquet(industry_path)
         if df.empty:
