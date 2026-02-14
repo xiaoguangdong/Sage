@@ -154,6 +154,12 @@ def match_gb_by_keywords(text: str, rules: List[Tuple[List[str], str]]) -> Optio
     return None
 
 
+def has_chinese(text: str) -> bool:
+    if not isinstance(text, str):
+        return False
+    return re.search(r"[\u4e00-\u9fff]", text) is not None
+
+
 def convert_doc_to_txt(path: Path) -> Path:
     if path.suffix.lower() == ".txt":
         return path
@@ -331,6 +337,25 @@ def main():
         )
 
     result_df = pd.DataFrame(results)
+
+    # 仅保留包含中文的产品名称
+    result_df = result_df[result_df["product_name"].apply(has_chinese)].copy()
+
+    # 按 product_name 去重，优先保留映射更完整的记录
+    source_rank = {
+        "industry_field": 4,
+        "desc_match": 3,
+        "name_match": 2,
+        "keyword_rule": 1,
+    }
+    result_df["has_sw"] = result_df["sw_industry"].notna().astype(int)
+    result_df["has_gb"] = result_df["gb_name"].notna().astype(int)
+    result_df["source_rank"] = result_df["map_source"].map(source_rank).fillna(0).astype(int)
+    result_df = (
+        result_df.sort_values(["has_sw", "has_gb", "source_rank"], ascending=False)
+        .drop_duplicates(subset=["product_name"], keep="first")
+        .drop(columns=["has_sw", "has_gb", "source_rank"])
+    )
 
     try:
         import yaml  # type: ignore
