@@ -18,6 +18,7 @@ import os
 import sys
 from pathlib import Path
 from typing import Dict, Optional, List
+from functools import reduce
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -61,7 +62,7 @@ class MacroDataProcessor:
         self.macro_data = None
         self.industry_data = None
         self.northbound_data = None
-        self.processed_dir = str(get_data_path("processed"))
+        self.processed_dir = str(get_data_path("processed", ensure=True))
     
     def load_tushare_macro(self) -> pd.DataFrame:
         """
@@ -134,16 +135,9 @@ class MacroDataProcessor:
                     temp = temp.rename(columns={'yield': 'yield_10y'})
                     yield_df = temp[['date', 'yield_10y']]
         
-        # 合并数据
-        macro = cpi.merge(ppi, on='date', how='outer')
-        macro = macro.merge(pmi, on='date', how='outer')
-        macro = macro.merge(yield_df, on='date', how='outer')
-        
-        # 按日期排序
-        macro = macro.sort_values('date').reset_index(drop=True)
-        
         # 加载社融和M2数据
         credit_path = os.path.join(self.data_dir, 'credit_data.parquet')
+        credit = pd.DataFrame()
         if os.path.exists(credit_path):
             credit = pd.read_parquet(credit_path)
             if 'date' in credit.columns:
@@ -156,9 +150,12 @@ class MacroDataProcessor:
                 credit['credit_growth'] = pd.to_numeric(credit['stk_endval'], errors='coerce').pct_change(12) * 100
 
             if 'credit_growth' in credit.columns:
-                macro = macro.merge(credit[['date', 'credit_growth']], on='date', how='left')
+                credit = credit[['date', 'credit_growth']]
+            else:
+                credit = pd.DataFrame()
         
         money_path = os.path.join(self.data_dir, 'money_supply.parquet')
+        money = pd.DataFrame()
         if os.path.exists(money_path):
             money = pd.read_parquet(money_path)
             if 'date' in money.columns:
@@ -168,7 +165,23 @@ class MacroDataProcessor:
 
             if 'm1_yoy' in money.columns and 'm2_yoy' in money.columns:
                 money['m1_m2_spread'] = money['m1_yoy'] - money['m2_yoy']
-                macro = macro.merge(money[['date', 'm1_yoy', 'm2_yoy', 'm1_m2_spread']], on='date', how='left')
+                money = money[['date', 'm1_yoy', 'm2_yoy', 'm1_m2_spread']]
+            else:
+                money = pd.DataFrame()
+
+        frames: List[pd.DataFrame] = []
+        for frame in [cpi, ppi, pmi, yield_df, credit, money]:
+            if frame is not None and not frame.empty:
+                frames.append(frame)
+
+        if frames:
+            macro = reduce(lambda left, right: left.merge(right, on='date', how='outer'), frames)
+        else:
+            macro = pd.DataFrame(columns=['date'])
+
+        # 按日期排序
+        if not macro.empty:
+            macro = macro.sort_values('date').reset_index(drop=True)
 
         # 确保关键列存在
         for col in ['credit_growth', 'm1_yoy', 'm2_yoy', 'm1_m2_spread']:
@@ -687,8 +700,10 @@ class MacroDataProcessor:
         industry_with_market = self.add_market_data(industry_cleaned, sw_list)
         if not industry_with_market.empty:
             industry_with_market = industry_with_market.sort_values(["sw_industry", "date"])
-            industry_with_market["rev_yoy"] = industry_with_market.groupby("sw_industry")["rev_yoy"].ffill()
-            industry_with_market["turnover_rate"] = industry_with_market.groupby("sw_industry")["turnover_rate"].ffill()
+            if "rev_yoy" in industry_with_market.columns:
+                industry_with_market["rev_yoy"] = industry_with_market.groupby("sw_industry")["rev_yoy"].ffill()
+            if "turnover_rate" in industry_with_market.columns:
+                industry_with_market["turnover_rate"] = industry_with_market.groupby("sw_industry")["turnover_rate"].ffill()
 
         # 4. 补齐字段
         industry_final = industry_with_market.copy()
