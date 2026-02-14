@@ -359,9 +359,10 @@ class MacroDataProcessor:
         if df.empty:
             return df
 
-        df = df[df["name"].isin(sw_list)].copy()
-        if df.empty:
-            return pd.DataFrame()
+        if sw_list:
+            filtered = df[df["name"].isin(sw_list)].copy()
+            if not filtered.empty:
+                df = filtered
 
         df["trade_date"] = pd.to_datetime(df["trade_date"].astype(str))
         df = df.sort_values(["name", "trade_date"])
@@ -446,9 +447,10 @@ class MacroDataProcessor:
         if df.empty or 'name' not in df.columns:
             return pd.DataFrame()
 
-        df = df[df['name'].isin(sw_list)].copy()
-        if df.empty:
-            return pd.DataFrame()
+        if sw_list:
+            filtered = df[df['name'].isin(sw_list)].copy()
+            if not filtered.empty:
+                df = filtered
 
         df['trade_date'] = pd.to_datetime(df['trade_date'].astype(str))
         df = df.sort_values(['name', 'trade_date'])
@@ -700,10 +702,10 @@ class MacroDataProcessor:
         industry_with_market = self.add_market_data(industry_cleaned, sw_list)
         if not industry_with_market.empty:
             industry_with_market = industry_with_market.sort_values(["sw_industry", "date"])
-            if "rev_yoy" in industry_with_market.columns:
-                industry_with_market["rev_yoy"] = industry_with_market.groupby("sw_industry")["rev_yoy"].ffill()
-            if "turnover_rate" in industry_with_market.columns:
-                industry_with_market["turnover_rate"] = industry_with_market.groupby("sw_industry")["turnover_rate"].ffill()
+            ffill_cols = ["rev_yoy", "turnover_rate", "pb_percentile", "pe_percentile", "rps_120"]
+            for col in ffill_cols:
+                if col in industry_with_market.columns:
+                    industry_with_market[col] = industry_with_market.groupby("sw_industry")[col].ffill()
 
         # 4. 补齐字段
         industry_final = industry_with_market.copy()
@@ -715,6 +717,8 @@ class MacroDataProcessor:
         if 'output_yoy' in industry_final.columns and 'rev_yoy' in industry_final.columns:
             mask = industry_final['inventory_yoy'].isna() & industry_final['output_yoy'].notna() & industry_final['rev_yoy'].notna()
             industry_final.loc[mask, 'inventory_yoy'] = industry_final.loc[mask, 'output_yoy'] - industry_final.loc[mask, 'rev_yoy']
+        if 'inventory_yoy' in industry_final.columns:
+            industry_final['inventory_yoy'] = industry_final.groupby("sw_industry")['inventory_yoy'].ffill()
 
         required_cols = [
             'sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
@@ -777,10 +781,34 @@ def main():
 
     report = {
         "macro": _coverage(data['macro'], ['date', 'credit_growth', 'pmi', 'cpi_yoy', 'yield_10y']),
-        "industry": _coverage(data['industry'], ['sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
-                                                'pb_percentile', 'pe_percentile', 'turnover_rate', 'rps_120',
-                                                'inventory_yoy', 'rev_yoy']),
+        "industry": _coverage(
+            data['industry'],
+            ['sw_industry', 'date', 'sw_ppi_yoy', 'fai_yoy',
+             'pb_percentile', 'pe_percentile', 'turnover_rate', 'rps_120',
+             'inventory_yoy', 'rev_yoy']
+        ),
         "northbound": _coverage(data['northbound'], ['sw_industry', 'trade_date', 'northbound_signal', 'industry_ratio']),
+        "causes": {
+            "macro": {
+                "credit_growth": "社融存量同比口径，前12个月无法计算。",
+                "pmi": "依赖tushare_pmi.parquet，缺失或未同步到raw目录。",
+                "cpi_yoy": "依赖tushare_cpi.parquet，缺失或未同步到raw目录。",
+                "yield_10y": "依赖tushare_yield_10y.parquet或yield_10y.parquet，早期日期可能为空。"
+            },
+            "industry": {
+                "sw_ppi_yoy": "行业PPI月度数据缺口或映射缺失。",
+                "pb_percentile": "依赖sw_valuation行业估值，早期或行业缺口。",
+                "pe_percentile": "依赖sw_valuation行业估值，早期或行业缺口。",
+                "turnover_rate": "依赖sw_daily_all的amount/float_mv，缺口或行业未覆盖。",
+                "rps_120": "需要120个交易日收益率，样本初期为空。",
+                "rev_yoy": "依赖fina_indicator并映射到行业，财报缺口或映射覆盖不足。",
+                "inventory_yoy": "由output_yoy - rev_yoy计算，rev_yoy为空则缺失。"
+            },
+            "northbound": {
+                "northbound_signal": "依赖northbound行业流数据，若行业或日期缺口则为空。",
+                "industry_ratio": "来自北向行业占比，原始vol/ratio缺口会导致缺失。"
+            }
+        }
     }
     report_path = os.path.join(output_dir, 'macro_alignment_report.json')
     with open(report_path, 'w', encoding='utf-8') as f:
