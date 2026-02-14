@@ -215,6 +215,22 @@ def run_ths_daily(
             progress_file.write_text(f"{code},{end_str}", encoding="utf-8")
 
 
+def run_ths_daily_all_by_month(
+    start_date: str = "20200101",
+    end_date: Optional[str] = None,
+    sleep_seconds: int = 40,
+    output_dir: Optional[Path] = None,
+) -> None:
+    """按月全量分页拉取 ths_daily（不输入指数）"""
+    run_ths_daily(
+        start_date=start_date,
+        end_date=end_date,
+        sleep_seconds=sleep_seconds,
+        all_by_month=True,
+        output_dir=output_dir,
+    )
+
+
 def run_concept_data_full(
     start_date: str = "20200101",
     end_date: Optional[str] = None,
