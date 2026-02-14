@@ -686,36 +686,34 @@ class MacroDataProcessor:
         """
         添加估值与RPS特征（无则留空）
         """
-        if industry_df is None or industry_df.empty:
-            return industry_df
+        if industry_df is None:
+            industry_df = pd.DataFrame()
 
         valuation_df = self.load_sw_valuation_features(sw_list)
         turnover_df = self.load_sw_turnover_rate(sw_list)
         stock_map = self.load_sw_stock_industry_map()
         rev_yoy_df = self.load_industry_rev_yoy(stock_map)
 
-        if valuation_df.empty:
-            valuation_df = pd.DataFrame()
+        if industry_df.empty:
+            frames = [valuation_df, turnover_df, rev_yoy_df]
+            frames = [f for f in frames if f is not None and not f.empty]
+            if not frames:
+                return industry_df
+            base = frames[0][['sw_industry', 'date']].drop_duplicates()
+            for frame in frames[1:]:
+                base = base.merge(frame[['sw_industry', 'date']].drop_duplicates(),
+                                  on=['sw_industry', 'date'], how='outer')
+            result = base
+        else:
+            result = industry_df.copy()
 
-        result = industry_df.copy()
         if not valuation_df.empty:
-            result = result.merge(
-                valuation_df,
-                on=['sw_industry', 'date'],
-                how='left'
-            )
+            result = result.merge(valuation_df, on=['sw_industry', 'date'], how='left')
         if not turnover_df.empty:
-            result = result.merge(
-                turnover_df,
-                on=['sw_industry', 'date'],
-                how='left'
-            )
+            result = result.merge(turnover_df, on=['sw_industry', 'date'], how='left')
         if not rev_yoy_df.empty:
-            result = result.merge(
-                rev_yoy_df,
-                on=['sw_industry', 'date'],
-                how='left'
-            )
+            result = result.merge(rev_yoy_df, on=['sw_industry', 'date'], how='left')
+
         return result
     
     def process_all(self) -> Dict[str, pd.DataFrame]:
