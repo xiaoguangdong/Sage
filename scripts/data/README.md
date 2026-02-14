@@ -146,6 +146,24 @@ python scripts/data/macro/align_nbs_industrial_data.py \
 说明：
 - 固定资产投资/价格指数会尝试使用 `config/sw_nbs_mapping.yaml` 将 NBS 行业名映射到申万一级。
 
+## 政策信号管道（MVP）
+
+脚本：`scripts/data/policy/policy_signal_pipeline.py`
+
+输入文件（放在 `data/raw/policy/` 或 `data/raw/tushare/policy/`）：
+- `tushare_anns.parquet` / `tushare_anns.csv`（公告）
+- `gov_notices.parquet` / `gov_notices.csv`（政府网站）
+- `tushare_reports.parquet` / `tushare_reports.csv`（研报）
+
+输出：
+- `data/processed/policy/policy_signals.parquet`
+- `data/processed/policy/policy_signals_summary.json`
+
+示例：
+```bash
+python scripts/data/policy/policy_signal_pipeline.py
+```
+
 ## Legacy 脚本
 
 历史脚本已移动至 `scripts/legacy/data/`，仅保留参考：
