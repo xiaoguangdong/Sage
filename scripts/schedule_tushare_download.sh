@@ -9,7 +9,7 @@ LOG_DIR="$PROJECT_DIR/logs/data"
 # 创建日志目录
 mkdir -p "$LOG_DIR"
 
-# 运行下载脚本
+# 运行下载脚本（统一入口）
 cd "$PROJECT_DIR"
 nohup venv/bin/python scripts/data/tushare_downloader.py --task daily_basic --resume > "$LOG_DIR/tushare_daily_basic.log" 2>&1 &
 nohup venv/bin/python scripts/data/tushare_downloader.py --task margin --resume > "$LOG_DIR/tushare_margin.log" 2>&1 &

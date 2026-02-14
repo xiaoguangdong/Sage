@@ -1,9 +1,9 @@
 #!/bin/bash
 # 概念成分股数据更新脚本
 # 使用方法：
-#   ./update_concept_data.sh init    # 初始化（获取基准数据）
-#   ./update_concept_data.sh update  # 周度更新
-#   ./update_concept_data.sh calc    # 只计算表现
+#   ./update_concept_data.sh init    # 初始化（获取概念列表与成分）
+#   ./update_concept_data.sh update  # 周度更新（获取概念列表与成分）
+#   ./update_concept_data.sh calc    # 仅刷新概念列表与成分（预留评分计算）
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
