@@ -74,8 +74,26 @@ def _daily_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, d
         current += timedelta(days=1)
 
 
+def _year_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
+    current = datetime(start.year, 1, 1)
+    while current.year <= end.year:
+        year_end = datetime(current.year, 12, 31)
+        if year_end > end:
+            year_end = end
+        yield current, year_end
+        current = datetime(current.year + 1, 1, 1)
+
+
 def _ensure_parent(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
+
+
+def _ts() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _log(message: str) -> None:
+    print(f"[{_ts()}] {message}")
 
 
 def _load_state(path: Path) -> Dict[str, Any]:
@@ -186,7 +204,7 @@ class TushareClient:
                 if attempt >= retries - 1:
                     raise
                 wait = (attempt + 1) * backoff
-                print(f"  请求失败: {exc}，{wait}s 后重试...")
+                _log(f"请求失败: {exc}，{wait}s 后重试...")
                 time.sleep(wait)
         return pd.DataFrame()
 
@@ -197,6 +215,7 @@ class TushareClient:
             page_params = dict(params)
             page_params["offset"] = offset
             page_params["limit"] = limit
+            _log(f"分页请求 {api} offset={offset} limit={limit}")
             df = self.request(api, page_params)
             if df is None or df.empty:
                 break
@@ -333,7 +352,7 @@ def run_task(
         windows = [win for win in windows if win[1] > last_end]
 
     if dry_run:
-        print(f"任务 {task.name} 将处理 {len(windows)} 个窗口")
+        _log(f"任务 {task.name} 将处理 {len(windows)} 个窗口")
         return
 
     client = TushareClient(sleep_seconds=sleep_seconds)
@@ -363,14 +382,14 @@ def run_task(
                 elif task.list_param:
                     params[task.list_param] = item
 
-            print(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
+            _log(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
             if task.pagination == "offset":
                 df = client.request_paged(task.api, params, limit=task.limit)
             else:
                 df = client.request(task.api, params)
 
             if df is None or df.empty:
-                print("  无数据")
+                _log("无数据")
                 if state_path:
                     _save_state(state_path, {"last_end": win_end})
                 continue
@@ -389,7 +408,7 @@ def run_task(
                 _save_state(state_path, {"last_end": win_end})
 
     if output_path.exists():
-        print(f"✅ 输出: {output_path}")
+        _log(f"✅ 输出: {output_path}")
 
 
 def main() -> None:
@@ -430,11 +449,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-def _year_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
-    current = datetime(start.year, 1, 1)
-    while current.year <= end.year:
-        year_end = datetime(current.year, 12, 31)
-        if year_end > end:
-            year_end = end
-        yield current, year_end
-        current = datetime(current.year + 1, 1, 1)
