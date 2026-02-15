@@ -31,6 +31,8 @@ class SelectionConfig:
     # 特征
     feature_cols: Optional[Tuple[str, ...]] = None
     rule_weights: Optional[Dict[str, float]] = None
+    min_feature_count: int = 8
+    max_feature_count: int = 30
 
     # 模型参数
     lgbm_params: Dict[str, object] = field(default_factory=lambda: {
@@ -70,6 +72,7 @@ class StockSelector:
         self.config = config or SelectionConfig()
         self.model = None
         self.feature_cols: Optional[List[str]] = None
+        self.feature_medians: Dict[str, float] = {}
         self.is_trained = False
 
     # -----------------------------
@@ -84,7 +87,11 @@ class StockSelector:
         train_df = train_df.dropna(subset=["label"])
 
         feature_cols = self._infer_feature_cols(train_df)
-        train_df = train_df.dropna(subset=feature_cols)
+        train_df = self._coerce_numeric_features(train_df, feature_cols)
+        feature_cols = self._select_usable_features(train_df, feature_cols)
+        if not feature_cols:
+            raise ValueError("训练特征不可用，请检查特征覆盖率")
+        train_df = self._fill_missing_features(train_df, feature_cols, fit=True)
 
         if train_df.empty:
             raise ValueError("训练数据为空，请检查输入数据与标签窗口")
@@ -111,7 +118,11 @@ class StockSelector:
 
         df_features = self.prepare_features(df)
         feature_cols = self.feature_cols or self._infer_feature_cols(df_features)
-        df_features = df_features.dropna(subset=feature_cols)
+        missing_cols = [c for c in feature_cols if c not in df_features.columns]
+        for col in missing_cols:
+            df_features[col] = np.nan
+        df_features = self._coerce_numeric_features(df_features, feature_cols)
+        df_features = self._fill_missing_features(df_features, feature_cols, fit=False)
 
         if df_features.empty:
             raise ValueError("预测数据为空，请检查输入数据")
@@ -124,6 +135,7 @@ class StockSelector:
         df_result = df_features.copy()
         df_result["score"] = scores
         df_result["rank"] = self._rank_by_date(df_result)
+        df_result["confidence"] = self._confidence_by_date(df_result)
         return df_result
 
     def select_top(self, df: pd.DataFrame, top_n: int = 10, trade_date: Optional[str] = None) -> pd.DataFrame:
@@ -155,16 +167,74 @@ class StockSelector:
 
         group = df.groupby(code_col, group_keys=False)
         returns = group[price_col].pct_change()
+        df["ret_1d"] = returns
 
         df["ret_5d"] = group[price_col].pct_change(5)
+        df["ret_10d"] = group[price_col].pct_change(10)
         df["ret_20d"] = group[price_col].pct_change(20)
         df["ret_60d"] = group[price_col].pct_change(60)
+        df["ma_10_ratio"] = df[price_col] / group[price_col].transform(lambda s: s.rolling(10).mean())
         df["ma_20_ratio"] = df[price_col] / group[price_col].transform(lambda s: s.rolling(20).mean())
+        df["ma_60_ratio"] = df[price_col] / group[price_col].transform(lambda s: s.rolling(60).mean())
         df["vol_20d"] = returns.groupby(df[code_col]).rolling(20).std().reset_index(level=0, drop=True)
+        df["downside_vol_20d"] = returns.where(returns < 0).groupby(df[code_col]).rolling(20).std().reset_index(level=0, drop=True)
+        rolling_dd = group[price_col].transform(lambda s: s / s.rolling(60).max() - 1)
+        df["max_drawdown_60d"] = rolling_dd.groupby(df[code_col]).rolling(60).min().reset_index(level=0, drop=True)
 
         if "turnover" in df.columns:
             df["turnover_20d_mean"] = group["turnover"].transform(lambda s: s.rolling(20).mean())
             df["turnover_20d_std"] = group["turnover"].transform(lambda s: s.rolling(20).std())
+            df["turnover_ratio_20d"] = df["turnover"] / df["turnover_20d_mean"].replace(0, np.nan)
+            df["liquidity_stability"] = -df["turnover_20d_std"]
+
+        if "amount" in df.columns:
+            df["amount_20d_mean"] = group["amount"].transform(lambda s: s.rolling(20).mean())
+            df["amount_ratio_20d"] = df["amount"] / df["amount_20d_mean"].replace(0, np.nan)
+
+        if self.config.industry_col and self.config.industry_col in df.columns:
+            df["industry_ret_20d"] = df.groupby([date_col, self.config.industry_col])["ret_20d"].transform("mean")
+            df["industry_ret_60d"] = df.groupby([date_col, self.config.industry_col])["ret_60d"].transform("mean")
+
+        pe_col = self._first_existing_column(df, ["pe_ttm", "pe", "peTTM"])
+        pb_col = self._first_existing_column(df, ["pb", "pbMRQ"])
+        roe_col = self._first_existing_column(df, ["roe", "roe_dt", "roe_ttm"])
+        roic_col = self._first_existing_column(df, ["roic", "roic_ttm"])
+        gross_margin_col = self._first_existing_column(df, ["gross_margin", "grossprofit_margin"])
+        profit_yoy_col = self._first_existing_column(df, ["netprofit_yoy", "profit_yoy", "dt_netprofit_yoy"])
+        debt_assets_col = self._first_existing_column(df, ["debt_to_assets", "debt_to_asset"])
+        ocf_profit_col = self._first_existing_column(df, ["ocf_to_profit", "ocfps"])
+        nb_hold_col = self._first_existing_column(df, ["northbound_hold_ratio", "hold_ratio"])
+        nb_flow_col = self._first_existing_column(df, ["northbound_net_flow", "northbound_net_flow_20d", "net_flow"])
+        beta_col = self._first_existing_column(df, ["beta_120d", "beta"])
+
+        if pe_col and pe_col != "pe_ttm":
+            df["pe_ttm"] = pd.to_numeric(df[pe_col], errors="coerce")
+        if pb_col and pb_col != "pb":
+            df["pb"] = pd.to_numeric(df[pb_col], errors="coerce")
+        if roe_col and roe_col != "roe":
+            df["roe"] = pd.to_numeric(df[roe_col], errors="coerce")
+        if roic_col and roic_col != "roic":
+            df["roic"] = pd.to_numeric(df[roic_col], errors="coerce")
+        if gross_margin_col and gross_margin_col != "gross_margin":
+            df["gross_margin"] = pd.to_numeric(df[gross_margin_col], errors="coerce")
+        if profit_yoy_col and profit_yoy_col != "netprofit_yoy":
+            df["netprofit_yoy"] = pd.to_numeric(df[profit_yoy_col], errors="coerce")
+        if debt_assets_col and debt_assets_col != "debt_to_assets":
+            df["debt_to_assets"] = pd.to_numeric(df[debt_assets_col], errors="coerce")
+        if ocf_profit_col and ocf_profit_col != "ocf_to_profit":
+            df["ocf_to_profit"] = pd.to_numeric(df[ocf_profit_col], errors="coerce")
+        if nb_hold_col and nb_hold_col != "northbound_hold_ratio":
+            df["northbound_hold_ratio"] = pd.to_numeric(df[nb_hold_col], errors="coerce")
+        if nb_flow_col and nb_flow_col != "northbound_net_flow_20d":
+            flow = pd.to_numeric(df[nb_flow_col], errors="coerce")
+            df["northbound_net_flow_20d"] = flow.groupby(df[code_col]).rolling(20).mean().reset_index(level=0, drop=True)
+        if beta_col and beta_col != "beta_120d":
+            df["beta_120d"] = pd.to_numeric(df[beta_col], errors="coerce")
+
+        if "pe_ttm" in df.columns:
+            df["pe_percentile"] = df.groupby(date_col)["pe_ttm"].rank(pct=True)
+        if "pb" in df.columns:
+            df["pb_percentile"] = df.groupby(date_col)["pb"].rank(pct=True)
 
         df["trade_date"] = df[date_col]
         return df
@@ -294,6 +364,33 @@ class StockSelector:
         if self.config.feature_cols:
             return list(self.config.feature_cols)
 
+        preferred = [
+            "roe",
+            "roic",
+            "gross_margin",
+            "netprofit_yoy",
+            "debt_to_assets",
+            "ocf_to_profit",
+            "pe_percentile",
+            "pb_percentile",
+            "ret_5d",
+            "ret_10d",
+            "ret_20d",
+            "ret_60d",
+            "industry_ret_20d",
+            "industry_ret_60d",
+            "ma_20_ratio",
+            "ma_60_ratio",
+            "northbound_hold_ratio",
+            "northbound_net_flow_20d",
+            "turnover_ratio_20d",
+            "amount_ratio_20d",
+            "vol_20d",
+            "downside_vol_20d",
+            "max_drawdown_60d",
+            "beta_120d",
+            "liquidity_stability",
+        ]
         exclude = {
             self.config.date_col,
             self.config.code_col,
@@ -304,7 +401,19 @@ class StockSelector:
             exclude.add(self.config.industry_col)
 
         numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-        return [c for c in numeric_cols if c not in exclude]
+        leak_patterns = ("label", "future", "target", "fwd", "next_")
+        selected = [c for c in preferred if c in numeric_cols and c not in exclude]
+        selected = [c for c in selected if not any(p in c.lower() for p in leak_patterns)]
+
+        if len(selected) < max(1, int(self.config.min_feature_count)):
+            fallback = [c for c in numeric_cols if c not in exclude]
+            fallback = [c for c in fallback if not any(p in c.lower() for p in leak_patterns)]
+            selected = fallback
+
+        max_count = int(self.config.max_feature_count) if self.config.max_feature_count else 30
+        if max_count > 0:
+            selected = selected[:max_count]
+        return selected
 
     def _validate_columns(self, df: pd.DataFrame, columns: Iterable[str]) -> None:
         missing = [c for c in columns if c not in df.columns]
@@ -316,3 +425,52 @@ class StockSelector:
         if date_col in df.columns:
             return df.groupby(date_col)["score"].rank(ascending=False, method="first")
         return df["score"].rank(ascending=False, method="first")
+
+    def _confidence_by_date(self, df: pd.DataFrame) -> pd.Series:
+        date_col = self.config.date_col
+        if date_col in df.columns:
+            return df.groupby(date_col)["score"].rank(pct=True)
+        return df["score"].rank(pct=True)
+
+    def _first_existing_column(self, df: pd.DataFrame, candidates: Sequence[str]) -> Optional[str]:
+        for col in candidates:
+            if col in df.columns:
+                return col
+        return None
+
+    def _coerce_numeric_features(self, df: pd.DataFrame, feature_cols: Sequence[str]) -> pd.DataFrame:
+        for col in feature_cols:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+        return df
+
+    def _select_usable_features(self, df: pd.DataFrame, feature_cols: Sequence[str]) -> List[str]:
+        usable: List[str] = []
+        for col in feature_cols:
+            if col not in df.columns:
+                continue
+            series = pd.to_numeric(df[col], errors="coerce")
+            coverage = float(series.notna().mean()) if len(series) else 0.0
+            if coverage < 0.15:
+                continue
+            if series.dropna().nunique() <= 1:
+                continue
+            usable.append(col)
+        return usable
+
+    def _fill_missing_features(self, df: pd.DataFrame, feature_cols: Sequence[str], fit: bool) -> pd.DataFrame:
+        date_col = self.config.date_col
+        if fit:
+            self.feature_medians = {}
+
+        if date_col in df.columns:
+            for col in feature_cols:
+                df[col] = df.groupby(date_col)[col].transform(lambda s: s.fillna(s.median()))
+
+        for col in feature_cols:
+            if fit:
+                median = float(df[col].median()) if df[col].notna().any() else 0.0
+                self.feature_medians[col] = median
+            fill_value = self.feature_medians.get(col, 0.0)
+            df[col] = df[col].fillna(fill_value)
+        return df

@@ -30,6 +30,16 @@ class TestStockSelector(unittest.TestCase):
                     "ts_code": code,
                     "close": price[i],
                     "turnover": turnover[i],
+                    "amount": float(price[i] * 1e6),
+                    "pe_ttm": 15.0 + i * 0.02,
+                    "pb": 1.2 + i * 0.005,
+                    "roe_dt": 8.0 + (i % 20) * 0.1,
+                    "grossprofit_margin": 25.0 + (i % 15) * 0.2,
+                    "netprofit_yoy": 10.0 + (i % 12),
+                    "debt_to_assets": 45.0 + (i % 8),
+                    "ocfps": 1.0 + (i % 10) * 0.05,
+                    "northbound_hold_ratio": 0.02 + (i % 5) * 0.001,
+                    "northbound_net_flow": 1_000_000 + i * 1000,
                     "industry_l1": industries[code],
                 })
 
@@ -60,6 +70,8 @@ class TestStockSelector(unittest.TestCase):
         result = selector.predict(self.df.tail(90))
         self.assertIn("score", result.columns)
         self.assertIn("rank", result.columns)
+        self.assertIn("confidence", result.columns)
+        self.assertTrue(((result["confidence"] >= 0) & (result["confidence"] <= 1)).all())
 
     def test_select_top(self):
         selector = StockSelector(SelectionConfig(model_type="rule", label_horizons=(20,), label_weights=(1.0,)))
@@ -67,6 +79,16 @@ class TestStockSelector(unittest.TestCase):
         last_date = self.df["trade_date"].max()
         picked = selector.select_top(self.df, top_n=2, trade_date=last_date)
         self.assertLessEqual(len(picked), 2)
+
+    def test_feature_inference_excludes_leakage_columns(self):
+        selector = StockSelector(SelectionConfig(model_type="rule", label_horizons=(20,), label_weights=(1.0,)))
+        feature_df = selector.prepare_features(self.df)
+        feature_df["future_return_20d"] = 0.1
+        feature_df["target_rank"] = 0.5
+        feature_cols = selector._infer_feature_cols(feature_df)
+        self.assertTrue(all("future" not in c.lower() for c in feature_cols))
+        self.assertTrue(all("target" not in c.lower() for c in feature_cols))
+        self.assertLessEqual(len(feature_cols), selector.config.max_feature_count)
 
 
 if __name__ == "__main__":
