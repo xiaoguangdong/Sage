@@ -15,11 +15,12 @@ A股主线逻辑识别与选股系统
 import pandas as pd
 import numpy as np
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-from scripts.data._shared.runtime import get_tushare_root, get_data_path
+from scripts.data._shared.runtime import get_tushare_root, get_data_path, get_project_root
 
 class MainlineLogicSystem:
     """主线逻辑识别系统"""
@@ -31,10 +32,16 @@ class MainlineLogicSystem:
         Args:
             data_dir: 数据目录
         """
-        self.data_dir = data_dir or str(get_tushare_root())
+        primary_root = Path(data_dir) if data_dir else get_tushare_root()
+        legacy_root = get_project_root() / "data" / "tushare"
+        self.data_roots = [str(primary_root)]
+        if str(legacy_root) != str(primary_root):
+            self.data_roots.append(str(legacy_root))
+
+        self.data_dir = self.data_roots[0]
         self.factors_dir = str(get_data_path("processed", "factors", ensure=True))
-        self.sectors_dir = os.path.join(self.data_dir, 'sectors')
-        self.sw_dir = os.path.join(self.data_dir, 'sw_industry')
+        self.sectors_dir = self._resolve_dir("sectors")
+        self.sw_dir = self._resolve_dir("sw_industry")
         self.signals_dir = str(get_data_path("signals", ensure=True))
         self.concept_processed_dir = str(get_data_path("processed", "concepts", ensure=True))
         
@@ -64,6 +71,20 @@ class MainlineLogicSystem:
         # 概念偏置权重（用于行业得分调整）
         self.concept_bias_weight = 0.15
         self.concept_overheat_penalty = 0.10
+
+    def _resolve_dir(self, subdir):
+        for root in self.data_roots:
+            candidate = os.path.join(root, subdir)
+            if os.path.exists(candidate):
+                return candidate
+        return os.path.join(self.data_roots[0], subdir)
+
+    def _resolve_file(self, *parts):
+        for root in self.data_roots:
+            candidate = os.path.join(root, *parts)
+            if os.path.exists(candidate):
+                return candidate
+        return os.path.join(self.data_roots[0], *parts)
     
     def load_data(self):
         """加载数据"""
@@ -72,7 +93,7 @@ class MainlineLogicSystem:
         # 加载日线数据
         daily_files = []
         for year in range(2020, 2027):
-            filepath = os.path.join(self.data_dir, 'daily', f'daily_{year}.parquet')
+            filepath = self._resolve_file('daily', f'daily_{year}.parquet')
             if os.path.exists(filepath):
                 daily_files.append(filepath)
         
@@ -82,7 +103,7 @@ class MainlineLogicSystem:
             print(f"  ✓ 日线数据: {len(self.daily)} 条记录")
         
         # 加载基础数据
-        basic_file = os.path.join(self.data_dir, 'daily_basic_all.parquet')
+        basic_file = self._resolve_file('daily_basic_all.parquet')
         if os.path.exists(basic_file):
             self.daily_basic = pd.read_parquet(basic_file)
             self.daily_basic['trade_date'] = pd.to_datetime(self.daily_basic['trade_date'])
@@ -91,7 +112,7 @@ class MainlineLogicSystem:
         # 加载财务数据
         fina_files = []
         for year in range(2020, 2026):
-            filepath = os.path.join(self.data_dir, 'fundamental', f'fina_indicator_{year}.parquet')
+            filepath = self._resolve_file('fundamental', f'fina_indicator_{year}.parquet')
             if os.path.exists(filepath):
                 fina_files.append(filepath)
         
@@ -100,7 +121,7 @@ class MainlineLogicSystem:
             print(f"  ✓ 财务数据: {len(self.fina_indicator)} 条记录")
         
         # 加载指数数据
-        index_file = os.path.join(self.data_dir, 'index', 'index_ohlc_all.parquet')
+        index_file = self._resolve_file('index', 'index_ohlc_all.parquet')
         if os.path.exists(index_file):
             self.index_data = pd.read_parquet(index_file)
             self.index_data['trade_date'] = pd.to_datetime(self.index_data['date'])
@@ -418,7 +439,7 @@ class MainlineLogicSystem:
         if self.industry_members is not None:
             # 按行业分组
             for industry_name, group in self.industry_members.groupby('industry_name'):
-                stocks = group['con_code'].tolist()
+                stocks = group['ts_code'].tolist()
                 
                 bias = concept_bias_map.get(industry_name)
                 score, details = self.calculate_sector_score(stocks, date, industry_name, concept_bias=bias)
@@ -532,7 +553,7 @@ class MainlineLogicSystem:
             
             # 获取板块内股票
             if self.industry_members is not None and sector_name in self.industry_members['industry_name'].values:
-                stocks = self.industry_members[self.industry_members['industry_name'] == sector_name]['con_code'].tolist()
+                stocks = self.industry_members[self.industry_members['industry_name'] == sector_name]['ts_code'].tolist()
             elif self.concept_details is not None and sector_name in self.concept_details['concept_name'].values:
                 stocks = self.concept_details[self.concept_details['concept_name'] == sector_name]['ts_code'].tolist()
             else:
