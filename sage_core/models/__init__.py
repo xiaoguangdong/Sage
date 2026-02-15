@@ -4,6 +4,16 @@
 from .trend_model import TrendModelRule, TrendModelLGBM, TrendModelHMM, create_trend_model
 from .entry_model import EntryModelLR
 from .stock_selector import StockSelector, SelectionConfig
+from .strategy_governance import (
+    SIGNAL_SCHEMA,
+    SUPPORTED_STRATEGIES,
+    StrategyGovernanceConfig,
+    SeedBalanceStrategy,
+    ChallengerConfig,
+    MultiAlphaChallengerStrategies,
+    ChampionChallengerEngine,
+    normalize_strategy_id,
+)
 
 try:
     from .rank_model import RankModelLGBM
@@ -18,5 +28,13 @@ __all__ = [
     'RankModelLGBM',
     'EntryModelLR',
     'StockSelector',
-    'SelectionConfig'
+    'SelectionConfig',
+    'SIGNAL_SCHEMA',
+    'SUPPORTED_STRATEGIES',
+    'StrategyGovernanceConfig',
+    'SeedBalanceStrategy',
+    'ChallengerConfig',
+    'MultiAlphaChallengerStrategies',
+    'ChampionChallengerEngine',
+    'normalize_strategy_id',
 ]

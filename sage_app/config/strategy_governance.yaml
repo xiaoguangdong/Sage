@@ -1,0 +1,27 @@
+# 选股策略治理配置（Champion / Challenger）
+
+strategy_governance:
+  # 当前执行层冠军策略（线上唯一）
+  active_champion_id: seed_balance_strategy
+  champion_source: manual
+  manual_effective_date: null
+  manual_reason: null
+
+  # 影子运行策略
+  challengers:
+    - balance_strategy_v1
+    - positive_strategy_v1
+    - value_strategy_v1
+
+# 挑战者正向策略（positive）的组合权重
+challenger_weights:
+  positive_growth_weight: 0.7
+  positive_frontier_weight: 0.3
+
+# Seed Balance Strategy 默认模型配置
+seed_balance_strategy:
+  model_type: lgbm
+  label_horizons: [20, 60, 120]
+  label_weights: [0.5, 0.3, 0.2]
+  risk_adjusted: true
+  industry_col: industry_l1
