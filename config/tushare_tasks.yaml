@@ -166,18 +166,14 @@ tasks:
     state: "data/states/fina_indicator_vip.json"
     output: "fina_indicator_vip/fina_indicator_vip_all.parquet"
 
-  tushare_concept_list:
-    api: concept
-    mode: single
-    output: "sectors/concepts.parquet"
-
-  tushare_concept_detail:
-    api: concept_detail
+  ths_member:
+    api: ths_member
     mode: list
-    list_file: "data/raw/tushare/sectors/concepts.parquet"
-    list_column: "code"
-    list_param: id
-    output: "sectors/concept_detail.parquet"
+    list_file: "data/raw/tushare/concepts/ths_index.parquet"
+    list_column: "ts_code"
+    list_param: ts_code
+    state: "data/states/ths_member.json"
+    output: "concepts/ths_member.parquet"
 
   northbound_flow:
     api: moneyflow_hsgt

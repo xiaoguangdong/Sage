@@ -1,9 +1,9 @@
 #!/bin/bash
-# 概念成分股数据更新脚本
+# 概念板块数据更新脚本
 # 使用方法：
-#   ./update_concept_data.sh init    # 初始化（获取概念列表与成分）
-#   ./update_concept_data.sh update  # 周度更新（获取概念列表与成分）
-#   ./update_concept_data.sh calc    # 仅刷新概念列表与成分（预留评分计算）
+#   ./update_concept_data.sh init    # 初始化（获取同花顺概念列表与成分）
+#   ./update_concept_data.sh update  # 周度更新（获取同花顺概念列表与成分）
+#   ./update_concept_data.sh calc    # 仅刷新同花顺概念列表与成分（预留评分计算）
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -16,19 +16,19 @@ source venv/bin/activate
 # 执行脚本
 case "$1" in
     init)
-        echo "=== 初始化：获取概念列表与成分 ==="
-        python scripts/data/tushare_downloader.py --task tushare_concept_list
-        python scripts/data/tushare_downloader.py --task tushare_concept_detail
+        echo "=== 初始化：获取同花顺概念列表与成分 ==="
+        python scripts/data/tushare_downloader.py --task ths_index
+        python scripts/data/tushare_downloader.py --task ths_member
         ;;
     update)
-        echo "=== 周度更新：获取概念列表与成分 ==="
-        python scripts/data/tushare_downloader.py --task tushare_concept_list
-        python scripts/data/tushare_downloader.py --task tushare_concept_detail
+        echo "=== 周度更新：获取同花顺概念列表与成分 ==="
+        python scripts/data/tushare_downloader.py --task ths_index
+        python scripts/data/tushare_downloader.py --task ths_member
         ;;
     calc)
-        echo "=== 计算概念表现（当前未实现，先更新概念成分） ==="
-        python scripts/data/tushare_downloader.py --task tushare_concept_list
-        python scripts/data/tushare_downloader.py --task tushare_concept_detail
+        echo "=== 计算概念表现（当前未实现，先更新同花顺概念成分） ==="
+        python scripts/data/tushare_downloader.py --task ths_index
+        python scripts/data/tushare_downloader.py --task ths_member
         ;;
     *)
         echo "使用方法："

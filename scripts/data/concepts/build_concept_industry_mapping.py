@@ -1,35 +1,92 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-基于概念成分股生成“概念→申万L1行业”映射与覆盖率统计
+基于同花顺概念成分(ths_member)生成“概念→申万L1行业”映射与覆盖率统计
 """
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Tuple
 
 import pandas as pd
 
 from scripts.data._shared.runtime import get_data_path
 
-
-def _pick_col(columns: List[str], candidates: List[str]) -> Optional[str]:
-    for name in candidates:
-        if name in columns:
-            return name
-    return None
-
-
-def load_concept_detail(path: Path) -> pd.DataFrame:
+def load_ths_member(path: Path) -> pd.DataFrame:
     if not path.exists():
-        raise FileNotFoundError(f"概念成分文件不存在: {path}")
+        raise FileNotFoundError(f"同花顺概念成分文件不存在: {path}")
     if path.suffix == ".parquet":
         df = pd.read_parquet(path)
     else:
         df = pd.read_csv(path)
     return df
+
+
+def load_ths_index(path: Path) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame(columns=["ts_code", "name"])
+    if path.suffix == ".parquet":
+        df = pd.read_parquet(path)
+    else:
+        df = pd.read_csv(path)
+    return df
+
+
+def _looks_like_concept_code(series: pd.Series) -> bool:
+    sample = series.dropna().astype(str).head(50)
+    if sample.empty:
+        return False
+    return sample.str.endswith(".TI").mean() > 0.6
+
+
+def normalize_ths_member(member_df: pd.DataFrame, index_df: pd.DataFrame) -> pd.DataFrame:
+    cols = member_df.columns.tolist()
+    concept_code_col = None
+    stock_col = None
+    concept_name_col = "concept_name" if "concept_name" in cols else None
+
+    for candidate in ["concept_code", "index_code", "id", "ts_code", "code"]:
+        if candidate in cols and _looks_like_concept_code(member_df[candidate]):
+            concept_code_col = candidate
+            break
+    if concept_code_col is None:
+        for candidate in ["concept_code", "index_code", "id", "ts_code", "code"]:
+            if candidate in cols:
+                concept_code_col = candidate
+                break
+
+    for candidate in ["ts_code", "con_code", "stock_code", "code", "symbol"]:
+        if candidate in cols and candidate != concept_code_col:
+            stock_col = candidate
+            break
+
+    if concept_code_col is None or stock_col is None:
+        raise ValueError(f"ths_member 字段不足，无法识别概念与成分列: {cols}")
+
+    normalized = member_df.rename(columns={concept_code_col: "concept_code", stock_col: "ts_code"}).copy()
+    normalized["concept_code"] = normalized["concept_code"].astype(str)
+    normalized["ts_code"] = normalized["ts_code"].astype(str)
+
+    if not concept_name_col:
+        for candidate in ["name", "index_name"]:
+            if candidate in cols:
+                concept_name_col = candidate
+                break
+    if concept_name_col:
+        normalized = normalized.rename(columns={concept_name_col: "concept_name"})
+
+    if "concept_name" not in normalized.columns and not index_df.empty and "ts_code" in index_df.columns:
+        name_col = "name" if "name" in index_df.columns else ("index_name" if "index_name" in index_df.columns else None)
+        if name_col:
+            names = index_df[["ts_code", name_col]].rename(columns={"ts_code": "concept_code", name_col: "concept_name"})
+            normalized = normalized.merge(names, on="concept_code", how="left")
+
+    if "concept_name" not in normalized.columns:
+        normalized["concept_name"] = normalized["concept_code"]
+
+    return normalized[["concept_code", "concept_name", "ts_code"]].drop_duplicates()
 
 
 def load_sw_l1(path: Path) -> pd.DataFrame:
@@ -58,29 +115,7 @@ def build_mapping(
     stock_map: pd.DataFrame,
     min_ratio: float = 0.2,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict]:
-    cols = concept_df.columns.tolist()
-    concept_code_col = _pick_col(cols, ["id", "concept_id", "concept_code", "code"])
-    concept_name_col = _pick_col(cols, ["concept_name", "name", "concept"])
-    stock_col = _pick_col(cols, ["ts_code", "con_code", "stock_code", "symbol"])
-
-    if not stock_col:
-        raise ValueError("概念成分缺少股票列（ts_code/con_code/symbol）")
-
-    df = concept_df.copy()
-    df = df.rename(columns={stock_col: "ts_code"})
-    if concept_code_col:
-        df = df.rename(columns={concept_code_col: "concept_code"})
-    if concept_name_col:
-        df = df.rename(columns={concept_name_col: "concept_name"})
-
-    if "concept_code" not in df.columns:
-        df["concept_code"] = df["ts_code"].astype(str)
-    if "concept_name" not in df.columns:
-        df["concept_name"] = df["concept_code"]
-
-    df["ts_code"] = df["ts_code"].astype(str)
-
-    merged = df.merge(stock_map, on="ts_code", how="left")
+    merged = concept_df.merge(stock_map, on="ts_code", how="left")
     total_by_concept = merged.groupby("concept_code")["ts_code"].nunique().rename("total_stocks")
     mapped = merged.dropna(subset=["industry_name"]).copy()
 
@@ -138,11 +173,14 @@ def main() -> None:
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("processed", "concepts", ensure=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    concept_path = get_data_path("raw", "tushare", "sectors") / "concept_detail.parquet"
+    concept_path = get_data_path("raw", "tushare", "concepts") / "ths_member.parquet"
+    ths_index_path = get_data_path("raw", "tushare", "concepts") / "ths_index.parquet"
     l1_path = get_data_path("raw", "tushare", "sw_industry") / "sw_industry_l1.parquet"
     member_path = get_data_path("raw", "tushare", "sw_industry") / "sw_index_member.parquet"
 
-    concept_df = load_concept_detail(concept_path)
+    ths_member_df = load_ths_member(concept_path)
+    ths_index_df = load_ths_index(ths_index_path)
+    concept_df = normalize_ths_member(ths_member_df, ths_index_df)
     l1_df = load_sw_l1(l1_path)
     member_df = load_sw_index_member(member_path)
     stock_map = build_stock_industry_map(member_df, l1_df)

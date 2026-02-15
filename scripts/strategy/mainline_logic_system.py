@@ -85,6 +85,63 @@ class MainlineLogicSystem:
             if os.path.exists(candidate):
                 return candidate
         return os.path.join(self.data_roots[0], *parts)
+
+    @staticmethod
+    def _looks_like_concept_code(series: pd.Series) -> bool:
+        sample = series.dropna().astype(str).head(50)
+        if sample.empty:
+            return False
+        return sample.str.endswith(".TI").mean() > 0.6
+
+    def _normalize_ths_member(self, members: pd.DataFrame, index_df: pd.DataFrame | None = None) -> pd.DataFrame:
+        cols = members.columns.tolist()
+        concept_code_col = None
+        stock_col = None
+
+        for candidate in ["concept_code", "index_code", "id", "ts_code", "code"]:
+            if candidate in cols and self._looks_like_concept_code(members[candidate]):
+                concept_code_col = candidate
+                break
+        if concept_code_col is None:
+            for candidate in ["concept_code", "index_code", "id", "ts_code", "code"]:
+                if candidate in cols:
+                    concept_code_col = candidate
+                    break
+
+        for candidate in ["ts_code", "con_code", "stock_code", "code", "symbol"]:
+            if candidate in cols and candidate != concept_code_col:
+                if candidate == "ts_code" and concept_code_col == "ts_code":
+                    continue
+                stock_col = candidate
+                break
+
+        if not concept_code_col or not stock_col:
+            raise ValueError(f"ths_member 字段不足，无法识别概念和成分列: {cols}")
+
+        concept_name_col = "concept_name" if "concept_name" in cols else None
+        if not concept_name_col:
+            for candidate in ["index_name", "name"]:
+                if candidate in cols:
+                    concept_name_col = candidate
+                    break
+
+        normalized = members.rename(columns={concept_code_col: "concept_code", stock_col: "ts_code"}).copy()
+        normalized["concept_code"] = normalized["concept_code"].astype(str)
+        normalized["ts_code"] = normalized["ts_code"].astype(str)
+
+        if concept_name_col:
+            normalized = normalized.rename(columns={concept_name_col: "concept_name"})
+
+        if "concept_name" not in normalized.columns and index_df is not None and not index_df.empty:
+            name_col = "name" if "name" in index_df.columns else ("index_name" if "index_name" in index_df.columns else None)
+            if name_col and "ts_code" in index_df.columns:
+                names = index_df[["ts_code", name_col]].rename(columns={"ts_code": "concept_code", name_col: "concept_name"})
+                normalized = normalized.merge(names, on="concept_code", how="left")
+
+        if "concept_name" not in normalized.columns:
+            normalized["concept_name"] = normalized["concept_code"]
+
+        return normalized[["concept_code", "concept_name", "ts_code"]].drop_duplicates()
     
     def load_data(self):
         """加载数据"""
@@ -153,13 +210,16 @@ class MainlineLogicSystem:
             print("  ! 行业成分股数据不存在，请先运行 tushare_downloader.py --task sw_industry_classify + sw_index_member")
             self.industry_members = None
 
-        # 加载概念成分股
-        concept_details_file = os.path.join(self.sectors_dir, 'concept_detail.parquet')
-        if os.path.exists(concept_details_file):
-            self.concept_details = pd.read_parquet(concept_details_file)
-            print(f"  ✓ 概念成分股: {len(self.concept_details)} 条记录")
+        # 加载概念成分股（ths_member）
+        ths_member_file = os.path.join(self._resolve_dir('concepts'), 'ths_member.parquet')
+        ths_index_file = os.path.join(self._resolve_dir('concepts'), 'ths_index.parquet')
+        if os.path.exists(ths_member_file):
+            member_df = pd.read_parquet(ths_member_file)
+            index_df = pd.read_parquet(ths_index_file) if os.path.exists(ths_index_file) else None
+            self.concept_details = self._normalize_ths_member(member_df, index_df=index_df)
+            print(f"  ✓ 同花顺概念成分股: {len(self.concept_details)} 条记录")
         else:
-            print("  ! 概念成分股数据不存在，请先运行 tushare_downloader.py --task tushare_concept_detail")
+            print("  ! 同花顺概念成分数据不存在，请先运行 tushare_downloader.py --task ths_member")
             self.concept_details = None
 
     def build_concept_bias(self, date, top_k: int | None = 10):

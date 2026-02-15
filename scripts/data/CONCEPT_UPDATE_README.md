@@ -1,8 +1,8 @@
-# 概念成分股数据更新系统（理想版统一入口）
+# 概念板块数据更新系统（理想版统一入口）
 
 ## 概述
 
-这个系统用于定期更新概念板块的成分股数据。当前统一由 `tushare_downloader.py` 入口完成，后续评分与表现计算再独立接入。
+这个系统用于定期更新同花顺概念板块数据。当前统一由 `tushare_downloader.py` 入口完成，后续评分与表现计算再独立接入。
 
 ## 功能特点
 
@@ -18,9 +18,9 @@
 # 激活虚拟环境
 source venv/bin/activate
 
-# 初始化/更新：获取概念列表与成分
-python scripts/data/tushare_downloader.py --task tushare_concept_list
-python scripts/data/tushare_downloader.py --task tushare_concept_detail
+# 初始化/更新：获取同花顺概念列表与成分
+python scripts/data/tushare_downloader.py --task ths_index
+python scripts/data/tushare_downloader.py --task ths_member
 ```
 
 ### 方法2：使用Shell脚本
@@ -40,14 +40,14 @@ python scripts/data/tushare_downloader.py --task tushare_concept_detail
 
 | 参数 | 说明 | 默认值 |
 |------|------|--------|
-| `--task` | 任务名（`tushare_concept_list`/`tushare_concept_detail`） | - |
+| `--task` | 任务名（`ths_index`/`ths_member`） | - |
 
 ## 工作流程
 
 ### 概念更新流程
 
-1. 拉取概念列表（`tushare_concept_list`）
-2. 按概念逐个拉取成分股（`tushare_concept_detail`）
+1. 拉取同花顺概念列表（`ths_index`）
+2. 按概念逐个拉取成分股（`ths_member`）
 
 > 概念表现/评分计算将作为独立模块接入，不在下载器内处理。
 
@@ -60,12 +60,12 @@ python scripts/data/tushare_downloader.py --task tushare_concept_detail
 ### 输入文件
 
 - `data/raw/tushare/daily/daily_YYYY.parquet` - 个股日线数据（按年存储）
-- `data/raw/tushare/sectors/all_concept_details_base.csv` - 基准概念成分股数据
+- `data/raw/tushare/concepts/ths_member.parquet` - 同花顺概念成分数据
 
 ### 输出文件
 
-- `data/raw/tushare/sectors/concepts.parquet` - 概念列表
-- `data/raw/tushare/sectors/concept_detail.parquet` - 概念成分
+- `data/raw/tushare/concepts/ths_index.parquet` - 同花顺概念列表
+- `data/raw/tushare/concepts/ths_member.parquet` - 同花顺概念成分
 - `logs/data/YYYYMMDD_NNN_tushare_downloader.log` - 更新日志
 
 ## 日志记录

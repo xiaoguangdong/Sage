@@ -13,11 +13,12 @@ A股主线逻辑识别与选股系统（优化版）
 import pandas as pd
 import numpy as np
 import os
+from pathlib import Path
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-from scripts.data._shared.runtime import get_tushare_root, get_data_path
+from scripts.data._shared.runtime import get_tushare_root, get_data_path, get_project_root
 
 class MainlineLogicSystemOptimized:
     """主线逻辑识别系统（优化版）"""
@@ -29,9 +30,15 @@ class MainlineLogicSystemOptimized:
         Args:
             data_dir: 数据目录
         """
-        self.data_dir = data_dir or str(get_tushare_root())
+        primary_root = Path(data_dir) if data_dir else get_tushare_root()
+        legacy_root = get_project_root() / "data" / "tushare"
+        self.data_roots = [str(primary_root)]
+        if str(legacy_root) != str(primary_root):
+            self.data_roots.append(str(legacy_root))
+
+        self.data_dir = self.data_roots[0]
         self.factors_dir = str(get_data_path("processed", "factors", ensure=True))
-        self.sectors_dir = os.path.join(self.data_dir, 'sectors')
+        self.sectors_dir = self._resolve_dir("sectors")
         
         os.makedirs(self.factors_dir, exist_ok=True)
         os.makedirs(self.sectors_dir, exist_ok=True)
@@ -55,6 +62,75 @@ class MainlineLogicSystemOptimized:
         }
         
         print("主线逻辑识别系统（优化版）已初始化")
+
+    def _resolve_dir(self, subdir):
+        for root in self.data_roots:
+            candidate = os.path.join(root, subdir)
+            if os.path.exists(candidate):
+                return candidate
+        return os.path.join(self.data_roots[0], subdir)
+
+    def _resolve_file(self, *parts):
+        for root in self.data_roots:
+            candidate = os.path.join(root, *parts)
+            if os.path.exists(candidate):
+                return candidate
+        return os.path.join(self.data_roots[0], *parts)
+
+    @staticmethod
+    def _looks_like_concept_code(series: pd.Series) -> bool:
+        sample = series.dropna().astype(str).head(50)
+        if sample.empty:
+            return False
+        return sample.str.endswith(".TI").mean() > 0.6
+
+    def _normalize_ths_member(self, members: pd.DataFrame, index_df: pd.DataFrame | None = None) -> pd.DataFrame:
+        cols = members.columns.tolist()
+        concept_code_col = None
+        stock_col = None
+
+        for candidate in ["concept_code", "index_code", "id", "ts_code", "code"]:
+            if candidate in cols and self._looks_like_concept_code(members[candidate]):
+                concept_code_col = candidate
+                break
+        if concept_code_col is None:
+            for candidate in ["concept_code", "index_code", "id", "ts_code", "code"]:
+                if candidate in cols:
+                    concept_code_col = candidate
+                    break
+
+        for candidate in ["ts_code", "con_code", "stock_code", "code", "symbol"]:
+            if candidate in cols and candidate != concept_code_col:
+                stock_col = candidate
+                break
+
+        if not concept_code_col or not stock_col:
+            raise ValueError(f"ths_member 字段不足，无法识别概念和成分列: {cols}")
+
+        concept_name_col = "concept_name" if "concept_name" in cols else None
+        if not concept_name_col:
+            for candidate in ["index_name", "name"]:
+                if candidate in cols:
+                    concept_name_col = candidate
+                    break
+
+        normalized = members.rename(columns={concept_code_col: "concept_code", stock_col: "ts_code"}).copy()
+        normalized["concept_code"] = normalized["concept_code"].astype(str)
+        normalized["ts_code"] = normalized["ts_code"].astype(str)
+
+        if concept_name_col:
+            normalized = normalized.rename(columns={concept_name_col: "concept_name"})
+
+        if "concept_name" not in normalized.columns and index_df is not None and not index_df.empty:
+            name_col = "name" if "name" in index_df.columns else ("index_name" if "index_name" in index_df.columns else None)
+            if name_col and "ts_code" in index_df.columns:
+                names = index_df[["ts_code", name_col]].rename(columns={"ts_code": "concept_code", name_col: "concept_name"})
+                normalized = normalized.merge(names, on="concept_code", how="left")
+
+        if "concept_name" not in normalized.columns:
+            normalized["concept_name"] = normalized["concept_code"]
+
+        return normalized[["concept_code", "concept_name", "ts_code"]].drop_duplicates()
     
     def load_data(self, start_date, end_date):
         """
@@ -68,7 +144,7 @@ class MainlineLogicSystemOptimized:
         # 加载日线数据
         daily_files = []
         for year in range(start_dt.year, end_dt.year + 1):
-            filepath = os.path.join(self.data_dir, 'daily', f'daily_{year}.parquet')
+            filepath = self._resolve_file('daily', f'daily_{year}.parquet')
             if os.path.exists(filepath):
                 daily_files.append(filepath)
         
@@ -78,7 +154,7 @@ class MainlineLogicSystemOptimized:
             print(f"  ✓ 日线数据: {len(self.daily)} 条记录")
         
         # 加载基础数据
-        basic_file = os.path.join(self.data_dir, 'daily_basic_all.parquet')
+        basic_file = self._resolve_file('daily_basic_all.parquet')
         if os.path.exists(basic_file):
             self.daily_basic = pd.read_parquet(basic_file)
             self.daily_basic['trade_date'] = pd.to_datetime(self.daily_basic['trade_date'])
@@ -87,7 +163,7 @@ class MainlineLogicSystemOptimized:
         # 加载财务数据
         fina_files = []
         for year in range(start_dt.year, end_dt.year + 1):
-            filepath = os.path.join(self.data_dir, 'fundamental', f'fina_indicator_{year}.parquet')
+            filepath = self._resolve_file('fundamental', f'fina_indicator_{year}.parquet')
             if os.path.exists(filepath):
                 fina_files.append(filepath)
         
@@ -97,7 +173,7 @@ class MainlineLogicSystemOptimized:
             print(f"  ✓ 财务数据: {len(self.fina_indicator)} 条记录")
         
         # 加载指数数据
-        index_file = os.path.join(self.data_dir, 'index', 'index_ohlc_all.parquet')
+        index_file = self._resolve_file('index', 'index_ohlc_all.parquet')
         if os.path.exists(index_file):
             self.index_data = pd.read_parquet(index_file)
             self.index_data['trade_date'] = pd.to_datetime(self.index_data['date'])
@@ -118,13 +194,16 @@ class MainlineLogicSystemOptimized:
             print("  ! 行业成分股数据不存在")
             self.industry_members = None
         
-        # 加载概念成分股
-        concept_details_file = os.path.join(self.sectors_dir, 'all_concept_details.csv')
-        if os.path.exists(concept_details_file):
-            self.concept_details = pd.read_csv(concept_details_file)
-            print(f"  ✓ 概念成分股: {len(self.concept_details)} 条记录")
+        # 加载概念成分股（ths_member）
+        ths_member_file = os.path.join(self._resolve_dir('concepts'), 'ths_member.parquet')
+        ths_index_file = os.path.join(self._resolve_dir('concepts'), 'ths_index.parquet')
+        if os.path.exists(ths_member_file):
+            member_df = pd.read_parquet(ths_member_file)
+            index_df = pd.read_parquet(ths_index_file) if os.path.exists(ths_index_file) else None
+            self.concept_details = self._normalize_ths_member(member_df, index_df=index_df)
+            print(f"  ✓ 同花顺概念成分股: {len(self.concept_details)} 条记录")
         else:
-            print("  ! 概念成分股数据不存在")
+            print("  ! 同花顺概念成分数据不存在")
             self.concept_details = None
         
         print(f"  ✓ 板块数据加载完成：")

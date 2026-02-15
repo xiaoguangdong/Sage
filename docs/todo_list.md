@@ -37,29 +37,29 @@
 ### 遇到的问题
 - **IP限制**: Tushare账号触发IP数量超限（最大2个），需要等待30分钟-1小时
 - **积分不足**: 东方财富和同花顺接口需要6000+积分
-- **数据更新**: 概念成分股需要定期更新，当前缺乏增量更新机制
+- **数据更新**: 同花顺概念成分（`ths_member`）需要定期更新，当前缺乏增量更新机制
 
 ### 解决方案
 - **短期方案**:
-  - 等待IP限制解除，下载Tushare所有879个概念的成分股
-  - 使用现有100个概念数据试跑验证逻辑
+  - 先完成同花顺概念成分全量拉取（`ths_member`）
+  - 使用已下载概念数据试跑验证逻辑
 - **中期方案**:
-  - 增加Tushare积分到6000+，使用东方财富接口
+  - 增加Tushare积分到6000+，提升同花顺概念接口覆盖
   - 实现每周增量更新机制（base + n个周期增量）
 - **长期方案**:
   - 建立概念数据自动更新系统
   - 定期检查概念成分股变化
 
 ### 待完成任务
-- [ ] 等待IP限制解除，下载所有879个Tushare概念成分股
+- [ ] 下载并校验同花顺概念成分全量（`ths_member`）
 - [ ] 实现2024-09-24到2024-12-31期间活跃概念分析
 - [ ] 如果效果好，考虑使用东方财富的5000个概念
-- [ ] 建立每周更新概念列表和成分股的机制
+- [ ] 建立每周更新同花顺概念列表和成分股的机制
 - [ ] 实现base概念 + n个周期增量概念的合并逻辑
 
 ### 相关文件
-- `scripts/data/tushare_downloader.py`（`--task tushare_concept_list`/`tushare_concept_detail`）
-- `data/raw/tushare/sectors/all_concept_details.csv` (100个概念)
+- `scripts/data/tushare_downloader.py`（`--task ths_index`/`ths_member`）
+- `data/raw/tushare/concepts/ths_member.parquet`
 
 ---
 
