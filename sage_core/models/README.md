@@ -8,7 +8,7 @@
 - `sage_core/models/execution/`
 - `sage_core/models/governance/`
 
-根目录中的历史模块（如 `trend_model.py`、`rank_model.py`）仅作为向后兼容入口，实际转发到对应业务域子目录。
+根目录不再保留平铺历史模块，统一通过业务域子目录访问。
 
 ## 新代码入口
 
