@@ -205,6 +205,60 @@ def _load_tushare_fallback(years: int = 2) -> pd.DataFrame:
     return daily
 
 
+def _load_hs300_index_frame(reference_trade_date: str | None = None) -> pd.DataFrame:
+    """
+    加载沪深300指数行情（优先 data/tushare/index/）。
+    返回列至少包含: trade_date, close, pct_chg
+    """
+    tushare_root = get_tushare_root()
+    candidates = [
+        tushare_root / "index" / "index_000300_SH_ohlc.parquet",
+        tushare_root / "index" / "index_ohlc_all.parquet",
+        tushare_root / "index_000300_SH_ohlc.parquet",
+        tushare_root / "index_ohlc_all.parquet",
+    ]
+    index_df = pd.DataFrame()
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            df = pd.read_parquet(path)
+        except Exception as exc:
+            logger.warning("读取指数文件失败: %s (%s)", path, exc)
+            continue
+        if "code" in df.columns:
+            df = df[df["code"].astype(str) == "000300.SH"].copy()
+        if df.empty:
+            continue
+        index_df = df
+        break
+
+    if index_df.empty:
+        return index_df
+
+    if "trade_date" not in index_df.columns:
+        if "date" in index_df.columns:
+            index_df["trade_date"] = index_df["date"]
+        elif "datetime" in index_df.columns:
+            index_df["trade_date"] = index_df["datetime"]
+    index_df["trade_date"] = pd.to_datetime(index_df["trade_date"], errors="coerce")
+    index_df = index_df.dropna(subset=["trade_date", "close"]).copy()
+    index_df["trade_date"] = index_df["trade_date"].dt.strftime("%Y%m%d")
+
+    if "pct_chg" not in index_df.columns:
+        if "pct_change" in index_df.columns:
+            index_df["pct_chg"] = pd.to_numeric(index_df["pct_change"], errors="coerce")
+        else:
+            index_df["pct_chg"] = pd.to_numeric(index_df["close"], errors="coerce").pct_change() * 100.0
+
+    if reference_trade_date:
+        ref = str(reference_trade_date)
+        index_df = index_df[index_df["trade_date"] <= ref].copy()
+
+    index_df = index_df.sort_values("trade_date").reset_index(drop=True)
+    return index_df
+
+
 def filter_universe(df: pd.DataFrame) -> pd.DataFrame:
     """
     过滤股票池
@@ -375,18 +429,27 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     if 'stock' not in df_features.columns and 'code' in df_features.columns:
         df_features['stock'] = df_features['code']
 
+    latest_trade_date_hint = None
+    if "trade_date" in df_features.columns:
+        latest_trade_date_hint = pd.to_datetime(df_features["trade_date"].max(), errors="coerce").strftime("%Y%m%d")
+
     index_candidates = {'000300.SH', 'sh.000300', '000300.SZ'}
     index_code = next((c for c in index_candidates if c in set(df_features['code'].values)), None)
-    df_index = df_features[df_features['code'] == index_code] if index_code else None
-    
-    if df_index is not None and len(df_index) > 0:
+    df_index = df_features[df_features['code'] == index_code].copy() if index_code else pd.DataFrame()
+
+    if df_index.empty:
+        df_index = _load_hs300_index_frame(reference_trade_date=latest_trade_date_hint)
+        if not df_index.empty:
+            logger.info("已从Tushare指数文件加载沪深300: rows=%d", len(df_index))
+
+    if len(df_index) > 0:
         trend_result = trend_model.predict(df_index)
         trend_state = trend_result['state']
         logger.info(f"趋势状态: {trend_result['state_name']} (state={trend_state})")
     else:
         trend_result = {'position_suggestion': 0.3, 'state_name': '震荡'}
         trend_state = 1  # 默认震荡
-        logger.warning("无法获取指数数据，使用默认趋势状态: 震荡")
+        logger.warning("无法获取沪深300指数数据，使用默认趋势状态: 震荡")
     
     # 5. 运行Champion/Challenger四策略，执行层只读取Champion
     logger.info("运行选股策略治理（Champion/Challenger）...")
