@@ -613,7 +613,7 @@ trend_fallback_mode = 'empty_portfolio'
 **目标**：实现基础的树模型系统
 
 **关键文件**：
-- `sage_core/models/rank_model.py` - 排序模型
+- `sage_core/stock_selection/rank_model.py` - 排序模型
 - `sage_core/features/` - 特征工程（目录）
 - `scripts/models/rank_trainer.py` - 排序模型训练（待实现）
 - `sage_core/backtest/walk_forward.py` - 周频滚动回测

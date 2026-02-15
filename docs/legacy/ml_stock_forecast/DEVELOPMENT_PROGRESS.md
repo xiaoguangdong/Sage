@@ -59,7 +59,7 @@ ml_stock_forecast/
 - 8个基础特征：MA20/60/120、4周波动率、12周波动率、MACD指标、价格位置
 - 10个硬核特征：均线多头排列、波动率分位、MACD金叉、价格创新高、量价背离等
 
-#### 2.3 模型模块 (sage_core/models/)
+#### 2.3 模型模块（已迁移为按业务域拆分：`sage_core/trend/`、`sage_core/industry/`、`sage_core/stock_selection/`、`sage_core/execution/`、`sage_core/governance/`）
 
 **trend_model.py**
 - `TrendModelRule` 类：规则版趋势模型
