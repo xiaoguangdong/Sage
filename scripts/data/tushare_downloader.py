@@ -316,6 +316,7 @@ def run_task(
     resume: bool,
     dry_run: bool,
 ) -> None:
+    _log(f"开始任务: {task.name}, start_date={start_date}, end_date={end_date}, resume={resume}")
     output_path = _resolve_output(task.output, output_root)
     state_path = _resolve_state(task.state) if task.state else None
 
@@ -343,6 +344,7 @@ def run_task(
     if resume and state_path:
         state = _load_state(state_path)
         last_end = state.get("last_end")
+        _log(f"读取断点: state={state_path}, last_end={last_end}")
 
     if task.mode in ("year_quarters",) or (task.mode == "list" and not start_date and not end_date):
         windows = [("", "")]
@@ -350,14 +352,23 @@ def run_task(
         windows = list(_iter_windows(task.mode, task.split, start_dt, end_dt, task.date_format))
     if last_end:
         windows = [win for win in windows if win[1] > last_end]
+    _log(f"待处理窗口数量: {len(windows)}")
 
     if dry_run:
         _log(f"任务 {task.name} 将处理 {len(windows)} 个窗口")
         return
 
+    _log("初始化 Tushare 客户端...")
     client = TushareClient(sleep_seconds=sleep_seconds)
+    _log("Tushare 客户端初始化完成")
 
-    existing = pd.read_parquet(output_path) if output_path.exists() else pd.DataFrame()
+    if output_path.exists():
+        _log(f"读取已有输出文件: {output_path}")
+        existing = pd.read_parquet(output_path)
+        _log(f"已有数据行数: {len(existing)}")
+    else:
+        existing = pd.DataFrame()
+        _log(f"输出文件不存在，将新建: {output_path}")
 
     list_items = _load_list_items(task, project_root) if task.mode == "list" else [None]
     if task.mode == "list" and not list_items:
