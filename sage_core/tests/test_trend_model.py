@@ -10,7 +10,7 @@ from pathlib import Path
 # 导入被测试的模块
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from sage_core.models.trend_model import TrendModelRule, create_trend_model
+from sage_core.trend.trend_model import TrendModelRule, create_trend_model
 
 
 class TestTrendModelRule(unittest.TestCase):

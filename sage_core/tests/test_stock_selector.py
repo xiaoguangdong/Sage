@@ -6,7 +6,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from sage_core.models.stock_selector import StockSelector, SelectionConfig
+from sage_core.stock_selection.stock_selector import StockSelector, SelectionConfig
 
 
 class TestStockSelector(unittest.TestCase):

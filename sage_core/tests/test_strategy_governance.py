@@ -7,8 +7,8 @@ import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from sage_core.models.stock_selector import SelectionConfig
-from sage_core.models.strategy_governance import (
+from sage_core.stock_selection.stock_selector import SelectionConfig
+from sage_core.governance.strategy_governance import (
     ChampionChallengerEngine,
     MultiAlphaChallengerStrategies,
     SeedBalanceStrategy,
