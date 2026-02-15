@@ -8,10 +8,10 @@
 - sage_core.execution
 - sage_core.governance
 """
-from sage_core.trend.trend_model import TrendModelRule, TrendModelLGBM, TrendModelHMM, create_trend_model
-from sage_core.execution.entry_model import EntryModelLR
-from sage_core.stock_selection.stock_selector import StockSelector, SelectionConfig
-from sage_core.governance.strategy_governance import (
+from sage_core.models.trend.trend_model import TrendModelRule, TrendModelLGBM, TrendModelHMM, create_trend_model
+from sage_core.models.execution.entry_model import EntryModelLR
+from sage_core.models.stock_selection.stock_selector import StockSelector, SelectionConfig
+from sage_core.models.governance.strategy_governance import (
     SIGNAL_SCHEMA,
     SUPPORTED_STRATEGIES,
     StrategyGovernanceConfig,
@@ -24,7 +24,7 @@ from sage_core.governance.strategy_governance import (
 )
 
 try:
-    from sage_core.stock_selection.rank_model import RankModelLGBM
+    from sage_core.models.stock_selection.rank_model import RankModelLGBM
 except ModuleNotFoundError:
     RankModelLGBM = None
 

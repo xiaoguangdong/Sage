@@ -1,1 +1,1 @@
-from sage_core.trend.trend_model import *  # noqa: F401,F403
+from sage_core.models.trend.trend_model import *  # noqa: F401,F403

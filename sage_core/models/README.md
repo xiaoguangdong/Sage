@@ -1,6 +1,14 @@
 # `sage_core.models` 说明
 
-`sage_core/models/` 仅用于兼容历史导入路径，不再承载新实现。
+`sage_core/models/` 作为兼容层保留，并按业务域重构为以下目录：
+
+- `sage_core/models/industry/`
+- `sage_core/models/trend/`
+- `sage_core/models/stock_selection/`
+- `sage_core/models/execution/`
+- `sage_core/models/governance/`
+
+根目录中的历史模块（如 `trend_model.py`、`rank_model.py`）仅作为向后兼容入口，实际转发到对应业务域子目录。
 
 ## 新代码入口
 
@@ -9,8 +17,3 @@
 - 选股：`sage_core/stock_selection/`
 - 执行：`sage_core/execution/`
 - 治理：`sage_core/governance/`
-
-## 迁移原则
-
-- 新功能只放业务域目录，不新增 `sage_core/models/*.py`。
-- 老脚本可继续通过 `sage_core.models.*` 访问，后续按需逐步替换。
