@@ -100,6 +100,65 @@ def load_inputs(tushare_root: Path):
     return hk, const
 
 
+def _load_market_trade_dates(tushare_root: Path) -> pd.Series:
+    candidates = [
+        tushare_root / "northbound" / "northbound_daily_flow.parquet",
+        tushare_root / "northbound" / "daily_flow.parquet",
+    ]
+    for path in candidates:
+        if not path.exists():
+            continue
+        try:
+            frame = pd.read_parquet(path, columns=["trade_date"])
+        except Exception:
+            continue
+        if frame.empty:
+            continue
+        dates = pd.to_datetime(frame["trade_date"], errors="coerce").dropna().drop_duplicates().sort_values()
+        if not dates.empty:
+            return dates
+    return pd.Series(dtype="datetime64[ns]")
+
+
+def _extend_with_proxy_dates(agg: pd.DataFrame, market_dates: pd.Series) -> pd.DataFrame:
+    if agg.empty or market_dates.empty:
+        agg["is_proxy"] = False
+        return agg
+
+    result = agg.copy()
+    result["trade_date"] = pd.to_datetime(result["trade_date"]).dt.floor("D")
+    result["is_proxy"] = False
+
+    last_ratio_date = result["trade_date"].max()
+    target_last_date = market_dates.max()
+    if pd.isna(last_ratio_date) or pd.isna(target_last_date) or target_last_date <= last_ratio_date:
+        return result
+
+    forward_dates = market_dates[market_dates > last_ratio_date]
+    if forward_dates.empty:
+        return result
+
+    template = result[result["trade_date"] == last_ratio_date][["industry_code", "industry_name", "industry_ratio"]].copy()
+    if template.empty:
+        return result
+
+    template["vol"] = pd.NA
+    proxy_frames = []
+    for trade_date in forward_dates.tolist():
+        proxy = template.copy()
+        proxy["trade_date"] = trade_date
+        proxy["ratio"] = proxy["industry_ratio"]
+        proxy["is_proxy"] = True
+        proxy_frames.append(proxy)
+
+    if not proxy_frames:
+        return result
+
+    result = pd.concat([result, *proxy_frames], ignore_index=True)
+    result = result.sort_values(["trade_date", "industry_code"]).reset_index(drop=True)
+    return result
+
+
 def aggregate(tushare_root: Path) -> Path:
     hk, const = load_inputs(tushare_root)
     hk["trade_date"] = pd.to_datetime(hk["trade_date"])
@@ -127,6 +186,8 @@ def aggregate(tushare_root: Path) -> Path:
 
     total_vol = agg.groupby("trade_date")["vol"].transform("sum")
     agg["industry_ratio"] = agg["vol"] / total_vol.replace(0, pd.NA)
+    market_dates = _load_market_trade_dates(tushare_root)
+    agg = _extend_with_proxy_dates(agg, market_dates)
 
     output_path = tushare_root / "northbound" / "industry_northbound_flow.parquet"
     agg.to_parquet(output_path, index=False)
@@ -140,7 +201,12 @@ def main():
 
     tushare_root = Path(args.tushare_root) if args.tushare_root else get_tushare_root()
     output_path = aggregate(tushare_root)
+    output_df = pd.read_parquet(output_path)
+    proxy_rows = int(pd.to_numeric(output_df.get("is_proxy", False), errors="coerce").fillna(False).astype(bool).sum())
+    latest_date = pd.to_datetime(output_df["trade_date"], errors="coerce").max()
+    latest_date_str = latest_date.strftime("%Y-%m-%d") if pd.notna(latest_date) else "unknown"
     print(f"北向行业配置已生成: {output_path}")
+    print(f"  最新日期: {latest_date_str}, 代理行数: {proxy_rows}")
 
 
 if __name__ == "__main__":

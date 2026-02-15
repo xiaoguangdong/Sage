@@ -106,6 +106,7 @@ date,yield_10y
 #### 文件命名
 - `northbound_flow.parquet`
 - `northbound_hold.parquet`
+- `industry_northbound_flow.parquet`（行业配置聚合，含 `is_proxy` 代理延展标记）
 
 #### 数据格式
 
@@ -125,6 +126,16 @@ trade_date,ts_code,name,hold_amount,hold_ratio,exchange_code
 ...
 ```
 
+**行业配置聚合 (industry_northbound_flow.parquet)**
+```
+industry_code,industry_name,trade_date,vol,ratio,industry_ratio,is_proxy
+801010,农林牧渔,2026-02-10,,0.021,0.021,true
+...
+```
+说明：
+- 原始持仓可用日期之后，按最新行业权重结构做“代理延展”（`is_proxy=true`），用于维持行业信号时效；
+- 代理数据默认降置信度使用，不替代真实持仓数据。
+
 ## 三、统一下载入口（理想版）
 
 统一入口：`scripts/data/tushare_downloader.py`  
@@ -139,6 +150,7 @@ python3 scripts/data/tushare_downloader.py --task yield_10y --resume
 python3 scripts/data/tushare_downloader.py --task yield_2y --resume
 python3 scripts/data/tushare_downloader.py --task northbound_flow --start-date 20200101 --end-date $(date +%Y%m%d) --resume
 python3 scripts/data/tushare_downloader.py --task northbound_hold --start-date 20200101 --end-date $(date +%Y%m%d) --resume
+python3 scripts/data/macro/aggregate_northbound_industry_flow.py --tushare-root data/tushare
 ```
 
 ## 四、数据更新时间表

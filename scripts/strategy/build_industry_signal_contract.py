@@ -115,7 +115,13 @@ def _load_northbound_signal(path: Path) -> pd.DataFrame:
         score = ratio.rank(pct=True).clip(0.0, 1.0)
         direction = score.apply(lambda x: 1 if x > 0.6 else (-1 if x < 0.4 else 0))
     confidence = pd.Series(0.6, index=df.index)
+    if "is_proxy" in df.columns:
+        proxy_mask = df["is_proxy"].fillna(False).astype(bool)
+        confidence.loc[proxy_mask] = 0.25
     meta = df[[c for c in ["industry_ratio", "ratio_signal"] if c in df.columns]].to_dict(orient="records")
+    if "is_proxy" in df.columns:
+        for idx, value in enumerate(df["is_proxy"].fillna(False).astype(bool).tolist()):
+            meta[idx]["is_proxy"] = bool(value)
     return pd.DataFrame(
         {
             "trade_date": df["trade_date"],
