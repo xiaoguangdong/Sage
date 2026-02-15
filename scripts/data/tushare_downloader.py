@@ -59,12 +59,12 @@ def _format_date(value: datetime, fmt: str = "%Y%m%d") -> str:
 def _month_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
     current = datetime(start.year, start.month, 1)
     while current <= end:
-        month_end = (current.replace(day=28) + timedelta(days=4)).replace(day=1) - timedelta(days=1)
-        if month_end > end:
-            month_end = end
-        yield current, month_end
-        current = month_end + timedelta(days=1)
-        current = datetime(current.year, current.month, 1)
+        next_month = (current.replace(day=28) + timedelta(days=4)).replace(day=1)
+        month_end = next_month - timedelta(days=1)
+        window_start = current if current > start else start
+        window_end = month_end if month_end < end else end
+        yield window_start, window_end
+        current = next_month
 
 
 def _daily_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
