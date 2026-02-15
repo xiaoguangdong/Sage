@@ -12,7 +12,7 @@ from typing import Dict, Tuple
 
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 def load_ths_member(path: Path) -> pd.DataFrame:
     if not path.exists():
@@ -173,10 +173,11 @@ def main() -> None:
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("processed", "concepts", ensure=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    concept_path = get_data_path("raw", "tushare", "concepts") / "ths_member.parquet"
-    ths_index_path = get_data_path("raw", "tushare", "concepts") / "ths_index.parquet"
-    l1_path = get_data_path("raw", "tushare", "sw_industry") / "sw_industry_l1.parquet"
-    member_path = get_data_path("raw", "tushare", "sw_industry") / "sw_index_member.parquet"
+    tushare_root = get_tushare_root()
+    concept_path = tushare_root / "concepts" / "ths_member.parquet"
+    ths_index_path = tushare_root / "concepts" / "ths_index.parquet"
+    l1_path = tushare_root / "sw_industry" / "sw_industry_l1.parquet"
+    member_path = tushare_root / "sw_industry" / "sw_index_member.parquet"
 
     ths_member_df = load_ths_member(concept_path)
     ths_index_df = load_ths_index(ths_index_path)

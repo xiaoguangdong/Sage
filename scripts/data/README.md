@@ -25,9 +25,9 @@ python scripts/data/tushare_downloader.py --task ths_daily \
 ```
 
 输出分片目录：
-- `data/raw/tushare/`（默认）
+- `data/tushare/`（默认）
 
-默认输出目录（不传 `--output-root`）：`data/raw/tushare/`
+默认输出目录（不传 `--output-root`）：`data/tushare/`
 
 ### 其他示例（YYYYMMDD）
 
@@ -56,7 +56,7 @@ python scripts/data/akshare_suite.py --action concept_components \
 # 个股历史（日线，YYYYMMDD）
 python scripts/data/akshare_suite.py --action stock_hist \
   --start-date 20240101 --end-date 20240201 \
-  --stock-list-csv data/raw/tushare/filtered_stocks_list.csv \
+  --stock-list-csv data/tushare/filtered_stocks_list.csv \
   --output-dir /tmp/sage_data --resume
 ```
 
@@ -114,8 +114,8 @@ python scripts/data/tushare_downloader.py --task tushare_reports \
 ```
 
 默认输出：
-- `data/raw/tushare/policy/tushare_anns.parquet`
-- `data/raw/tushare/policy/tushare_reports.parquet`
+- `data/tushare/policy/tushare_anns.parquet`
+- `data/tushare/policy/tushare_reports.parquet`
 
 ### 2) 政策数据拉取（政府网站 RSS/Atom）
 
@@ -187,14 +187,14 @@ python3 scripts/data/tushare_downloader.py --task ths_daily --start-date 2023010
 ```
 
 输出：
-- `data/raw/tushare/concepts/ths_index.parquet`
-- `data/raw/tushare/concepts/ths_daily.parquet`
+- `data/tushare/concepts/ths_index.parquet`
+- `data/tushare/concepts/ths_daily.parquet`
 
 ### 3) 政策信号管道
 
 脚本：`scripts/data/policy/policy_signal_pipeline.py`
 
-输入文件（放在 `data/raw/policy/` 或 `data/raw/tushare/policy/`）：
+输入文件（放在 `data/raw/policy/` 或 `data/tushare/policy/`）：
 - `tushare_anns.parquet` / `tushare_anns.csv`（公告）
 - `gov_notices.parquet` / `gov_notices.csv`（政府网站）
 - `tushare_reports.parquet` / `tushare_reports.csv`（研报）

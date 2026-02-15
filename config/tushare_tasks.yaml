@@ -89,7 +89,7 @@ tasks:
   hs300_moneyflow:
     api: moneyflow
     mode: list
-    list_file: "data/raw/tushare/constituents/hs300_constituents_all.parquet"
+    list_file: "data/tushare/constituents/hs300_constituents_all.parquet"
     list_column: "con_code"
     list_param: ts_code
     start_field: start_date
@@ -110,7 +110,7 @@ tasks:
   sw_industry_daily:
     api: daily
     mode: list
-    list_file: "data/raw/tushare/sw_industry/sw_industry_l1.parquet"
+    list_file: "data/tushare/sw_industry/sw_industry_l1.parquet"
     list_column: "index_code"
     list_param: ts_code
     start_field: start_date
@@ -123,7 +123,7 @@ tasks:
   sw_index_member:
     api: index_member
     mode: list
-    list_file: "data/raw/tushare/sw_industry/sw_industry_l1.parquet"
+    list_file: "data/tushare/sw_industry/sw_industry_l1.parquet"
     list_column: "index_code"
     list_param: index_code
     dedup_keys: ["index_code", "con_code"]
@@ -147,7 +147,7 @@ tasks:
   fina_indicator:
     api: fina_indicator
     mode: list
-    list_file: "data/raw/tushare/filtered_stocks_list.csv"
+    list_file: "data/tushare/filtered_stocks_list.csv"
     list_columns: ["tushare", "ts_code"]
     list_param: ts_code
     start_field: start_date
@@ -169,7 +169,7 @@ tasks:
   ths_member:
     api: ths_member
     mode: list
-    list_file: "data/raw/tushare/concepts/ths_index.parquet"
+    list_file: "data/tushare/concepts/ths_index.parquet"
     list_column: "ts_code"
     list_param: ts_code
     state: "data/states/ths_member.json"

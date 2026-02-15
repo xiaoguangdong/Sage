@@ -19,6 +19,9 @@ data:
   roots:
     primary: "/Users/dongxg/SourceCode/Sage/data"
     secondary: "/Volumes/SPEED/BizData/Stock/Sage/data"
+  paths:
+    tushare: "data/tushare"
+    tushare_secondary: "/Volumes/SPEED/BizData/Stock/Sage/data/tushare"
   layout:
     raw: "raw"
     processed: "processed"

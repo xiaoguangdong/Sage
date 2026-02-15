@@ -22,7 +22,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.insert(0, project_root)
 
 from sage_core.industry.macro_predictor import MacroPredictor
-from scripts.data._shared.runtime import get_data_path
+from scripts.data._shared.runtime import get_tushare_root
 
 
 def load_real_data():
@@ -31,7 +31,7 @@ def load_real_data():
     print("加载真实数据")
     print("=" * 80)
     
-    data_dir = str(get_data_path("raw", "tushare", "macro"))
+    data_dir = str(get_tushare_root() / "macro")
     
     # 1. 加载宏观数据
     print("\n1. 加载宏观数据...")

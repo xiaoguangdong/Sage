@@ -6,7 +6,7 @@ import pandas as pd
 
 from sage_core.data import DataCatalog, DataStore, DatasetSpec
 from sage_core.features import FeaturePipeline, PriceFeatures
-from scripts.data._shared import runtime as runtime_module
+from sage_core.utils import runtime_paths
 
 
 def _setup_roots(tmp_path: Path):
@@ -21,7 +21,7 @@ def test_feature_pipeline_run(tmp_path, monkeypatch):
     primary, secondary = _setup_roots(tmp_path)
     monkeypatch.setenv("SAGE_DATA_ROOT_PRIMARY", str(primary))
     monkeypatch.setenv("SAGE_DATA_ROOT_SECONDARY", str(secondary))
-    runtime_module._BASE_CONFIG = None
+    runtime_paths.reset_runtime_cache()
 
     df = pd.DataFrame({
         "date": pd.date_range("2024-01-01", periods=10, freq="D"),

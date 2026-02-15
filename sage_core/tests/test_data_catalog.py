@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from sage_core.data import DataCatalog
-from scripts.data._shared import runtime as runtime_module
+from sage_core.utils import runtime_paths
 
 
 def _setup_roots(tmp_path: Path):
@@ -20,7 +20,7 @@ def test_catalog_resolve_secondary(tmp_path, monkeypatch):
     primary, secondary = _setup_roots(tmp_path)
     monkeypatch.setenv("SAGE_DATA_ROOT_PRIMARY", str(primary))
     monkeypatch.setenv("SAGE_DATA_ROOT_SECONDARY", str(secondary))
-    runtime_module._BASE_CONFIG = None
+    runtime_paths.reset_runtime_cache()
 
     target = secondary / "raw" / "tushare" / "index" / "index_ohlc_all.parquet"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -35,7 +35,7 @@ def test_catalog_resolve_primary_when_missing(tmp_path, monkeypatch):
     primary, secondary = _setup_roots(tmp_path)
     monkeypatch.setenv("SAGE_DATA_ROOT_PRIMARY", str(primary))
     monkeypatch.setenv("SAGE_DATA_ROOT_SECONDARY", str(secondary))
-    runtime_module._BASE_CONFIG = None
+    runtime_paths.reset_runtime_cache()
 
     catalog = DataCatalog()
     resolved = catalog.resolve_path("index_ohlc_all")

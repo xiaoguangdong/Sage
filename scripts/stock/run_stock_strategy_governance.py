@@ -49,7 +49,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="运行Champion/Challenger四策略选股")
     parser.add_argument("--trade-date", required=True, help="交易日 YYYYMMDD")
     parser.add_argument("--top-n", type=int, default=10, help="每个策略输出TopN")
-    parser.add_argument("--config", type=str, default="sage_app/config/strategy_governance.yaml", help="治理配置路径")
+    parser.add_argument("--config", type=str, default="config/app/strategy_governance.yaml", help="治理配置路径")
     parser.add_argument("--seed-input", type=str, default=None, help="seed策略输入（parquet/csv）")
     parser.add_argument("--data-dir", type=str, default=None, help="Tushare原始数据根目录（给challenger用）")
     parser.add_argument("--active-champion-id", type=str, default=None, help="手动指定冠军策略ID")

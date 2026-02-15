@@ -17,7 +17,7 @@ strategy_governance:
 auto_promotion:
   enabled: true
   allow_when_manual: false
-  evaluation_path: sage_app/config/shadow_eval.json
+  evaluation_path: config/app/shadow_eval.json
   decision_path: data/backtest/governance/promotion_decisions.jsonl
   consecutive_periods: 3
   max_drawdown_tolerance: 0.02

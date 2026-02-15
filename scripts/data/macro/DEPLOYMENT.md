@@ -17,7 +17,7 @@
 ## 二、数据目录结构
 
 ```
-data/raw/tushare/
+data/tushare/
 ├── macro/                           # 宏观数据
 │   ├── nbs_ppi_industry_202512.csv  ✅ 已测试（模拟数据）
 │   ├── nbs_fai_industry_202512.csv   ✅ 已测试（模拟数据）
@@ -144,4 +144,4 @@ crontab -e
 
 **创建时间**: 2026-02-11
 **脚本位置**: `scripts/data/macro/`
-**数据目录**: `data/raw/tushare/macro/`
+**数据目录**: `data/tushare/macro/`

@@ -22,7 +22,7 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 sys.path.insert(0, project_root)
 
 from sage_core.industry.macro_predictor import MacroPredictor
-from scripts.data._shared.runtime import get_data_path
+from scripts.data._shared.runtime import get_tushare_root
 
 
 def load_realistic_data():
@@ -31,7 +31,7 @@ def load_realistic_data():
     print("加载数据（真实宏观+合理模拟行业）")
     print("=" * 80)
     
-    data_dir = str(get_data_path("raw", "tushare", "macro"))
+    data_dir = str(get_tushare_root() / "macro")
     
     # 1. 加载真实宏观数据
     print("\n1. 加载真实宏观数据...")
@@ -75,7 +75,7 @@ def load_realistic_data():
     print("\n2. 加载北向资金数据...")
     
     # 加载北向资金数据
-    northbound_flow = pd.read_parquet(str(get_data_path("raw", "tushare", "northbound", "daily_flow.parquet")))
+    northbound_flow = pd.read_parquet(str(get_tushare_root() / "northbound" / "daily_flow.parquet"))
     northbound_flow['trade_date'] = pd.to_datetime(northbound_flow['trade_date'].astype(str), format='%Y%m%d')
     northbound_flow = northbound_flow.sort_values('trade_date')
     
@@ -197,7 +197,7 @@ def load_nbs_industry_data(start_date='2020-01-01', end_date='2026-12-31'):
     """
     import yaml
 
-    data_dir = str(get_data_path("raw", "tushare", "macro"))
+    data_dir = str(get_tushare_root() / "macro")
 
     # 1. 读取NBS PPI数据
     ppi_data = pd.read_csv(f'{data_dir}/nbs_ppi_industry_2020.csv')

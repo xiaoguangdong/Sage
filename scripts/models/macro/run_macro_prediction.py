@@ -25,7 +25,7 @@ sys.path.insert(0, project_root)
 
 from sage_core.industry.macro_predictor import MacroPredictor
 from scripts.data.macro.clean_macro_data import MacroDataProcessor
-from scripts.data._shared.runtime import get_data_path
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 
 class MacroPredictionRunner:
@@ -53,7 +53,7 @@ class MacroPredictionRunner:
             processed_dir: 处理后数据目录
             config_path: 配置文件路径
         """
-        self.data_dir = data_dir or str(get_data_path("raw", "tushare", "macro"))
+        self.data_dir = data_dir or str(get_tushare_root() / "macro")
         self.processed_dir = processed_dir or str(get_data_path("processed"))
         self.config_path = config_path
         self.predictor = None
@@ -372,7 +372,7 @@ def main():
                        help='结束日期 (YYYY-MM-DD)')
     parser.add_argument('--output', type=str, default=None,
                        help='输出文件路径')
-    parser.add_argument('--data-dir', type=str, default=str(get_data_path("raw", "tushare", "macro")),
+    parser.add_argument('--data-dir', type=str, default=str(get_tushare_root() / "macro"),
                        help='数据目录')
     parser.add_argument('--processed-dir', type=str, default=str(get_data_path("processed")),
                        help='处理后数据目录')

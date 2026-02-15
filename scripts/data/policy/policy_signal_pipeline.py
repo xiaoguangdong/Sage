@@ -26,7 +26,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_data_path, get_data_root
+from scripts.data._shared.runtime import get_data_path, get_data_root, get_tushare_root
 
 
 DEFAULT_INPUT_NAMES = {
@@ -68,12 +68,12 @@ def resolve_input_dirs(input_dir: Optional[str]) -> List[Path]:
     if input_dir:
         path = Path(input_dir)
         return [path if path.is_absolute() else PROJECT_ROOT / path]
-    # 默认：先读 data/raw/policy，再读 data/raw/tushare/policy（若存在）
+    # 默认：先读 data/raw/policy，再读 data/tushare/policy（若存在）
     dirs: List[Path] = []
     raw_policy = get_data_path("raw", "policy")
     if raw_policy.exists():
         dirs.append(raw_policy)
-    raw_tushare_policy = get_data_path("raw", "tushare", "policy")
+    raw_tushare_policy = get_tushare_root() / "policy"
     if raw_tushare_policy.exists():
         dirs.append(raw_tushare_policy)
     return dirs or [raw_policy]

@@ -6,7 +6,7 @@ from typing import Dict, Iterable, Optional
 
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path
+from sage_core.utils.runtime_paths import get_data_path
 
 
 @dataclass(frozen=True)

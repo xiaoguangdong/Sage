@@ -359,7 +359,7 @@ def _resolve_tushare_root(data_dir_arg: Optional[str]) -> Path:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="月度重训选股模型并导出最新周信号")
-    parser.add_argument("--config", type=str, default="sage_app/config/strategy_governance.yaml")
+    parser.add_argument("--config", type=str, default="config/app/strategy_governance.yaml")
     parser.add_argument("--as-of-date", type=str, default=None, help="训练截止日，YYYYMMDD，默认最新交易日")
     parser.add_argument("--train-lookback-days", type=int, default=900, help="训练回看天数")
     parser.add_argument("--top-n", type=int, default=10, help="最新周信号TopN")

@@ -59,13 +59,13 @@ python scripts/data/tushare_downloader.py --task ths_member
 
 ### 输入文件
 
-- `data/raw/tushare/daily/daily_YYYY.parquet` - 个股日线数据（按年存储）
-- `data/raw/tushare/concepts/ths_member.parquet` - 同花顺概念成分数据
+- `data/tushare/daily/daily_YYYY.parquet` - 个股日线数据（按年存储）
+- `data/tushare/concepts/ths_member.parquet` - 同花顺概念成分数据
 
 ### 输出文件
 
-- `data/raw/tushare/concepts/ths_index.parquet` - 同花顺概念列表
-- `data/raw/tushare/concepts/ths_member.parquet` - 同花顺概念成分
+- `data/tushare/concepts/ths_index.parquet` - 同花顺概念列表
+- `data/tushare/concepts/ths_member.parquet` - 同花顺概念成分
 - `logs/data/YYYYMMDD_NNN_tushare_downloader.log` - 更新日志
 
 ## 日志记录
@@ -116,7 +116,7 @@ crontab -e
 
 ### 问题3：个股数据文件不存在
 
-**现象**: `个股数据文件不存在: data/raw/tushare/daily/daily_2024.parquet`
+**现象**: `个股数据文件不存在: data/tushare/daily/daily_2024.parquet`
 
 **解决**:
 - 确认个股数据已下载

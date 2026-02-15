@@ -12,7 +12,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from scripts.data._shared.runtime import get_tushare_root
+from sage_core.utils.runtime_paths import get_tushare_root
 logger = logging.getLogger(__name__)
 
 

@@ -15,7 +15,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_data_path
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 
 def load_ths_daily(input_path: Path) -> pd.DataFrame:
@@ -78,8 +78,9 @@ def main() -> None:
     parser.add_argument("--top-k", type=int, default=None, help="仅保留每个交易日热度TopK概念")
     args = parser.parse_args()
 
-    input_path = Path(args.input_path) if args.input_path else get_data_path("raw", "tushare", "concepts") / "ths_daily.parquet"
-    index_path = Path(args.index_path) if args.index_path else get_data_path("raw", "tushare", "concepts") / "ths_index.parquet"
+    tushare_root = get_tushare_root()
+    input_path = Path(args.input_path) if args.input_path else tushare_root / "concepts" / "ths_daily.parquet"
+    index_path = Path(args.index_path) if args.index_path else tushare_root / "concepts" / "ths_index.parquet"
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("signals", ensure=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 

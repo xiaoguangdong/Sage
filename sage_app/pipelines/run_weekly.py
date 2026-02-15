@@ -56,7 +56,9 @@ def load_config(config_dir: str | None = None) -> dict:
     config = {}
 
     if config_dir is None:
-        config_dir = str(Path(__file__).resolve().parents[1] / "config")
+        new_config_dir = Path(__file__).resolve().parents[2] / "config" / "app"
+        legacy_config_dir = Path(__file__).resolve().parents[1] / "config"
+        config_dir = str(new_config_dir if new_config_dir.exists() else legacy_config_dir)
     
     # 加载趋势模型配置
     try:

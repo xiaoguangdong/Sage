@@ -5,18 +5,27 @@
 ## 快速开始
 
 1. 创建/激活虚拟环境（示例）：
-   - `python3 -m venv venv && source venv/bin/activate`
+   - `python3 -m venv .venv && source .venv/bin/activate`
+   - `venv/`、`venv310/` 仅保留兼容用途，不作为默认开发环境
 2. 设置数据源 token（不要写进代码/仓库）：
    - `export TUSHARE_TOKEN=...`
 3. 宏观数据脚本入口：
    - `./scripts/data/macro/fetch_all_macro_data.sh`
    - `./scripts/data/macro/check_macro_data.sh`
+4. 任务编排统一入口：
+   - `python scripts/run_job.py weekly_pipeline`
+   - `python scripts/run_job.py stock_monthly -- --top-n 10`
 
 ## 代码结构与职责
 
 - `sage_core/`：核心算法库（趋势/宏观/选股/风控/回测等）
 - `sage_app/`：非核心管线（数据接入/调度/入口脚本）
 - `scripts/`：脚本入口（data/models/strategy/backtest/monitoring/legacy）
+- `scripts/run_job.py`：统一任务编排入口（weekly/stock/macro/scheduler）
+- `config/`：统一配置目录
+  - `config/base.yaml`：全局运行时配置（数据根目录、日志、下载策略）
+  - `config/tushare_tasks.yaml`：Tushare 下载任务定义
+  - `config/app/`：应用层策略配置（趋势/选股/治理/风控）
 
 ## 数据不丢失机制（推荐启用）
 
