@@ -19,10 +19,10 @@ from sage_core.utils.logging_utils import setup_logging
 from sage_core.data.universe import Universe
 from sage_core.features.price_features import PriceFeatures
 from sage_core.features.market_features import MarketFeatures
-from sage_core.models.trend_model import create_trend_model
-from sage_core.models.rank_model import RankModelLGBM
-from sage_core.models.entry_model import EntryModelLR
-from sage_core.models.strategy_governance import (
+from sage_core.trend.trend_model import create_trend_model
+from sage_core.stock_selection.rank_model import RankModelLGBM
+from sage_core.execution.entry_model import EntryModelLR
+from sage_core.governance.strategy_governance import (
     ChampionChallengerEngine,
     ChallengerConfig,
     MultiAlphaChallengerStrategies,
@@ -32,7 +32,7 @@ from sage_core.models.strategy_governance import (
     normalize_strategy_id,
     save_strategy_outputs,
 )
-from sage_core.models.stock_selector import SelectionConfig
+from sage_core.stock_selection.stock_selector import SelectionConfig
 from sage_core.portfolio.construction import PortfolioConstruction
 from sage_core.portfolio.risk_control import RiskControl
 from sage_core.backtest.walk_forward import WalkForwardBacktest

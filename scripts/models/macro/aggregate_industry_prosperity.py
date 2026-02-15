@@ -21,7 +21,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import get_tushare_root, get_data_path
-from sage_core.models.signal_indicators import IndustryProsperity
+from sage_core.industry.signal_indicators import IndustryProsperity
 
 
 def load_constituents(tushare_root: Path) -> pd.DataFrame:

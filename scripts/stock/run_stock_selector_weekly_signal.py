@@ -22,7 +22,7 @@ from scripts.stock.run_stock_selector_monthly import (
     _resolve_tushare_root,
     _to_yyyymmdd,
 )
-from sage_core.models.stock_selector import SelectionConfig, StockSelector
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 
 
 def _load_json(path: Path) -> Dict[str, Any]:

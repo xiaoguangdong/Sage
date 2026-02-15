@@ -1,10 +1,10 @@
 """
-模型模块
+模型兼容层（向后兼容）
 """
-from .trend_model import TrendModelRule, TrendModelLGBM, TrendModelHMM, create_trend_model
-from .entry_model import EntryModelLR
-from .stock_selector import StockSelector, SelectionConfig
-from .strategy_governance import (
+from sage_core.trend.trend_model import TrendModelRule, TrendModelLGBM, TrendModelHMM, create_trend_model
+from sage_core.execution.entry_model import EntryModelLR
+from sage_core.stock_selection.stock_selector import StockSelector, SelectionConfig
+from sage_core.governance.strategy_governance import (
     SIGNAL_SCHEMA,
     SUPPORTED_STRATEGIES,
     StrategyGovernanceConfig,
@@ -17,7 +17,7 @@ from .strategy_governance import (
 )
 
 try:
-    from .rank_model import RankModelLGBM
+    from sage_core.stock_selection.rank_model import RankModelLGBM
 except ModuleNotFoundError:
     RankModelLGBM = None
 

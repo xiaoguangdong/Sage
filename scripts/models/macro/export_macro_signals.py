@@ -17,7 +17,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from sage_core.models.signal_indicators import MacroSignal, IndustryProsperity, NorthboundFlow
+from sage_core.industry.signal_indicators import MacroSignal, IndustryProsperity, NorthboundFlow
 
 
 def apply_delay(df: pd.DataFrame, date_col: str, delay_days: int) -> pd.DataFrame:

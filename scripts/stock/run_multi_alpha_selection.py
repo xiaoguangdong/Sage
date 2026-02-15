@@ -15,7 +15,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from sage_core.models.multi_alpha_selector import MultiAlphaStockSelector
+from sage_core.stock_selection.multi_alpha_selector import MultiAlphaStockSelector
 from scripts.data._shared.runtime import get_tushare_root
 
 

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from scripts.data._shared.runtime import get_data_root, get_tushare_root
-from sage_core.models.stock_selector import SelectionConfig, StockSelector
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
