@@ -22,6 +22,7 @@ JOB_SCRIPTS = {
     "industry_signal_contract": PROJECT_ROOT / "scripts" / "strategy" / "build_industry_signal_contract.py",
     "industry_signal_quality": PROJECT_ROOT / "scripts" / "monitoring" / "check_industry_signal_quality.py",
     "ths_daily_completeness": PROJECT_ROOT / "scripts" / "monitoring" / "check_ths_daily_completeness.py",
+    "ths_daily_monthly_full": PROJECT_ROOT / "scripts" / "data" / "run_ths_daily_monthly_full.py",
 }
 
 

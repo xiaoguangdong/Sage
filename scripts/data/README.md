@@ -184,11 +184,15 @@ python3 scripts/data/policy/fetch_eastmoney_industry_reports.py \
 ```bash
 python3 scripts/data/tushare_downloader.py --task ths_index
 python3 scripts/data/tushare_downloader.py --task ths_daily --start-date 20230101 --end-date 20251231 --resume
+python3 scripts/data/run_ths_daily_monthly_full.py --start-date 20200101 --end-date 20260213
+# 或统一入口
+python3 scripts/run_job.py ths_daily_monthly_full -- --start-date 20200101 --end-date 20260213
 ```
 
 输出：
 - `data/tushare/concepts/ths_index.parquet`
 - `data/tushare/concepts/ths_daily.parquet`
+- `data/processed/concepts/ths_daily_completeness_report.json`
 
 ### 3) 政策信号管道
 

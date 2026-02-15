@@ -3,10 +3,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
