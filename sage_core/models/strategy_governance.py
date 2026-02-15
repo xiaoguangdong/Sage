@@ -94,6 +94,136 @@ def _normalize_trade_date(value: str | int | pd.Timestamp) -> str:
         return str(value)
 
 
+def decide_auto_promotion(
+    evaluation_df: pd.DataFrame,
+    current_champion: str,
+    challengers: Tuple[str, ...],
+    as_of_date: Optional[str] = None,
+    enabled: bool = False,
+    manual_mode: bool = False,
+    allow_when_manual: bool = False,
+    consecutive_periods: int = 3,
+    max_drawdown_tolerance: float = 0.02,
+    max_turnover_multiplier: float = 1.2,
+    min_cost_return_diff: float = 0.0,
+    min_sharpe_diff: float = 0.0,
+    min_data_quality: float = 0.95,
+) -> Dict[str, object]:
+    """
+    自动晋升决策：
+    - 仅当 enabled=True 时生效
+    - Challenger 需连续N个评估周期满足硬门槛
+    - 多候选时按综合得分差（challenger - champion）最大者晋升
+    """
+    current_champion = normalize_strategy_id(current_champion)
+    challengers = tuple(normalize_strategy_id(s) for s in challengers)
+
+    decision = {
+        "enabled": bool(enabled),
+        "current_champion": current_champion,
+        "next_champion": current_champion,
+        "promoted": False,
+        "reason": "disabled",
+        "candidate": None,
+        "score_diff": 0.0,
+        "periods_checked": 0,
+    }
+    if not enabled:
+        return decision
+    if manual_mode and not allow_when_manual:
+        decision["reason"] = "manual_mode"
+        return decision
+    if evaluation_df is None or evaluation_df.empty:
+        decision["reason"] = "no_evaluation_data"
+        return decision
+
+    required_cols = {"strategy_id", "trade_date", "cost_return", "max_drawdown", "sharpe", "turnover"}
+    if not required_cols.issubset(evaluation_df.columns):
+        decision["reason"] = "invalid_evaluation_schema"
+        return decision
+
+    data = evaluation_df.copy()
+    data["trade_date"] = pd.to_datetime(data["trade_date"], errors="coerce")
+    data = data.dropna(subset=["trade_date"])
+    if as_of_date is not None:
+        cutoff = pd.to_datetime(_normalize_trade_date(as_of_date), format="%Y%m%d", errors="coerce")
+        if pd.notna(cutoff):
+            data = data[data["trade_date"] <= cutoff]
+    if data.empty:
+        decision["reason"] = "no_data_before_cutoff"
+        return decision
+
+    if "data_quality" not in data.columns:
+        data["data_quality"] = 1.0
+
+    champion_rows = data[data["strategy_id"] == current_champion].copy()
+    if champion_rows.empty:
+        decision["reason"] = "champion_metrics_missing"
+        return decision
+
+    best_candidate = None
+    best_diff = -np.inf
+    best_periods = 0
+
+    for challenger in challengers:
+        if challenger == current_champion:
+            continue
+        challenger_rows = data[data["strategy_id"] == challenger].copy()
+        if challenger_rows.empty:
+            continue
+
+        merged = challenger_rows.merge(
+            champion_rows,
+            on="trade_date",
+            how="inner",
+            suffixes=("_c", "_ch"),
+        ).sort_values("trade_date")
+        recent = merged.tail(consecutive_periods)
+        if len(recent) < consecutive_periods:
+            continue
+
+        gate = (
+            (recent["cost_return_c"] >= recent["cost_return_ch"] + min_cost_return_diff)
+            & (recent["sharpe_c"] >= recent["sharpe_ch"] + min_sharpe_diff)
+            & (recent["turnover_c"] <= recent["turnover_ch"] * max_turnover_multiplier)
+            & (recent["data_quality_c"] >= min_data_quality)
+            & (recent["max_drawdown_c"].abs() <= recent["max_drawdown_ch"].abs() + max_drawdown_tolerance)
+        )
+        if not bool(gate.all()):
+            continue
+
+        challenger_score = (
+            recent["cost_return_c"] * 0.4
+            + recent["sharpe_c"] * 0.3
+            - recent["max_drawdown_c"].abs() * 0.2
+            - recent["turnover_c"] * 0.1
+        )
+        champion_score = (
+            recent["cost_return_ch"] * 0.4
+            + recent["sharpe_ch"] * 0.3
+            - recent["max_drawdown_ch"].abs() * 0.2
+            - recent["turnover_ch"] * 0.1
+        )
+        score_diff = float((challenger_score - champion_score).mean())
+        if score_diff > best_diff:
+            best_diff = score_diff
+            best_candidate = challenger
+            best_periods = len(recent)
+
+    if best_candidate and best_diff > 0:
+        decision.update({
+            "next_champion": best_candidate,
+            "promoted": True,
+            "reason": "challenger_outperformed",
+            "candidate": best_candidate,
+            "score_diff": round(best_diff, 6),
+            "periods_checked": int(best_periods),
+        })
+    else:
+        decision["reason"] = "no_eligible_challenger"
+    return decision
+
+
 @dataclass
 class StrategyGovernanceConfig:
     active_champion_id: str = "seed_balance_strategy"

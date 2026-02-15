@@ -13,6 +13,19 @@ strategy_governance:
     - positive_strategy_v1
     - value_strategy_v1
 
+# 自动晋升（Champion/Challenger）配置
+auto_promotion:
+  enabled: false
+  allow_when_manual: false
+  evaluation_path: data/backtest/governance/shadow_eval.parquet
+  decision_path: data/backtest/governance/promotion_decisions.jsonl
+  consecutive_periods: 3
+  max_drawdown_tolerance: 0.02
+  max_turnover_multiplier: 1.2
+  min_cost_return_diff: 0.0
+  min_sharpe_diff: 0.0
+  min_data_quality: 0.95
+
 # 挑战者正向策略（positive）的组合权重
 challenger_weights:
   positive_growth_weight: 0.7

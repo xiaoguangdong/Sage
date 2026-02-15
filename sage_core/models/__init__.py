@@ -13,6 +13,7 @@ from .strategy_governance import (
     MultiAlphaChallengerStrategies,
     ChampionChallengerEngine,
     normalize_strategy_id,
+    decide_auto_promotion,
 )
 
 try:
@@ -37,4 +38,5 @@ __all__ = [
     'MultiAlphaChallengerStrategies',
     'ChampionChallengerEngine',
     'normalize_strategy_id',
+    'decide_auto_promotion',
 ]

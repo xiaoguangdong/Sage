@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import yaml
 import logging
+import json
 import sys
 from pathlib import Path
 from datetime import datetime
@@ -27,6 +28,7 @@ from sage_core.models.strategy_governance import (
     MultiAlphaChallengerStrategies,
     SeedBalanceStrategy,
     StrategyGovernanceConfig,
+    decide_auto_promotion,
     normalize_strategy_id,
     save_strategy_outputs,
 )
@@ -234,6 +236,23 @@ def _signals_to_ranked(champion_signals: pd.DataFrame) -> pd.DataFrame:
     return df_ranked.sort_values("rank_score", ascending=False).reset_index(drop=True)
 
 
+def _load_evaluation_frame(evaluation_path: Path) -> pd.DataFrame:
+    if not evaluation_path.exists():
+        return pd.DataFrame()
+    if evaluation_path.suffix.lower() == ".parquet":
+        return pd.read_parquet(evaluation_path)
+    if evaluation_path.suffix.lower() in {".csv", ".txt"}:
+        return pd.read_csv(evaluation_path)
+    logger.warning("不支持的评估文件格式: %s", evaluation_path)
+    return pd.DataFrame()
+
+
+def _append_decision_jsonl(path: Path, decision: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(decision, ensure_ascii=False) + "\n")
+
+
 def run_weekly_workflow(config: dict, df: pd.DataFrame):
     """
     运行每周工作流
@@ -291,6 +310,71 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         latest_trade_date = pd.to_datetime(df_features['trade_date'].max(), errors='coerce').strftime('%Y%m%d')
     else:
         latest_trade_date = datetime.now().strftime('%Y%m%d')
+
+    governance_cfg = (config.get("strategy_governance") or {})
+    governance_raw = governance_cfg.get("strategy_governance", {})
+    auto_cfg = governance_cfg.get("auto_promotion", {})
+    configured_champion = normalize_strategy_id(
+        governance_raw.get("active_champion_id", governance_engine.governance_config.active_champion_id)
+    )
+    manual_mode = governance_raw.get("champion_source", "manual") == "manual"
+    auto_enabled = bool(auto_cfg.get("enabled", False))
+    promotion_decision = {
+        "enabled": auto_enabled,
+        "current_champion": configured_champion,
+        "next_champion": configured_champion,
+        "promoted": False,
+        "reason": "disabled",
+    }
+
+    if auto_enabled:
+        evaluation_path = Path(auto_cfg.get("evaluation_path", "data/backtest/governance/shadow_eval.parquet"))
+        try:
+            evaluation_df = _load_evaluation_frame(evaluation_path)
+            promotion_decision = decide_auto_promotion(
+                evaluation_df=evaluation_df,
+                current_champion=configured_champion,
+                challengers=governance_engine.governance_config.normalized_challengers(),
+                as_of_date=latest_trade_date,
+                enabled=auto_enabled,
+                manual_mode=manual_mode,
+                allow_when_manual=bool(auto_cfg.get("allow_when_manual", False)),
+                consecutive_periods=int(auto_cfg.get("consecutive_periods", 3)),
+                max_drawdown_tolerance=float(auto_cfg.get("max_drawdown_tolerance", 0.02)),
+                max_turnover_multiplier=float(auto_cfg.get("max_turnover_multiplier", 1.2)),
+                min_cost_return_diff=float(auto_cfg.get("min_cost_return_diff", 0.0)),
+                min_sharpe_diff=float(auto_cfg.get("min_sharpe_diff", 0.0)),
+                min_data_quality=float(auto_cfg.get("min_data_quality", 0.95)),
+            )
+        except Exception as exc:
+            logger.warning("自动晋升评估失败，回退手动冠军: %s", exc)
+            promotion_decision = {
+                "enabled": auto_enabled,
+                "current_champion": configured_champion,
+                "next_champion": configured_champion,
+                "promoted": False,
+                "reason": f"error:{exc}",
+            }
+
+    active_champion_id = normalize_strategy_id(
+        promotion_decision.get("next_champion", configured_champion)
+    )
+    logger.info(
+        "自动晋升决策: enabled=%s, promoted=%s, champion=%s -> %s, reason=%s",
+        promotion_decision.get("enabled", False),
+        promotion_decision.get("promoted", False),
+        configured_champion,
+        active_champion_id,
+        promotion_decision.get("reason"),
+    )
+    decision_path = Path(auto_cfg.get("decision_path", "data/backtest/governance/promotion_decisions.jsonl"))
+    decision_record = {
+        "trade_date": latest_trade_date,
+        "champion_source": governance_raw.get("champion_source", "manual"),
+        **promotion_decision,
+    }
+    _append_decision_jsonl(decision_path, decision_record)
+
     seed_data = df_features.copy()
     if 'ts_code' in seed_data.columns:
         seed_data = seed_data[~seed_data['ts_code'].isin(index_candidates)].copy()
@@ -299,6 +383,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         trade_date=latest_trade_date,
         top_n=10,
         seed_data=seed_data,
+        active_champion_id=active_champion_id,
         allocation_method="fixed",
         regime={0: "bear", 1: "sideways", 2: "bull"}.get(trend_state, "sideways"),
     )
