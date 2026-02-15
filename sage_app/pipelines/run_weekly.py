@@ -405,7 +405,7 @@ def _build_and_load_industry_snapshot(
     default_lookback_days: int = 30,
     half_life_days: dict[str, float] | None = None,
     default_half_life_days: float = 7.0,
-) -> tuple[pd.DataFrame, Path]:
+) -> tuple[pd.DataFrame, pd.DataFrame, Path, Path]:
     output_dir = get_data_path("signals", "industry", ensure=True)
     result = build_industry_signal_contract_artifacts(
         output_dir=output_dir,
@@ -416,12 +416,14 @@ def _build_and_load_industry_snapshot(
         default_half_life_days=float(default_half_life_days),
     )
     snapshot_path = Path(result.get("signal_snapshot_path", output_dir / "industry_signal_snapshot_latest.parquet"))
+    score_snapshot_path = Path(result.get("score_snapshot_path", output_dir / "industry_score_snapshot_latest.parquet"))
     if not result.get("generated", False):
         if snapshot_path.exists():
             logger.warning("行业信号未重建，回退读取已有快照: %s", snapshot_path)
-            return pd.read_parquet(snapshot_path), snapshot_path
+            score_snapshot = pd.read_parquet(score_snapshot_path) if score_snapshot_path.exists() else pd.DataFrame()
+            return pd.read_parquet(snapshot_path), score_snapshot, snapshot_path, score_snapshot_path
         logger.warning("行业信号未重建且无历史快照可用")
-        return pd.DataFrame(), snapshot_path
+        return pd.DataFrame(), pd.DataFrame(), snapshot_path, score_snapshot_path
 
     summary = result.get("summary", {}) or {}
     freshness = summary.get("signal_freshness", {})
@@ -431,9 +433,9 @@ def _build_and_load_industry_snapshot(
         summary.get("rows_signal_snapshot"),
         freshness,
     )
-    if snapshot_path.exists():
-        return pd.read_parquet(snapshot_path), snapshot_path
-    return pd.DataFrame(), snapshot_path
+    snapshot = pd.read_parquet(snapshot_path) if snapshot_path.exists() else pd.DataFrame()
+    score_snapshot = pd.read_parquet(score_snapshot_path) if score_snapshot_path.exists() else pd.DataFrame()
+    return snapshot, score_snapshot, snapshot_path, score_snapshot_path
 
 
 def run_weekly_workflow(config: dict, df: pd.DataFrame):
@@ -624,7 +626,14 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     half_life_days = industry_cfg.get("signal_half_life_days")
     default_lookback = industry_cfg.get("default_lookback_days", 30)
     default_half_life = industry_cfg.get("default_half_life_days", 7.0)
-    industry_snapshot, industry_snapshot_path = _build_and_load_industry_snapshot(
+    overlay_cfg = industry_cfg.get("overlay") if isinstance(industry_cfg, dict) else {}
+    overlay_strength = float((overlay_cfg or {}).get("overlay_strength", 0.20))
+    mainline_strength = float((overlay_cfg or {}).get("mainline_strength", 0.35))
+    signal_weights = (overlay_cfg or {}).get("signal_weights")
+    if not isinstance(signal_weights, dict):
+        signal_weights = None
+
+    industry_snapshot, industry_score_snapshot, industry_snapshot_path, industry_score_snapshot_path = _build_and_load_industry_snapshot(
         latest_trade_date=latest_trade_date,
         lookback_days=lookback_days if isinstance(lookback_days, dict) else None,
         default_lookback_days=int(default_lookback),
@@ -636,7 +645,10 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         stock_signals=champion_contract,
         industry_snapshot=industry_snapshot,
         stock_industry_map=stock_industry_map,
-        overlay_strength=0.20,
+        industry_score_snapshot=industry_score_snapshot,
+        signal_weights=signal_weights,
+        overlay_strength=overlay_strength,
+        mainline_strength=mainline_strength,
     )
     exec_signal_path = contract_dir / f"execution_signals_{latest_trade_date}.parquet"
     execution_signals.to_parquet(exec_signal_path, index=False)
@@ -737,6 +749,12 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         "signal_contract_path": str(contract_path),
         "execution_signal_path": str(exec_signal_path),
         "industry_snapshot_path": str(industry_snapshot_path) if industry_snapshot_path.exists() else None,
+        "industry_score_snapshot_path": str(industry_score_snapshot_path) if industry_score_snapshot_path.exists() else None,
+        "industry_overlay_config": {
+            "overlay_strength": overlay_strength,
+            "mainline_strength": mainline_strength,
+            "signal_weights": signal_weights,
+        },
         "position_info": position_info,
         "target_exposure": float(target_exposure),
         "risk_checks": risk_checks,

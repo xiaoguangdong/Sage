@@ -111,8 +111,10 @@ def apply_industry_overlay(
     stock_signals: pd.DataFrame,
     industry_snapshot: pd.DataFrame,
     stock_industry_map: pd.DataFrame,
+    industry_score_snapshot: Optional[pd.DataFrame] = None,
     signal_weights: Optional[Dict[str, float]] = None,
     overlay_strength: float = 0.20,
+    mainline_strength: float = 0.0,
 ) -> pd.DataFrame:
     if stock_signals is None or stock_signals.empty:
         return pd.DataFrame(columns=list(stock_signals.columns) + ["industry_l1", "industry_overlay", "score_raw", "score_final"])
@@ -121,7 +123,7 @@ def apply_industry_overlay(
     out["score_raw"] = pd.to_numeric(out["score"], errors="coerce").fillna(0.0)
     out["score_final"] = out["score_raw"]
 
-    if industry_snapshot is None or industry_snapshot.empty or stock_industry_map is None or stock_industry_map.empty:
+    if stock_industry_map is None or stock_industry_map.empty:
         return out
 
     weights = signal_weights or {
@@ -130,38 +132,36 @@ def apply_industry_overlay(
         "northbound_ratio": 0.3,
     }
 
-    snapshot = industry_snapshot.copy()
-    required = {"sw_industry", "signal_name", "score", "confidence"}
-    if not required.issubset(snapshot.columns):
-        return out
+    grouped = pd.DataFrame(columns=["industry_l1", "industry_overlay"])
+    snapshot = industry_snapshot.copy() if industry_snapshot is not None else pd.DataFrame()
+    if not snapshot.empty:
+        required = {"sw_industry", "signal_name", "score", "confidence"}
+        if required.issubset(snapshot.columns):
+            score_series = pd.to_numeric(snapshot["score"], errors="coerce").fillna(0.0)
+            if "score_signed" in snapshot.columns:
+                signed_score = pd.to_numeric(snapshot["score_signed"], errors="coerce").fillna(0.0)
+            elif "direction" in snapshot.columns and score_series.between(0.0, 1.0).all():
+                direction = pd.to_numeric(snapshot["direction"], errors="coerce").fillna(0.0).clip(-1.0, 1.0)
+                signed_score = direction * (2.0 * (score_series - 0.5).abs())
+            elif score_series.between(0.0, 1.0).all():
+                signed_score = 2.0 * (score_series - 0.5)
+            else:
+                signed_score = score_series
 
-    score_series = pd.to_numeric(snapshot["score"], errors="coerce").fillna(0.0)
-    if "score_signed" in snapshot.columns:
-        signed_score = pd.to_numeric(snapshot["score_signed"], errors="coerce").fillna(0.0)
-    elif "direction" in snapshot.columns and score_series.between(0.0, 1.0).all():
-        direction = pd.to_numeric(snapshot["direction"], errors="coerce").fillna(0.0).clip(-1.0, 1.0)
-        signed_score = direction * (2.0 * (score_series - 0.5).abs())
-    elif score_series.between(0.0, 1.0).all():
-        signed_score = 2.0 * (score_series - 0.5)
-    else:
-        signed_score = score_series
+            snapshot = snapshot[snapshot["signal_name"].isin(weights.keys())].copy()
+            if not snapshot.empty:
+                snapshot["score"] = signed_score.loc[snapshot.index].clip(-1.0, 1.0)
+                snapshot["confidence"] = pd.to_numeric(snapshot["confidence"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
+                snapshot["signal_weight"] = snapshot["signal_name"].map(weights).astype(float)
+                snapshot["weighted"] = snapshot["score"] * snapshot["confidence"] * snapshot["signal_weight"]
 
-    snapshot = snapshot[snapshot["signal_name"].isin(weights.keys())].copy()
-    if snapshot.empty:
-        return out
-
-    snapshot["score"] = signed_score.loc[snapshot.index].clip(-1.0, 1.0)
-    snapshot["confidence"] = pd.to_numeric(snapshot["confidence"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
-    snapshot["signal_weight"] = snapshot["signal_name"].map(weights).astype(float)
-    snapshot["weighted"] = snapshot["score"] * snapshot["confidence"] * snapshot["signal_weight"]
-
-    grouped = snapshot.groupby("sw_industry", as_index=False).agg(
-        weighted_sum=("weighted", "sum"),
-        weight_sum=("signal_weight", "sum"),
-    )
-    grouped["industry_overlay"] = grouped["weighted_sum"] / grouped["weight_sum"].replace(0.0, np.nan)
-    grouped["industry_overlay"] = grouped["industry_overlay"].fillna(0.0).clip(-1.0, 1.0)
-    grouped = grouped.rename(columns={"sw_industry": "industry_l1"})[["industry_l1", "industry_overlay"]]
+                grouped = snapshot.groupby("sw_industry", as_index=False).agg(
+                    weighted_sum=("weighted", "sum"),
+                    weight_sum=("signal_weight", "sum"),
+                )
+                grouped["industry_overlay"] = grouped["weighted_sum"] / grouped["weight_sum"].replace(0.0, np.nan)
+                grouped["industry_overlay"] = grouped["industry_overlay"].fillna(0.0).clip(-1.0, 1.0)
+                grouped = grouped.rename(columns={"sw_industry": "industry_l1"})[["industry_l1", "industry_overlay"]]
 
     map_df = stock_industry_map.copy()
     map_df = map_df.dropna(subset=["ts_code", "industry_l1"])
@@ -172,5 +172,32 @@ def apply_industry_overlay(
     out = out.merge(map_df, on="ts_code", how="left")
     out = out.merge(grouped, on="industry_l1", how="left")
     out["industry_overlay"] = out["industry_overlay"].fillna(0.0)
+
+    mainline = industry_score_snapshot.copy() if industry_score_snapshot is not None else pd.DataFrame()
+    mainline_col = "mainline_overlay"
+    if not mainline.empty:
+        industry_col = "sw_industry" if "sw_industry" in mainline.columns else ("industry_l1" if "industry_l1" in mainline.columns else None)
+        score_col = "combined_score" if "combined_score" in mainline.columns else ("score" if "score" in mainline.columns else None)
+        if industry_col and score_col:
+            mainline = mainline[[industry_col, score_col]].copy().rename(columns={industry_col: "industry_l1", score_col: "mainline_score"})
+            mainline["mainline_score"] = pd.to_numeric(mainline["mainline_score"], errors="coerce").fillna(0.5)
+            if mainline["mainline_score"].between(0.0, 1.0).all():
+                mainline[mainline_col] = (2.0 * (mainline["mainline_score"] - 0.5)).clip(-1.0, 1.0)
+            else:
+                mainline[mainline_col] = mainline["mainline_score"].clip(-1.0, 1.0)
+            mainline = mainline[["industry_l1", mainline_col]].drop_duplicates(subset=["industry_l1"])
+            out = out.merge(mainline, on="industry_l1", how="left")
+
+    if mainline_col not in out.columns:
+        out[mainline_col] = 0.0
+    out[mainline_col] = pd.to_numeric(out[mainline_col], errors="coerce").fillna(0.0).clip(-1.0, 1.0)
+
+    mainline_strength = float(mainline_strength)
+    if mainline_strength > 0:
+        base_strength = max(0.0, 1.0 - mainline_strength)
+        out["industry_overlay"] = (
+            base_strength * out["industry_overlay"] + mainline_strength * out[mainline_col]
+        ).clip(-1.0, 1.0)
+
     out["score_final"] = out["score_raw"] * (1.0 + float(overlay_strength) * out["industry_overlay"])
     return out

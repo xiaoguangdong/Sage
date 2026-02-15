@@ -51,3 +51,10 @@ industry_signals:
     policy_score: 5
     concept_bias: 5
     northbound_ratio: 7
+  overlay:
+    overlay_strength: 0.20
+    mainline_strength: 0.35
+    signal_weights:
+      policy_score: 0.4
+      concept_bias: 0.3
+      northbound_ratio: 0.3
