@@ -332,6 +332,18 @@ def _append_decision_jsonl(path: Path, decision: dict) -> None:
         f.write(json.dumps(decision, ensure_ascii=False) + "\n")
 
 
+def _json_safe(value):
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, np.generic):
+        value = value.item()
+    if isinstance(value, float) and not np.isfinite(value):
+        return None
+    return value
+
+
 def run_weekly_workflow(config: dict, df: pd.DataFrame):
     """
     运行每周工作流
@@ -618,8 +630,9 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         "target_exposure": float(target_exposure),
         "risk_checks": risk_checks,
     }
+    context_payload = _json_safe(context_payload)
     with open(context_file, "w", encoding="utf-8") as f:
-        json.dump(context_payload, f, ensure_ascii=False, indent=2)
+        json.dump(context_payload, f, ensure_ascii=False, indent=2, allow_nan=False)
     logger.info(f"执行上下文已保存到: {context_file}")
     
     return portfolio
