@@ -135,11 +135,22 @@ def apply_industry_overlay(
     if not required.issubset(snapshot.columns):
         return out
 
+    score_series = pd.to_numeric(snapshot["score"], errors="coerce").fillna(0.0)
+    if "score_signed" in snapshot.columns:
+        signed_score = pd.to_numeric(snapshot["score_signed"], errors="coerce").fillna(0.0)
+    elif "direction" in snapshot.columns and score_series.between(0.0, 1.0).all():
+        direction = pd.to_numeric(snapshot["direction"], errors="coerce").fillna(0.0).clip(-1.0, 1.0)
+        signed_score = direction * (2.0 * (score_series - 0.5).abs())
+    elif score_series.between(0.0, 1.0).all():
+        signed_score = 2.0 * (score_series - 0.5)
+    else:
+        signed_score = score_series
+
     snapshot = snapshot[snapshot["signal_name"].isin(weights.keys())].copy()
     if snapshot.empty:
         return out
 
-    snapshot["score"] = pd.to_numeric(snapshot["score"], errors="coerce").fillna(0.0).clip(-1.0, 1.0)
+    snapshot["score"] = signed_score.loc[snapshot.index].clip(-1.0, 1.0)
     snapshot["confidence"] = pd.to_numeric(snapshot["confidence"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
     snapshot["signal_weight"] = snapshot["signal_name"].map(weights).astype(float)
     snapshot["weighted"] = snapshot["score"] * snapshot["confidence"] * snapshot["signal_weight"]

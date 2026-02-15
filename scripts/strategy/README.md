@@ -9,13 +9,16 @@
 python scripts/strategy/build_industry_concept_bias.py --top-k 10
 
 # 2) 行业信号统一契约（policy/concept/northbound）
-python scripts/strategy/build_industry_signal_contract.py
+python scripts/strategy/build_industry_signal_contract.py \
+  --as-of-date 2026-02-14 \
+  --signal-lookback-days policy_score=3,concept_bias=7,northbound_ratio=45
 ```
 
 输出：
 - `data/signals/industry/industry_concept_bias.parquet`
 - `data/signals/industry/industry_signal_contract.parquet`
 - `data/signals/industry/industry_signal_snapshot_latest.parquet`
+- `data/signals/industry/industry_score_snapshot_latest.parquet`
 
 ## 政策信号回测（MVP）
 

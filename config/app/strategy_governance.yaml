@@ -38,3 +38,11 @@ seed_balance_strategy:
   label_weights: [0.5, 0.3, 0.2]
   risk_adjusted: true
   industry_col: industry_l1
+
+# 行业信号契约对齐配置（run_weekly 自动按 trade_date 构建）
+industry_signals:
+  default_lookback_days: 30
+  signal_lookback_days:
+    policy_score: 3
+    concept_bias: 7
+    northbound_ratio: 45

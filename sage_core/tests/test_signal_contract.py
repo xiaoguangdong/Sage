@@ -87,3 +87,37 @@ def test_apply_industry_overlay_changes_score():
     coal_score = out.loc[out["ts_code"] == "000002.SZ", "score_final"].iloc[0]
     assert elec_score > out.loc[out["ts_code"] == "000001.SZ", "score_raw"].iloc[0]
     assert coal_score < out.loc[out["ts_code"] == "000002.SZ", "score_raw"].iloc[0]
+
+
+def test_apply_industry_overlay_supports_zero_one_score_with_direction():
+    trade_date = "20260215"
+    champion = _sample_signal(trade_date, ["000001.SZ", "000002.SZ"], base_score=1.00)
+    champion["strategy_id"] = "seed_balance_strategy"
+    champion["is_champion"] = True
+    champion["signal_name"] = "stock_score"
+    champion["source"] = "champion_challenger"
+
+    stock_industry_map = pd.DataFrame(
+        [
+            {"ts_code": "000001.SZ", "industry_l1": "电子"},
+            {"ts_code": "000002.SZ", "industry_l1": "煤炭"},
+        ]
+    )
+
+    industry_snapshot = pd.DataFrame(
+        [
+            {"trade_date": trade_date, "sw_industry": "电子", "signal_name": "policy_score", "score": 0.9, "confidence": 1.0, "direction": 1},
+            {"trade_date": trade_date, "sw_industry": "煤炭", "signal_name": "policy_score", "score": 0.1, "confidence": 1.0, "direction": -1},
+        ]
+    )
+    out = apply_industry_overlay(
+        stock_signals=champion,
+        industry_snapshot=industry_snapshot,
+        stock_industry_map=stock_industry_map,
+        signal_weights={"policy_score": 1.0},
+        overlay_strength=0.2,
+    )
+    elec_score = out.loc[out["ts_code"] == "000001.SZ", "score_final"].iloc[0]
+    coal_score = out.loc[out["ts_code"] == "000002.SZ", "score_final"].iloc[0]
+    assert elec_score > out.loc[out["ts_code"] == "000001.SZ", "score_raw"].iloc[0]
+    assert coal_score < out.loc[out["ts_code"] == "000002.SZ", "score_raw"].iloc[0]

@@ -14,6 +14,7 @@ from datetime import datetime
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
 from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.strategy.build_industry_signal_contract import build_industry_signal_contract_artifacts
 from sage_app.data.data_loader import DataLoader
 from sage_core.utils.column_normalizer import normalize_security_columns
 from sage_core.utils.logging_utils import setup_logging
@@ -398,6 +399,39 @@ def _json_safe(value):
     return value
 
 
+def _build_and_load_industry_snapshot(
+    latest_trade_date: str,
+    lookback_days: dict[str, int] | None = None,
+    default_lookback_days: int = 30,
+) -> tuple[pd.DataFrame, Path]:
+    output_dir = get_data_path("signals", "industry", ensure=True)
+    result = build_industry_signal_contract_artifacts(
+        output_dir=output_dir,
+        as_of_date=latest_trade_date,
+        signal_lookback_days=lookback_days or {},
+        default_lookback_days=int(default_lookback_days),
+    )
+    snapshot_path = Path(result.get("signal_snapshot_path", output_dir / "industry_signal_snapshot_latest.parquet"))
+    if not result.get("generated", False):
+        if snapshot_path.exists():
+            logger.warning("行业信号未重建，回退读取已有快照: %s", snapshot_path)
+            return pd.read_parquet(snapshot_path), snapshot_path
+        logger.warning("行业信号未重建且无历史快照可用")
+        return pd.DataFrame(), snapshot_path
+
+    summary = result.get("summary", {}) or {}
+    freshness = summary.get("signal_freshness", {})
+    logger.info(
+        "行业信号已对齐: as_of=%s, rows=%s, freshness=%s",
+        summary.get("as_of_date"),
+        summary.get("rows_signal_snapshot"),
+        freshness,
+    )
+    if snapshot_path.exists():
+        return pd.read_parquet(snapshot_path), snapshot_path
+    return pd.DataFrame(), snapshot_path
+
+
 def run_weekly_workflow(config: dict, df: pd.DataFrame):
     """
     运行每周工作流
@@ -580,9 +614,15 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         champion_id=active_champion_id,
         min_confidence=0.0,
     )
-
-    industry_snapshot_path = get_data_path("signals", "industry", "industry_signal_snapshot_latest.parquet")
-    industry_snapshot = pd.read_parquet(industry_snapshot_path) if industry_snapshot_path.exists() else pd.DataFrame()
+    strategy_cfg = config.get("strategy_governance", {}) if isinstance(config, dict) else {}
+    industry_cfg = (strategy_cfg.get("industry_signals") or {}) if isinstance(strategy_cfg, dict) else {}
+    lookback_days = industry_cfg.get("signal_lookback_days")
+    default_lookback = industry_cfg.get("default_lookback_days", 30)
+    industry_snapshot, industry_snapshot_path = _build_and_load_industry_snapshot(
+        latest_trade_date=latest_trade_date,
+        lookback_days=lookback_days if isinstance(lookback_days, dict) else None,
+        default_lookback_days=int(default_lookback),
+    )
     stock_industry_map = build_stock_industry_map_from_features(df_features)
     execution_signals = apply_industry_overlay(
         stock_signals=champion_contract,

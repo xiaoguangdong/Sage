@@ -51,4 +51,5 @@ python scripts/run_job.py stock_scheduler -- --mode cron
   - `data/signals/stock_selector/contracts/stock_signal_contract_latest.parquet`
 - 周度主流程会基于 `stock_signal_contract` + `industry_signal_snapshot_latest.parquet` 生成执行信号：
   - `data/signals/stock_selector/contracts/execution_signals_<trade_date>.parquet`
+  - `run_weekly.py` 会先按当日 `trade_date` 自动重建行业信号快照（回看窗口见 `config/app/strategy_governance.yaml` 的 `industry_signals`）
 - 组合构建与仓位风控仅消费上述执行信号，不再直接读取单策略中间表。
