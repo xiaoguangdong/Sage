@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List
 
+import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -19,6 +20,11 @@ DEFAULT_SIGNAL_LOOKBACK_DAYS = {
     "policy_score": 3,
     "concept_bias": 7,
     "northbound_ratio": 45,
+}
+DEFAULT_SIGNAL_HALF_LIFE_DAYS = {
+    "policy_score": 5,
+    "concept_bias": 5,
+    "northbound_ratio": 7,
 }
 
 
@@ -162,11 +168,31 @@ def _parse_signal_lookback(raw: str | None) -> Dict[str, int]:
     return mapping
 
 
+def _parse_signal_float_map(raw: str | None) -> Dict[str, float]:
+    if not raw:
+        return {}
+    mapping: Dict[str, float] = {}
+    for segment in raw.split(","):
+        item = segment.strip()
+        if not item:
+            continue
+        if "=" not in item:
+            raise ValueError(f"signal float map 配置非法: {item}")
+        signal_name, value = item.split("=", 1)
+        signal_name = signal_name.strip()
+        if not signal_name:
+            raise ValueError(f"signal float map 缺少 signal_name: {item}")
+        mapping[signal_name] = float(value.strip())
+    return mapping
+
+
 def _build_aligned_signal_snapshot(
     contract: pd.DataFrame,
     as_of_date: pd.Timestamp,
     lookback_days: Dict[str, int],
     default_lookback_days: int,
+    confidence_half_life_days: Dict[str, float],
+    default_confidence_half_life_days: float,
 ) -> pd.DataFrame:
     if contract.empty:
         return pd.DataFrame()
@@ -188,6 +214,15 @@ def _build_aligned_signal_snapshot(
 
     source = source.sort_values(["signal_name", "sw_industry", "trade_date"])
     latest = source.groupby(["signal_name", "sw_industry"], as_index=False).tail(1).copy()
+    latest["confidence_raw"] = pd.to_numeric(latest["confidence"], errors="coerce").fillna(0.0)
+    latest["confidence_half_life_days"] = (
+        latest["signal_name"]
+        .map(confidence_half_life_days)
+        .fillna(float(default_confidence_half_life_days))
+        .clip(lower=1.0)
+    )
+    latest["confidence_decay"] = np.exp(-np.log(2.0) * latest["stale_days"] / latest["confidence_half_life_days"])
+    latest["confidence"] = (latest["confidence_raw"] * latest["confidence_decay"]).clip(0.0, 1.0)
     latest["source_trade_date"] = latest["trade_date"]
     latest["trade_date"] = as_of_date
     return latest[
@@ -196,6 +231,9 @@ def _build_aligned_signal_snapshot(
             "source_trade_date",
             "stale_days",
             "max_stale_days",
+            "confidence_raw",
+            "confidence_half_life_days",
+            "confidence_decay",
             "sw_industry",
             "signal_name",
             "score",
@@ -245,6 +283,8 @@ def build_industry_signal_contract_artifacts(
     as_of_date: str | pd.Timestamp | None = None,
     signal_lookback_days: Dict[str, int] | None = None,
     default_lookback_days: int = 30,
+    signal_half_life_days: Dict[str, float] | None = None,
+    default_half_life_days: float = 7.0,
 ) -> Dict[str, Any]:
     output_dir = Path(output_dir)
     if not output_dir.is_absolute():
@@ -292,6 +332,9 @@ def build_industry_signal_contract_artifacts(
     lookback_days = dict(DEFAULT_SIGNAL_LOOKBACK_DAYS)
     if signal_lookback_days:
         lookback_days.update({str(k): int(v) for k, v in signal_lookback_days.items()})
+    half_life_days = dict(DEFAULT_SIGNAL_HALF_LIFE_DAYS)
+    if signal_half_life_days:
+        half_life_days.update({str(k): float(v) for k, v in signal_half_life_days.items()})
 
     if as_of_date is not None:
         as_of = pd.to_datetime(as_of_date).floor("D")
@@ -303,6 +346,8 @@ def build_industry_signal_contract_artifacts(
         as_of_date=as_of,
         lookback_days=lookback_days,
         default_lookback_days=default_lookback_days,
+        confidence_half_life_days=half_life_days,
+        default_confidence_half_life_days=default_half_life_days,
     )
     score_snapshot = _to_snapshot(signal_snapshot) if not signal_snapshot.empty else pd.DataFrame()
 
@@ -325,6 +370,8 @@ def build_industry_signal_contract_artifacts(
                 "rows": int(len(group)),
                 "max_stale_days": int(group["stale_days"].max()),
                 "avg_stale_days": round(float(group["stale_days"].mean()), 4),
+                "avg_confidence_raw": round(float(group["confidence_raw"].mean()), 4),
+                "avg_confidence_effective": round(float(group["confidence"].mean()), 4),
             }
 
     summary = {
@@ -337,6 +384,8 @@ def build_industry_signal_contract_artifacts(
         "sources": sorted(contract["source"].unique().tolist()),
         "signal_lookback_days": lookback_days,
         "default_lookback_days": int(default_lookback_days),
+        "signal_half_life_days": half_life_days,
+        "default_half_life_days": float(default_half_life_days),
         "signal_freshness": signal_freshness,
     }
 
@@ -372,8 +421,16 @@ def main() -> None:
         help="按信号配置最大回看天数，例如 policy_score=3,concept_bias=7,northbound_ratio=45",
     )
     parser.add_argument("--default-lookback-days", type=int, default=30, help="未单独配置信号的默认最大回看天数")
+    parser.add_argument(
+        "--signal-half-life-days",
+        type=str,
+        default=None,
+        help="按信号配置置信度半衰期（天），例如 policy_score=5,concept_bias=5,northbound_ratio=7",
+    )
+    parser.add_argument("--default-half-life-days", type=float, default=7.0, help="未单独配置信号的置信度半衰期（天）")
     args = parser.parse_args()
     lookback_days = _parse_signal_lookback(args.signal_lookback_days)
+    half_life_days = _parse_signal_float_map(args.signal_half_life_days)
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("signals", "industry", ensure=True)
     result = build_industry_signal_contract_artifacts(
         output_dir=output_dir,
@@ -383,6 +440,8 @@ def main() -> None:
         as_of_date=args.as_of_date,
         signal_lookback_days=lookback_days,
         default_lookback_days=args.default_lookback_days,
+        signal_half_life_days=half_life_days,
+        default_half_life_days=args.default_half_life_days,
     )
     if not result.get("generated", False):
         print("无可用行业信号，未生成契约")

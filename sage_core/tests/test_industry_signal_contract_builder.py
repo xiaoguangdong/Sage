@@ -67,6 +67,8 @@ def test_build_aligned_signal_snapshot_with_lookback():
         as_of_date=pd.Timestamp("2026-02-14"),
         lookback_days={"policy_score": 3, "concept_bias": 7, "northbound_ratio": 45},
         default_lookback_days=30,
+        confidence_half_life_days={"policy_score": 5, "concept_bias": 5, "northbound_ratio": 7},
+        default_confidence_half_life_days=7.0,
     )
     assert not aligned.empty
     assert aligned["trade_date"].nunique() == 1
@@ -78,6 +80,7 @@ def test_build_aligned_signal_snapshot_with_lookback():
     assert concept_row["stale_days"] == 1
     assert northbound_row["stale_days"] == 43
     assert northbound_row["source_trade_date"] == pd.Timestamp("2026-01-02")
+    assert northbound_row["confidence"] < northbound_row["confidence_raw"]
 
 
 def test_build_aligned_signal_snapshot_drops_expired_signal():
@@ -87,6 +90,8 @@ def test_build_aligned_signal_snapshot_drops_expired_signal():
         as_of_date=pd.Timestamp("2026-02-14"),
         lookback_days={"policy_score": 3, "concept_bias": 7, "northbound_ratio": 30},
         default_lookback_days=30,
+        confidence_half_life_days={"policy_score": 5, "concept_bias": 5, "northbound_ratio": 7},
+        default_confidence_half_life_days=7.0,
     )
     assert "northbound_ratio" not in set(aligned["signal_name"])
 
@@ -98,6 +103,8 @@ def test_to_snapshot_generates_rank():
         as_of_date=pd.Timestamp("2026-02-14"),
         lookback_days={"policy_score": 3, "concept_bias": 7, "northbound_ratio": 45},
         default_lookback_days=30,
+        confidence_half_life_days={"policy_score": 5, "concept_bias": 5, "northbound_ratio": 7},
+        default_confidence_half_life_days=7.0,
     )
     score_snapshot = _to_snapshot(aligned)
     assert {"trade_date", "sw_industry", "combined_score", "rank"}.issubset(score_snapshot.columns)
@@ -136,6 +143,7 @@ def test_build_industry_signal_contract_artifacts(tmp_path):
         northbound_path=northbound_path,
         as_of_date="2026-02-14",
         signal_lookback_days={"policy_score": 3, "concept_bias": 7, "northbound_ratio": 30},
+        signal_half_life_days={"policy_score": 5, "concept_bias": 5, "northbound_ratio": 7},
     )
     assert result["generated"] is True
     snapshot = pd.read_parquet(result["signal_snapshot_path"])

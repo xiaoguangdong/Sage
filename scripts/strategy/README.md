@@ -11,7 +11,8 @@ python scripts/strategy/build_industry_concept_bias.py --top-k 10
 # 2) 行业信号统一契约（policy/concept/northbound）
 python scripts/strategy/build_industry_signal_contract.py \
   --as-of-date 2026-02-14 \
-  --signal-lookback-days policy_score=3,concept_bias=7,northbound_ratio=45
+  --signal-lookback-days policy_score=3,concept_bias=7,northbound_ratio=45 \
+  --signal-half-life-days policy_score=5,concept_bias=5,northbound_ratio=7
 ```
 
 输出：

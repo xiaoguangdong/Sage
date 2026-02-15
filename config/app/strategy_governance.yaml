@@ -42,7 +42,12 @@ seed_balance_strategy:
 # 行业信号契约对齐配置（run_weekly 自动按 trade_date 构建）
 industry_signals:
   default_lookback_days: 30
+  default_half_life_days: 7.0
   signal_lookback_days:
     policy_score: 3
     concept_bias: 7
     northbound_ratio: 45
+  signal_half_life_days:
+    policy_score: 5
+    concept_bias: 5
+    northbound_ratio: 7

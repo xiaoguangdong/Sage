@@ -23,6 +23,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="行业信号质量检查")
     parser.add_argument("--northbound-min-rows", type=int, default=20)
     parser.add_argument("--northbound-max-stale-days", type=int, default=7)
+    parser.add_argument("--northbound-min-effective-confidence", type=float, default=0.05)
     parser.add_argument("--concept-min-coverage", type=float, default=0.95)
     parser.add_argument("--output", type=str, default=None)
     args = parser.parse_args()
@@ -35,11 +36,13 @@ def main() -> None:
     northbound = (summary.get("signal_freshness") or {}).get("northbound_ratio") or {}
     northbound_rows = int(northbound.get("rows", 0) or 0)
     northbound_stale = int(northbound.get("max_stale_days", 99999) or 99999)
+    northbound_conf = float(northbound.get("avg_confidence_effective", 0.0) or 0.0)
     concept_coverage = float(concept_report.get("coverage_rate", 0.0) or 0.0)
 
     checks = {
         "northbound_rows_ok": northbound_rows >= int(args.northbound_min_rows),
         "northbound_stale_ok": northbound_stale <= int(args.northbound_max_stale_days),
+        "northbound_confidence_ok": northbound_conf >= float(args.northbound_min_effective_confidence),
         "concept_coverage_ok": concept_coverage >= float(args.concept_min_coverage),
     }
     passed = all(checks.values())
@@ -49,11 +52,13 @@ def main() -> None:
         "metrics": {
             "northbound_rows": northbound_rows,
             "northbound_max_stale_days": northbound_stale,
+            "northbound_avg_confidence_effective": northbound_conf,
             "concept_coverage_rate": concept_coverage,
         },
         "thresholds": {
             "northbound_min_rows": int(args.northbound_min_rows),
             "northbound_max_stale_days": int(args.northbound_max_stale_days),
+            "northbound_min_effective_confidence": float(args.northbound_min_effective_confidence),
             "concept_min_coverage": float(args.concept_min_coverage),
         },
     }

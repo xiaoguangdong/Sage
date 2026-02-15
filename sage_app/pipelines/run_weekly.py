@@ -403,6 +403,8 @@ def _build_and_load_industry_snapshot(
     latest_trade_date: str,
     lookback_days: dict[str, int] | None = None,
     default_lookback_days: int = 30,
+    half_life_days: dict[str, float] | None = None,
+    default_half_life_days: float = 7.0,
 ) -> tuple[pd.DataFrame, Path]:
     output_dir = get_data_path("signals", "industry", ensure=True)
     result = build_industry_signal_contract_artifacts(
@@ -410,6 +412,8 @@ def _build_and_load_industry_snapshot(
         as_of_date=latest_trade_date,
         signal_lookback_days=lookback_days or {},
         default_lookback_days=int(default_lookback_days),
+        signal_half_life_days=half_life_days or {},
+        default_half_life_days=float(default_half_life_days),
     )
     snapshot_path = Path(result.get("signal_snapshot_path", output_dir / "industry_signal_snapshot_latest.parquet"))
     if not result.get("generated", False):
@@ -617,11 +621,15 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     strategy_cfg = config.get("strategy_governance", {}) if isinstance(config, dict) else {}
     industry_cfg = (strategy_cfg.get("industry_signals") or {}) if isinstance(strategy_cfg, dict) else {}
     lookback_days = industry_cfg.get("signal_lookback_days")
+    half_life_days = industry_cfg.get("signal_half_life_days")
     default_lookback = industry_cfg.get("default_lookback_days", 30)
+    default_half_life = industry_cfg.get("default_half_life_days", 7.0)
     industry_snapshot, industry_snapshot_path = _build_and_load_industry_snapshot(
         latest_trade_date=latest_trade_date,
         lookback_days=lookback_days if isinstance(lookback_days, dict) else None,
         default_lookback_days=int(default_lookback),
+        half_life_days=half_life_days if isinstance(half_life_days, dict) else None,
+        default_half_life_days=float(default_half_life),
     )
     stock_industry_map = build_stock_industry_map_from_features(df_features)
     execution_signals = apply_industry_overlay(
