@@ -203,6 +203,12 @@ python3 scripts/data/tushare_downloader.py --task ths_daily --start-date 2023010
 输出：
 - `data/processed/policy/policy_signals.parquet`
 - `data/processed/policy/policy_signals_summary.json`
+- `data/processed/policy/policy_source_health.parquet`
+
+说明：
+- `policy_signals.parquet` 已包含 `confidence` 字段。
+- 管道会先做去重（同源+同日+标题/内容指纹），再聚合行业信号。
+- 来源权重会叠加 `source_stability_score`（基于14/30日活跃度）。
 
 示例：
 ```bash

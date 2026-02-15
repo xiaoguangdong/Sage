@@ -15,11 +15,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
@@ -138,6 +139,91 @@ def normalize_records(df: pd.DataFrame, source_type: str) -> pd.DataFrame:
     return result
 
 
+def _normalize_text(value: str) -> str:
+    text = (value or "").strip().lower()
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def deduplicate_records(texts: pd.DataFrame) -> Tuple[pd.DataFrame, Dict[str, int]]:
+    if texts.empty:
+        return texts, {"before": 0, "after": 0, "removed": 0}
+
+    df = texts.copy()
+    df["publish_date"] = pd.to_datetime(df["publish_date"], errors="coerce")
+    df = df.dropna(subset=["publish_date"])
+    df["trade_date"] = df["publish_date"].dt.floor("D")
+    df["title_norm"] = df["title"].astype(str).map(_normalize_text)
+    df["content_norm"] = df["content"].astype(str).map(_normalize_text)
+
+    def _doc_id(row: pd.Series) -> str:
+        payload = "||".join(
+            [
+                row["source_type"],
+                str(row["trade_date"].date()),
+                row["title_norm"],
+                row["content_norm"][:1000],
+            ]
+        )
+        return hashlib.sha1(payload.encode("utf-8")).hexdigest()
+
+    df["doc_id"] = df.apply(_doc_id, axis=1)
+    before = len(df)
+    df = df.drop_duplicates(subset=["doc_id"], keep="first").reset_index(drop=True)
+    after = len(df)
+    df = df.drop(columns=["title_norm", "content_norm"])
+    return df, {"before": before, "after": after, "removed": before - after}
+
+
+def build_source_health(texts: pd.DataFrame) -> pd.DataFrame:
+    if texts.empty:
+        return pd.DataFrame(
+            columns=[
+                "trade_date",
+                "source_type",
+                "source_doc_count",
+                "source_cadence_14d",
+                "source_activity_ratio",
+                "source_stability_score",
+            ]
+        )
+
+    frames = []
+    for source, group in texts.groupby("source_type"):
+        series = (
+            group.assign(trade_date=pd.to_datetime(group["publish_date"]).dt.floor("D"))
+            .groupby("trade_date")
+            .size()
+            .rename("source_doc_count")
+            .sort_index()
+        )
+        if series.empty:
+            continue
+        full_idx = pd.date_range(series.index.min(), series.index.max(), freq="D")
+        series = series.reindex(full_idx, fill_value=0.0)
+
+        cadence = (series > 0).rolling(14, min_periods=1).mean()
+        avg_30 = series.rolling(30, min_periods=1).mean()
+        activity_ratio = (series / avg_30.replace(0, pd.NA)).fillna(1.0).clip(lower=0.0, upper=2.0)
+        stability = (0.5 * cadence + 0.5 * (activity_ratio / 2.0)).clip(lower=0.2, upper=1.0)
+
+        out = pd.DataFrame(
+            {
+                "trade_date": series.index,
+                "source_type": source,
+                "source_doc_count": series.values,
+                "source_cadence_14d": cadence.values,
+                "source_activity_ratio": activity_ratio.values,
+                "source_stability_score": stability.values,
+            }
+        )
+        frames.append(out)
+
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 def load_policy_texts(input_dirs: List[Path]) -> pd.DataFrame:
     frames = []
     for input_dir in input_dirs:
@@ -218,14 +304,14 @@ def map_industries(
     return list(dict.fromkeys(results))
 
 
-def build_score(text: str, positive: List[str], negative: List[str]) -> float:
+def build_score(text: str, positive: List[str], negative: List[str]) -> Tuple[float, int, int]:
     if not text:
-        return 0.5
+        return 0.5, 0, 0
     pos = sum(1 for kw in positive if kw in text)
     neg = sum(1 for kw in negative if kw in text)
     raw = pos - neg
     score = 0.5 + 0.1 * raw
-    return max(0.0, min(1.0, score))
+    return max(0.0, min(1.0, score)), pos, neg
 
 
 def extract_industries(text: str, mapping: Dict[str, List[str]]) -> List[str]:
@@ -244,6 +330,7 @@ def aggregate_signals(
     positive: List[str],
     negative: List[str],
     source_weights: Dict[str, float],
+    source_health: pd.DataFrame,
     l2_to_l1: Dict[str, str],
     alias_map: Dict[str, str],
 ) -> pd.DataFrame:
@@ -251,7 +338,11 @@ def aggregate_signals(
         return pd.DataFrame()
 
     rows = []
-    l1_set = set(l2_to_l1.values())
+    l1_set = set(l2_to_l1.values()) | set(industry_keywords.keys())
+    if not source_health.empty:
+        source_health = source_health.copy()
+        source_health["trade_date"] = pd.to_datetime(source_health["trade_date"]).dt.floor("D")
+
     for _, row in texts.iterrows():
         text = f"{row['title']} {row['content']}"
         industries = []
@@ -262,15 +353,30 @@ def aggregate_signals(
             industries = extract_industries(text, industry_keywords)
         if not industries:
             continue
-        base_score = build_score(text, positive, negative)
-        weight = float(source_weights.get(row["source_type"], 1.0))
+        base_score, pos_hits, neg_hits = build_score(text, positive, negative)
+        source_type = row["source_type"]
+        trade_date = pd.to_datetime(row["publish_date"]).floor("D")
+        base_weight = float(source_weights.get(source_type, 1.0))
+        stability_score = 1.0
+        if not source_health.empty:
+            matched = source_health[
+                (source_health["source_type"] == source_type)
+                & (source_health["trade_date"] == trade_date)
+            ]
+            if not matched.empty:
+                stability_score = float(matched.iloc[-1]["source_stability_score"])
+        weight = base_weight * stability_score
         for industry in industries:
             rows.append({
-                "trade_date": row["publish_date"].date(),
+                "trade_date": trade_date,
                 "sw_industry": industry,
                 "score": base_score,
                 "weight": weight,
-                "source_type": row["source_type"],
+                "base_weight": base_weight,
+                "source_stability_score": stability_score,
+                "source_type": source_type,
+                "pos_hits": pos_hits,
+                "neg_hits": neg_hits,
             })
 
     if not rows:
@@ -292,10 +398,22 @@ def aggregate_signals(
     )
     meta = df.groupby(["trade_date", "sw_industry"]).agg(
         doc_count=("score", "count"),
+        source_count=("source_type", "nunique"),
         source_weights=("weight", "sum"),
+        avg_source_stability=("source_stability_score", "mean"),
+        score_std=("score", "std"),
+        pos_hits=("pos_hits", "sum"),
+        neg_hits=("neg_hits", "sum"),
     ).reset_index()
 
     result = aggregated.merge(meta, on=["trade_date", "sw_industry"], how="left")
+    result["score_std"] = result["score_std"].fillna(0.0)
+    result["sentiment_strength"] = (result["pos_hits"] - result["neg_hits"]).abs()
+    doc_component = (result["doc_count"].clip(upper=8) / 8.0) * 0.4
+    source_component = (result["source_count"].clip(upper=3) / 3.0) * 0.3
+    stability_component = result["avg_source_stability"].clip(lower=0.0, upper=1.0) * 0.2
+    dispersion_component = (1.0 - (result["score_std"] / 0.25).clip(lower=0.0, upper=1.0)) * 0.1
+    result["confidence"] = (doc_component + source_component + stability_component + dispersion_component).clip(0.0, 1.0)
     return result.sort_values(["trade_date", "policy_score"], ascending=[True, False])
 
 
@@ -322,17 +440,31 @@ def main():
     if texts.empty:
         print(f"未发现政策文本文件，目录: {', '.join(str(p) for p in input_dirs)}")
         return
+    texts, dedup_stats = deduplicate_records(texts)
+    source_health = build_source_health(texts)
 
     l2_to_l1 = load_sw_l2_to_l1_map()
     alias_cfg = load_yaml(PROJECT_ROOT / "config" / "policy_industry_alias.yaml")
     alias_map = (alias_cfg.get("aliases") or {}) if isinstance(alias_cfg, dict) else {}
-    signals = aggregate_signals(texts, industry_keywords, positive, negative, source_weights, l2_to_l1, alias_map)
+    signals = aggregate_signals(
+        texts=texts,
+        industry_keywords=industry_keywords,
+        positive=positive,
+        negative=negative,
+        source_weights=source_weights,
+        source_health=source_health,
+        l2_to_l1=l2_to_l1,
+        alias_map=alias_map,
+    )
     if signals.empty:
         print("未提取到有效行业政策信号")
         return
 
     signals.to_parquet(output_dir / "policy_signals.parquet", index=False)
     print(f"政策信号已保存: {output_dir / 'policy_signals.parquet'}")
+    if not source_health.empty:
+        source_health.to_parquet(output_dir / "policy_source_health.parquet", index=False)
+        print(f"来源健康度已保存: {output_dir / 'policy_source_health.parquet'}")
 
     # 记录来源摘要
     summary = {
@@ -340,6 +472,7 @@ def main():
         "rows": int(len(texts)),
         "signals": int(len(signals)),
         "sources": list(texts["source_type"].value_counts().to_dict().items()),
+        "dedup": dedup_stats,
     }
     with open(output_dir / "policy_signals_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)

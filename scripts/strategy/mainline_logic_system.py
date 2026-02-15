@@ -227,6 +227,22 @@ class MainlineLogicSystem:
         基于概念信号构建行业偏置
         返回: {sw_industry: (bias_strength, overheat_rate)}
         """
+        industry_bias_path = os.path.join(self.signals_dir, "industry", "industry_concept_bias.parquet")
+        if os.path.exists(industry_bias_path):
+            try:
+                industry_bias = pd.read_parquet(industry_bias_path)
+                if not industry_bias.empty:
+                    industry_bias["trade_date"] = pd.to_datetime(industry_bias["trade_date"])
+                    latest_day = industry_bias["trade_date"].max() if pd.to_datetime(date) > industry_bias["trade_date"].max() else pd.to_datetime(date)
+                    day_df = industry_bias[industry_bias["trade_date"] == latest_day]
+                    if not day_df.empty:
+                        return {
+                            row["sw_industry"]: (float(row["concept_bias_strength"]), float(row["overheat_rate"]))
+                            for _, row in day_df.iterrows()
+                        }
+            except Exception:
+                pass
+
         if top_k:
             signal_path = os.path.join(self.signals_dir, f"concept_signals_top{top_k}.parquet")
         else:

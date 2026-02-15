@@ -17,6 +17,8 @@ JOB_SCRIPTS = {
     "trend_scheduler": PROJECT_ROOT / "sage_app" / "pipelines" / "trend_signal_scheduler.py",
     "stock_scheduler": PROJECT_ROOT / "sage_app" / "pipelines" / "stock_selector_scheduler.py",
     "macro_prediction": PROJECT_ROOT / "scripts" / "models" / "macro" / "run_macro_prediction.py",
+    "industry_concept_bias": PROJECT_ROOT / "scripts" / "strategy" / "build_industry_concept_bias.py",
+    "industry_signal_contract": PROJECT_ROOT / "scripts" / "strategy" / "build_industry_signal_contract.py",
 }
 
 
