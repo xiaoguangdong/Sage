@@ -16,6 +16,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from scripts.data._shared.runtime import get_data_path, get_tushare_root
 from scripts.strategy.build_industry_signal_contract import build_industry_signal_contract_artifacts
 from sage_app.data.data_loader import DataLoader
+from sage_app.pipelines.overlay_config import resolve_industry_overlay_config
 from sage_core.utils.column_normalizer import normalize_security_columns
 from sage_core.utils.logging_utils import setup_logging
 from sage_core.data.universe import Universe
@@ -626,12 +627,18 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     half_life_days = industry_cfg.get("signal_half_life_days")
     default_lookback = industry_cfg.get("default_lookback_days", 30)
     default_half_life = industry_cfg.get("default_half_life_days", 7.0)
-    overlay_cfg = industry_cfg.get("overlay") if isinstance(industry_cfg, dict) else {}
-    overlay_strength = float((overlay_cfg or {}).get("overlay_strength", 0.20))
-    mainline_strength = float((overlay_cfg or {}).get("mainline_strength", 0.35))
-    signal_weights = (overlay_cfg or {}).get("signal_weights")
-    if not isinstance(signal_weights, dict):
-        signal_weights = None
+    overlay_resolved = resolve_industry_overlay_config(industry_cfg if isinstance(industry_cfg, dict) else None, trend_state)
+    overlay_strength = float(overlay_resolved["overlay_strength"])
+    mainline_strength = float(overlay_resolved["mainline_strength"])
+    signal_weights = overlay_resolved["signal_weights"]
+    regime_name = overlay_resolved["regime_name"]
+    logger.info(
+        "行业叠加参数: regime=%s, overlay_strength=%.3f, mainline_strength=%.3f, signal_weights=%s",
+        regime_name,
+        overlay_strength,
+        mainline_strength,
+        signal_weights,
+    )
 
     industry_snapshot, industry_score_snapshot, industry_snapshot_path, industry_score_snapshot_path = _build_and_load_industry_snapshot(
         latest_trade_date=latest_trade_date,
@@ -751,6 +758,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         "industry_snapshot_path": str(industry_snapshot_path) if industry_snapshot_path.exists() else None,
         "industry_score_snapshot_path": str(industry_score_snapshot_path) if industry_score_snapshot_path.exists() else None,
         "industry_overlay_config": {
+            "regime": regime_name,
             "overlay_strength": overlay_strength,
             "mainline_strength": mainline_strength,
             "signal_weights": signal_weights,
