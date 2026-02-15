@@ -1,0 +1,40 @@
+# 风险控制与仓位管理配置（豆包方案落地）
+
+risk_control:
+  # 组合硬约束
+  enable_position_limit: true
+  preserve_gross_exposure: true
+  max_single_position: 0.30
+  max_sector_exposure: 0.40
+
+  # 止损与回撤控制
+  enable_stop_loss: true
+  stop_loss: -0.08
+  enable_drawdown_control: true
+  max_drawdown: -0.15
+
+  # 目标波动率仓位
+  market_vol_window: 20
+  target_volatility:
+    2: 0.18  # RISK_ON
+    1: 0.12  # 震荡
+    0: 0.08  # RISK_OFF
+  position_caps:
+    2: 1.00
+    1: 0.60
+    0: 0.30
+
+  # 冲击减仓（指数）
+  daily_shock_threshold: -0.02
+  weekly_shock_threshold: -0.05
+  daily_shock_cut: 0.10
+  weekly_shock_cut: 0.50
+
+  # 回撤阶梯减仓（阈值触发后执行一次对应cut）
+  drawdown_cuts:
+    - threshold: -0.15
+      cut: 0.90
+    - threshold: -0.12
+      cut: 0.60
+    - threshold: -0.08
+      cut: 0.30

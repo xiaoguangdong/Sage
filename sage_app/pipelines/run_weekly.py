@@ -67,6 +67,13 @@ def load_config(config_dir: str | None = None) -> dict:
     except Exception as e:
         logger.warning(f"无法加载买卖点模型配置: {e}")
     
+    # 加载风险控制配置
+    try:
+        with open(f'{config_dir}/risk_control.yaml', 'r', encoding='utf-8') as f:
+            config['risk_control'] = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning(f"无法加载风险控制配置: {e}")
+    
     return config
 
 
@@ -206,6 +213,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         trend_state = trend_result['state']
         logger.info(f"趋势状态: {trend_result['state_name']} (state={trend_state})")
     else:
+        trend_result = {'position_suggestion': 0.3, 'state_name': '震荡'}
         trend_state = 1  # 默认震荡
         logger.warning("无法获取指数数据，使用默认趋势状态: 震荡")
     
@@ -236,8 +244,45 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     
     # 8. 风险控制
     logger.info("风险控制...")
-    risk_control = RiskControl()
+    risk_control = RiskControl((config.get('risk_control') or {}).get('risk_control'))
     portfolio = risk_control.adjust_weights(portfolio)
+
+    market_volatility = risk_control.compute_market_volatility(df_index) if df_index is not None else np.nan
+    latest_index_return = None
+    latest_week_return = None
+    if df_index is not None and len(df_index) > 0:
+        df_index_sorted = df_index.sort_values('trade_date')
+        if 'pct_chg' in df_index_sorted.columns:
+            index_returns = pd.to_numeric(df_index_sorted['pct_chg'], errors='coerce') / 100.0
+        elif 'return' in df_index_sorted.columns:
+            index_returns = pd.to_numeric(df_index_sorted['return'], errors='coerce')
+        elif 'close' in df_index_sorted.columns:
+            index_returns = pd.to_numeric(df_index_sorted['close'], errors='coerce').pct_change()
+        else:
+            index_returns = pd.Series(dtype=float)
+        index_returns = index_returns.dropna()
+        if len(index_returns) >= 1:
+            latest_index_return = float(index_returns.iloc[-1])
+        if len(index_returns) >= 5:
+            latest_week_return = float((1.0 + index_returns.tail(5)).prod() - 1.0)
+
+    position_info = risk_control.compute_target_position(
+        trend_state=trend_state,
+        market_volatility=market_volatility,
+        latest_index_return=latest_index_return,
+        latest_week_return=latest_week_return,
+        portfolio_drawdown=risk_control.current_drawdown,
+    )
+    trend_position = float(trend_result.get('position_suggestion', 1.0))
+    target_exposure = min(position_info['final_position'], trend_position)
+    portfolio = risk_control.scale_to_target_exposure(portfolio, target_exposure)
+    logger.info(
+        "仓位管理: market_vol=%.2f%%, trend_pos=%.2f%%, vol_target_pos=%.2f%%, final_pos=%.2f%%",
+        (market_volatility * 100.0) if market_volatility is not None and not np.isnan(market_volatility) else float('nan'),
+        trend_position * 100.0,
+        position_info['final_position'] * 100.0,
+        float(portfolio['weight'].sum()) * 100.0 if len(portfolio) > 0 else 0.0,
+    )
     
     # 9. 输出结果
     logger.info("=" * 50)

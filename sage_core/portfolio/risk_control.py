@@ -31,6 +31,28 @@ class RiskControl:
             'enable_stop_loss': True,  # 启用止损
             'enable_drawdown_control': True,  # 启用回撤控制
             'enable_position_limit': True,  # 启用仓位限制
+            'preserve_gross_exposure': True,  # 调权后保持总仓位
+            # 豆包风格仓位管理（简化门控）
+            'target_volatility': {
+                2: 0.18,  # RISK_ON
+                1: 0.12,  # 震荡
+                0: 0.08,  # RISK_OFF
+            },
+            'position_caps': {
+                2: 1.00,
+                1: 0.60,
+                0: 0.30,
+            },
+            'market_vol_window': 20,
+            'daily_shock_threshold': -0.02,
+            'weekly_shock_threshold': -0.05,
+            'daily_shock_cut': 0.10,
+            'weekly_shock_cut': 0.50,
+            'drawdown_cuts': [
+                {'threshold': -0.15, 'cut': 0.90},
+                {'threshold': -0.12, 'cut': 0.60},
+                {'threshold': -0.08, 'cut': 0.30},
+            ],
         }
         
         # 合并配置
@@ -40,6 +62,100 @@ class RiskControl:
         self.current_drawdown = 0.0
         self.portfolio_value = 1.0
         self.peak_value = 1.0
+    
+    def compute_market_volatility(self, index_df: pd.DataFrame) -> float:
+        """
+        计算市场年化波动率（基于近N日）
+        """
+        if index_df is None or index_df.empty:
+            return np.nan
+        window = int(self.config.get('market_vol_window', 20))
+        temp = index_df.copy().sort_values('trade_date')
+
+        if 'pct_chg' in temp.columns:
+            returns = pd.to_numeric(temp['pct_chg'], errors='coerce') / 100.0
+        elif 'return' in temp.columns:
+            returns = pd.to_numeric(temp['return'], errors='coerce')
+        elif 'close' in temp.columns:
+            close = pd.to_numeric(temp['close'], errors='coerce')
+            returns = close.pct_change()
+        else:
+            return np.nan
+
+        returns = returns.dropna()
+        if len(returns) < max(5, window):
+            return np.nan
+
+        annualized_vol = returns.tail(window).std(ddof=0) * np.sqrt(252)
+        return float(annualized_vol)
+    
+    def compute_target_position(
+        self,
+        trend_state: int,
+        market_volatility: float,
+        latest_index_return: float | None = None,
+        latest_week_return: float | None = None,
+        portfolio_drawdown: float | None = None,
+    ) -> Dict[str, float]:
+        """
+        基于趋势状态 + 波动率 + 冲击事件计算目标仓位
+        """
+        target_volatility_cfg = self.config.get('target_volatility', {})
+        position_caps_cfg = self.config.get('position_caps', {})
+        target_vol = float(target_volatility_cfg.get(trend_state, target_volatility_cfg.get(1, 0.12)))
+        position_cap = float(position_caps_cfg.get(trend_state, position_caps_cfg.get(1, 0.60)))
+
+        if market_volatility is None or np.isnan(market_volatility) or market_volatility <= 0:
+            base_position = position_cap
+        else:
+            base_position = min(target_vol / market_volatility, position_cap)
+
+        position_after_shock = float(base_position)
+        daily_threshold = float(self.config.get('daily_shock_threshold', -0.02))
+        weekly_threshold = float(self.config.get('weekly_shock_threshold', -0.05))
+        daily_cut = float(self.config.get('daily_shock_cut', 0.10))
+        weekly_cut = float(self.config.get('weekly_shock_cut', 0.50))
+
+        if latest_index_return is not None and latest_index_return <= daily_threshold:
+            position_after_shock *= max(0.0, 1.0 - daily_cut)
+        if latest_week_return is not None and latest_week_return <= weekly_threshold:
+            position_after_shock *= max(0.0, 1.0 - weekly_cut)
+
+        position_after_drawdown = float(position_after_shock)
+        drawdown_rules = sorted(
+            self.config.get('drawdown_cuts', []),
+            key=lambda item: item.get('threshold', 0),
+        )
+        if portfolio_drawdown is not None:
+            for rule in drawdown_rules:
+                threshold = float(rule.get('threshold', -1.0))
+                cut = float(rule.get('cut', 0.0))
+                if portfolio_drawdown <= threshold:
+                    position_after_drawdown *= max(0.0, 1.0 - cut)
+                    break
+
+        final_position = float(np.clip(position_after_drawdown, 0.0, 1.0))
+        return {
+            'trend_state': int(trend_state),
+            'market_volatility': float(market_volatility) if market_volatility is not None and not np.isnan(market_volatility) else np.nan,
+            'base_position': float(base_position),
+            'position_after_shock': float(position_after_shock),
+            'final_position': final_position,
+        }
+    
+    def scale_to_target_exposure(self, df_portfolio: pd.DataFrame, target_exposure: float) -> pd.DataFrame:
+        """
+        将组合总仓位缩放到目标仓位
+        """
+        result = df_portfolio.copy()
+        target_exposure = float(np.clip(target_exposure, 0.0, 1.0))
+        if result.empty or 'weight' not in result.columns:
+            return result
+        current_exposure = float(result['weight'].sum())
+        if current_exposure <= 0:
+            return result
+        result['weight'] = result['weight'] * (target_exposure / current_exposure)
+        return result
     
     def check_entry_signal(self, df: pd.DataFrame, entry_signal: pd.Series) -> pd.Series:
         """
@@ -169,16 +285,42 @@ class RiskControl:
             调整后的组合数据
         """
         df_adjusted = df_portfolio.copy()
+        if df_adjusted.empty or 'weight' not in df_adjusted.columns:
+            return df_adjusted
+
+        gross_before = float(df_adjusted['weight'].sum())
+        if gross_before <= 0:
+            return df_adjusted
         
         # 调整单只股票仓位
         if self.config['enable_position_limit']:
             max_weight = self.config['max_single_position']
-            df_adjusted['weight'] = df_adjusted['weight'].clip(upper=max_weight)
-            
-            # 重新归一化
-            total_weight = df_adjusted['weight'].sum()
-            if total_weight > 0:
-                df_adjusted['weight'] = df_adjusted['weight'] / total_weight
+            clipped_weight = df_adjusted['weight'].clip(upper=max_weight)
+            total_weight = float(clipped_weight.sum())
+            preserve_gross_exposure = self.config.get('preserve_gross_exposure', True)
+
+            if total_weight > 0 and preserve_gross_exposure:
+                target_gross = min(gross_before, 1.0)
+                if total_weight > target_gross:
+                    clipped_weight = clipped_weight * (target_gross / total_weight)
+                elif total_weight < target_gross:
+                    # 仅在未触碰单票上限的标的上补仓，避免放大后再次突破单票上限
+                    headroom = (max_weight - clipped_weight).clip(lower=0.0)
+                    total_headroom = float(headroom.sum())
+                    needed = target_gross - total_weight
+                    if total_headroom > 0 and needed > 0:
+                        add_ratio = min(1.0, needed / total_headroom)
+                        clipped_weight = clipped_weight + headroom * add_ratio
+                    if float(clipped_weight.sum()) + 1e-12 < target_gross:
+                        logger.warning(
+                            "受单票上限约束，无法恢复到原总仓位: target=%.2f%%, actual=%.2f%%",
+                            target_gross * 100.0,
+                            float(clipped_weight.sum()) * 100.0,
+                        )
+            elif total_weight > 0:
+                clipped_weight = clipped_weight / total_weight
+
+            df_adjusted['weight'] = clipped_weight
         
         # 调整行业暴露
         if 'sector' in df_adjusted.columns and self.config['max_sector_exposure'] < 1.0:
