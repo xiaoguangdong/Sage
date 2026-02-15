@@ -44,6 +44,20 @@ python scripts/run_job.py stock_scheduler -- --mode cron
 - 月度任务：每月第1~7个自然日的工作日触发，并在任务内校验“是否当月首个交易日”。
 - 周度任务：默认每周五运行，生成最新周信号。
 
+## 券商执行入口（平安证券预留）
+
+```bash
+python scripts/run_job.py broker_submit -- --broker pingan
+
+./venv/bin/python scripts/stock/run_broker_execution.py \
+  --broker pingan \
+  --top-n 10
+```
+
+- 默认模式是 `dry-run`，输出提交回执：
+  - `data/portfolio/broker_submit_<YYYYMMDD_HHMMSS>.json`
+- 使用 `--submit` 会尝试实盘提交；当前 PingAn 适配器为预留 stub，会显式报未实现。
+
 ## 统一信号契约（执行层单入口）
 
 - 选股治理脚本会额外输出统一契约：

@@ -15,6 +15,7 @@
 4. 任务编排统一入口：
    - `python scripts/run_job.py weekly_pipeline`
    - `python scripts/run_job.py stock_monthly -- --top-n 10`
+   - `python scripts/run_job.py broker_submit -- --broker pingan`（默认 dry-run）
 
 ## 代码结构与职责
 
@@ -26,6 +27,7 @@
   - `config/base.yaml`：全局运行时配置（数据根目录、日志、下载策略）
   - `config/tushare_tasks.yaml`：Tushare 下载任务定义
   - `config/app/`：应用层策略配置（趋势/选股/治理/风控）
+  - `config/app/broker.yaml`：券商执行入口配置（仅结构，敏感信息走环境变量）
 
 ## 数据不丢失机制（推荐启用）
 

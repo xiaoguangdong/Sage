@@ -1,0 +1,16 @@
+# 券商执行配置（预留）
+# 注意：不要在仓库里写真实账号/密钥，统一走环境变量或本地私密配置覆盖。
+
+brokers:
+  pingan:
+    enabled: true
+    endpoint: ""
+    client_id: ""
+    account_id: ""
+    auth:
+      access_key_env: "PINGAN_API_KEY"
+      secret_key_env: "PINGAN_API_SECRET"
+      token_env: "PINGAN_API_TOKEN"
+    order:
+      market: "A"
+      account_type: "cash"

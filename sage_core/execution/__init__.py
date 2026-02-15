@@ -1,4 +1,14 @@
 from .entry_model import EntryModelLR
+from .broker_adapter import (
+    BrokerOrder,
+    BrokerSubmitResult,
+    PingAnSecuritiesAdapter,
+    build_orders_from_portfolio,
+    create_broker_adapter,
+    load_broker_config,
+    normalize_ts_code,
+    save_submit_payload,
+)
 from .signal_contract import (
     apply_industry_overlay,
     build_stock_industry_map_from_features,
@@ -8,6 +18,14 @@ from .signal_contract import (
 
 __all__ = [
     "EntryModelLR",
+    "BrokerOrder",
+    "BrokerSubmitResult",
+    "PingAnSecuritiesAdapter",
+    "create_broker_adapter",
+    "load_broker_config",
+    "save_submit_payload",
+    "normalize_ts_code",
+    "build_orders_from_portfolio",
     "build_stock_signal_contract",
     "select_champion_signals",
     "build_stock_industry_map_from_features",
