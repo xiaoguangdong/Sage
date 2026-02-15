@@ -3,7 +3,7 @@
 strategy_governance:
   # 当前执行层冠军策略（线上唯一）
   active_champion_id: seed_balance_strategy
-  champion_source: manual
+  champion_source: auto
   manual_effective_date: null
   manual_reason: null
 
@@ -15,9 +15,9 @@ strategy_governance:
 
 # 自动晋升（Champion/Challenger）配置
 auto_promotion:
-  enabled: false
+  enabled: true
   allow_when_manual: false
-  evaluation_path: data/backtest/governance/shadow_eval.parquet
+  evaluation_path: sage_app/config/shadow_eval.json
   decision_path: data/backtest/governance/promotion_decisions.jsonl
   consecutive_periods: 3
   max_drawdown_tolerance: 0.02

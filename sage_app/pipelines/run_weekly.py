@@ -241,6 +241,10 @@ def _load_evaluation_frame(evaluation_path: Path) -> pd.DataFrame:
         return pd.DataFrame()
     if evaluation_path.suffix.lower() == ".parquet":
         return pd.read_parquet(evaluation_path)
+    if evaluation_path.suffix.lower() == ".json":
+        return pd.read_json(evaluation_path)
+    if evaluation_path.suffix.lower() == ".jsonl":
+        return pd.read_json(evaluation_path, lines=True)
     if evaluation_path.suffix.lower() in {".csv", ".txt"}:
         return pd.read_csv(evaluation_path)
     logger.warning("不支持的评估文件格式: %s", evaluation_path)

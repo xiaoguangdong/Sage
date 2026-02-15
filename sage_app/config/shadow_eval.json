@@ -1,0 +1,16 @@
+[
+  {"strategy_id":"seed_balance_strategy","trade_date":"2026-01-03","cost_return":0.0112,"max_drawdown":-0.051,"sharpe":0.81,"turnover":0.22,"data_quality":0.99},
+  {"strategy_id":"balance_strategy_v1","trade_date":"2026-01-03","cost_return":0.0125,"max_drawdown":-0.050,"sharpe":0.83,"turnover":0.24,"data_quality":0.99},
+  {"strategy_id":"positive_strategy_v1","trade_date":"2026-01-03","cost_return":0.0168,"max_drawdown":-0.046,"sharpe":0.95,"turnover":0.21,"data_quality":0.99},
+  {"strategy_id":"value_strategy_v1","trade_date":"2026-01-03","cost_return":0.0101,"max_drawdown":-0.049,"sharpe":0.79,"turnover":0.20,"data_quality":0.99},
+
+  {"strategy_id":"seed_balance_strategy","trade_date":"2026-01-10","cost_return":0.0089,"max_drawdown":-0.055,"sharpe":0.76,"turnover":0.23,"data_quality":0.98},
+  {"strategy_id":"balance_strategy_v1","trade_date":"2026-01-10","cost_return":0.0102,"max_drawdown":-0.053,"sharpe":0.80,"turnover":0.25,"data_quality":0.98},
+  {"strategy_id":"positive_strategy_v1","trade_date":"2026-01-10","cost_return":0.0141,"max_drawdown":-0.049,"sharpe":0.90,"turnover":0.22,"data_quality":0.98},
+  {"strategy_id":"value_strategy_v1","trade_date":"2026-01-10","cost_return":0.0090,"max_drawdown":-0.051,"sharpe":0.77,"turnover":0.21,"data_quality":0.98},
+
+  {"strategy_id":"seed_balance_strategy","trade_date":"2026-01-17","cost_return":0.0130,"max_drawdown":-0.052,"sharpe":0.84,"turnover":0.22,"data_quality":0.99},
+  {"strategy_id":"balance_strategy_v1","trade_date":"2026-01-17","cost_return":0.0140,"max_drawdown":-0.051,"sharpe":0.85,"turnover":0.24,"data_quality":0.99},
+  {"strategy_id":"positive_strategy_v1","trade_date":"2026-01-17","cost_return":0.0192,"max_drawdown":-0.045,"sharpe":1.01,"turnover":0.21,"data_quality":0.99},
+  {"strategy_id":"value_strategy_v1","trade_date":"2026-01-17","cost_return":0.0115,"max_drawdown":-0.050,"sharpe":0.81,"turnover":0.20,"data_quality":0.99}
+]
