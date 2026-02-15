@@ -17,3 +17,19 @@
   - `feature_importance_<date>.parquet`
   - `training_summary_<date>.json`
   - `models/stock_selector_<model_type>_<date>.*`
+
+## 仅更新周信号（使用最近一次训练模型）
+
+```bash
+./venv/bin/python scripts/stock/run_stock_selector_weekly_signal.py \
+  --top-n 10
+```
+
+## APScheduler 调度（月度重训 + 周度信号）
+
+```bash
+./venv/bin/python sage_app/pipelines/stock_selector_scheduler.py --mode cron
+```
+
+- 月度任务：每月第1~7个自然日的工作日触发，并在任务内校验“是否当月首个交易日”。
+- 周度任务：默认每周五运行，生成最新周信号。

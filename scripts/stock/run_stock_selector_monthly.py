@@ -418,10 +418,21 @@ def main() -> None:
     importance_path = output_root / f"feature_importance_{end_date}.parquet"
     summary_path = output_root / f"training_summary_{end_date}.json"
     model_path = model_dir / f"{model_version}"
+    metadata_path = model_dir / f"{model_version}.meta.json"
 
     weekly_signals.to_parquet(signal_path, index=False)
     importance.to_parquet(importance_path, index=False)
     model_saved_path = _save_model_artifact(selector, model_path)
+    metadata = {
+        "model_version": model_version,
+        "model_type": effective_cfg.model_type,
+        "model_path": model_saved_path,
+        "selector_config": asdict(effective_cfg),
+        "feature_cols": selector.feature_cols or [],
+        "feature_medians": selector.feature_medians,
+        "rule_weights": getattr(selector, "rule_weights", {}),
+    }
+    metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
 
     summary = {
         "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -435,6 +446,7 @@ def main() -> None:
         "features": selector.feature_cols or [],
         "artifacts": {
             "model": model_saved_path,
+            "model_metadata": str(metadata_path),
             "weekly_signals": str(signal_path),
             "feature_importance": str(importance_path),
         },
