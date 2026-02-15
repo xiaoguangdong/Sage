@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from sage_core.execution.signal_contract import build_stock_signal_contract
 from sage_core.stock_selection.stock_selector import SelectionConfig
 from sage_core.governance.strategy_governance import (
     ChampionChallengerEngine,
@@ -136,13 +137,30 @@ def main() -> None:
         challenger_signals=result["challenger_signals"],
     )
 
+    signal_contract = build_stock_signal_contract(
+        trade_date=args.trade_date,
+        champion_id=result["active_champion_id"],
+        champion_signals=result["champion_signals"],
+        challenger_signals=result["challenger_signals"],
+        include_challengers=True,
+    )
+    contract_dir = output_root / "contracts"
+    contract_dir.mkdir(parents=True, exist_ok=True)
+    contract_path = contract_dir / f"stock_signal_contract_{args.trade_date}.parquet"
+    latest_path = contract_dir / "stock_signal_contract_latest.parquet"
+    signal_contract.to_parquet(contract_path, index=False)
+    signal_contract.to_parquet(latest_path, index=False)
+
     summary = {
         "trade_date": args.trade_date,
         "active_champion_id": result["active_champion_id"],
         "top_n": args.top_n,
         "allocation_method": args.allocation_method,
         "regime": args.regime,
+        "contract_rows": int(len(signal_contract)),
         "saved_files": {k: str(v) for k, v in saved.items()},
+        "signal_contract_path": str(contract_path),
+        "signal_contract_latest": str(latest_path),
     }
     summary_path = output_root / f"governance_summary_{args.trade_date}.json"
     summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")

@@ -43,3 +43,12 @@ python scripts/run_job.py stock_scheduler -- --mode cron
 
 - 月度任务：每月第1~7个自然日的工作日触发，并在任务内校验“是否当月首个交易日”。
 - 周度任务：默认每周五运行，生成最新周信号。
+
+## 统一信号契约（执行层单入口）
+
+- 选股治理脚本会额外输出统一契约：
+  - `data/signals/stock_selector/contracts/stock_signal_contract_<trade_date>.parquet`
+  - `data/signals/stock_selector/contracts/stock_signal_contract_latest.parquet`
+- 周度主流程会基于 `stock_signal_contract` + `industry_signal_snapshot_latest.parquet` 生成执行信号：
+  - `data/signals/stock_selector/contracts/execution_signals_<trade_date>.parquet`
+- 组合构建与仓位风控仅消费上述执行信号，不再直接读取单策略中间表。

@@ -13,6 +13,7 @@ from datetime import datetime
 # 导入项目模块
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from scripts.data._shared.runtime import get_data_path
 from sage_app.data.data_loader import DataLoader
 from sage_core.utils.column_normalizer import normalize_security_columns
 from sage_core.utils.logging_utils import setup_logging
@@ -22,6 +23,12 @@ from sage_core.features.market_features import MarketFeatures
 from sage_core.trend.trend_model import create_trend_model
 from sage_core.stock_selection.rank_model import RankModelLGBM
 from sage_core.execution.entry_model import EntryModelLR
+from sage_core.execution.signal_contract import (
+    apply_industry_overlay,
+    build_stock_industry_map_from_features,
+    build_stock_signal_contract,
+    select_champion_signals,
+)
 from sage_core.governance.strategy_governance import (
     ChampionChallengerEngine,
     ChallengerConfig,
@@ -224,17 +231,16 @@ def _build_governance_engine(config: dict) -> ChampionChallengerEngine:
     )
 
 
-def _signals_to_ranked(champion_signals: pd.DataFrame) -> pd.DataFrame:
-    if champion_signals is None or champion_signals.empty:
+def _signals_to_ranked(execution_signals: pd.DataFrame) -> pd.DataFrame:
+    if execution_signals is None or execution_signals.empty:
         return pd.DataFrame()
-    df_ranked = champion_signals.rename(
-        columns={
-            "ts_code": "code",
-            "score": "rank_score",
-        }
-    ).copy()
+    df_ranked = execution_signals.copy()
+    score_col = "score_final" if "score_final" in df_ranked.columns else "score"
+    df_ranked = df_ranked.rename(columns={"ts_code": "code", score_col: "rank_score"}).copy()
     if "rank" not in df_ranked.columns:
         df_ranked["rank"] = df_ranked["rank_score"].rank(ascending=False, method="first")
+    if "industry_l1" in df_ranked.columns and "sector" not in df_ranked.columns:
+        df_ranked["sector"] = df_ranked["industry_l1"]
     return df_ranked.sort_values("rank_score", ascending=False).reset_index(drop=True)
 
 
@@ -413,8 +419,46 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     )
     logger.info("选股信号已保存: %s", {k: str(v) for k, v in saved_paths.items()})
 
-    # 6. Champion信号转组合候选
-    df_ranked = _signals_to_ranked(champion_signals)
+    # 6. 统一信号契约：执行层只消费contract
+    signal_contract = build_stock_signal_contract(
+        trade_date=latest_trade_date,
+        champion_id=active_champion_id,
+        champion_signals=champion_signals,
+        challenger_signals=challenger_signals,
+        include_challengers=True,
+    )
+    contract_dir = get_data_path("signals", "stock_selector", "contracts", ensure=True)
+    contract_path = contract_dir / f"stock_signal_contract_{latest_trade_date}.parquet"
+    contract_latest = contract_dir / "stock_signal_contract_latest.parquet"
+    signal_contract.to_parquet(contract_path, index=False)
+    signal_contract.to_parquet(contract_latest, index=False)
+
+    champion_contract = select_champion_signals(
+        signal_contract,
+        champion_id=active_champion_id,
+        min_confidence=0.0,
+    )
+
+    industry_snapshot_path = get_data_path("signals", "industry", "industry_signal_snapshot_latest.parquet")
+    industry_snapshot = pd.read_parquet(industry_snapshot_path) if industry_snapshot_path.exists() else pd.DataFrame()
+    stock_industry_map = build_stock_industry_map_from_features(df_features)
+    execution_signals = apply_industry_overlay(
+        stock_signals=champion_contract,
+        industry_snapshot=industry_snapshot,
+        stock_industry_map=stock_industry_map,
+        overlay_strength=0.20,
+    )
+    exec_signal_path = contract_dir / f"execution_signals_{latest_trade_date}.parquet"
+    execution_signals.to_parquet(exec_signal_path, index=False)
+    logger.info(
+        "执行信号契约已生成: contract=%s, execution=%s, rows=%d",
+        contract_path,
+        exec_signal_path,
+        len(execution_signals),
+    )
+
+    # 7. Champion执行信号转组合候选
+    df_ranked = _signals_to_ranked(execution_signals)
     if df_ranked.empty:
         logger.warning("Champion信号为空，回退到简单排序")
         df_ranked = df_features.copy()
@@ -423,12 +467,12 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         if 'code' not in df_ranked.columns and 'ts_code' in df_ranked.columns:
             df_ranked['code'] = df_ranked['ts_code']
     
-    # 7. 构建组合
+    # 8. 构建组合
     logger.info("构建组合...")
     portfolio_constructor = PortfolioConstruction()
     portfolio = portfolio_constructor.construct_portfolio(df_ranked, trend_state)
     
-    # 8. 风险控制
+    # 9. 风险控制
     logger.info("风险控制...")
     risk_control = RiskControl((config.get('risk_control') or {}).get('risk_control'))
     portfolio = risk_control.adjust_weights(portfolio)
@@ -462,6 +506,10 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     trend_position = float(trend_result.get('position_suggestion', 1.0))
     target_exposure = min(position_info['final_position'], trend_position)
     portfolio = risk_control.scale_to_target_exposure(portfolio, target_exposure)
+    portfolio_for_risk = portfolio.copy()
+    if "sector" not in portfolio_for_risk.columns and "industry_l1" in portfolio_for_risk.columns:
+        portfolio_for_risk["sector"] = portfolio_for_risk["industry_l1"]
+    risk_checks = risk_control.check_portfolio_risk(portfolio_for_risk) if len(portfolio_for_risk) > 0 else {}
     logger.info(
         "仓位管理: market_vol=%.2f%%, trend_pos=%.2f%%, vol_target_pos=%.2f%%, final_pos=%.2f%%",
         (market_volatility * 100.0) if market_volatility is not None and not np.isnan(market_volatility) else float('nan'),
@@ -469,8 +517,10 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         position_info['final_position'] * 100.0,
         float(portfolio['weight'].sum()) * 100.0 if len(portfolio) > 0 else 0.0,
     )
+    if risk_checks:
+        logger.info("风控检查: %s", risk_checks)
     
-    # 9. 输出结果
+    # 10. 输出结果
     logger.info("=" * 50)
     logger.info("组合构建完成")
     logger.info("=" * 50)
@@ -481,13 +531,28 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     for i, row in portfolio.head(5).iterrows():
         logger.info(f"  {row['code']}: 权重 {row['weight']:.2%}, 排名 {row['rank']}")
     
-    # 10. 保存结果
+    # 11. 保存结果
     output_dir = 'data/portfolio'
     Path(output_dir).mkdir(exist_ok=True)
     
     output_file = f"{output_dir}/portfolio_{datetime.now().strftime('%Y%m%d')}.csv"
     portfolio.to_csv(output_file, index=False)
     logger.info(f"组合结果已保存到: {output_file}")
+
+    context_file = f"{output_dir}/execution_context_{datetime.now().strftime('%Y%m%d')}.json"
+    context_payload = {
+        "trade_date": latest_trade_date,
+        "active_champion_id": active_champion_id,
+        "signal_contract_path": str(contract_path),
+        "execution_signal_path": str(exec_signal_path),
+        "industry_snapshot_path": str(industry_snapshot_path) if industry_snapshot_path.exists() else None,
+        "position_info": position_info,
+        "target_exposure": float(target_exposure),
+        "risk_checks": risk_checks,
+    }
+    with open(context_file, "w", encoding="utf-8") as f:
+        json.dump(context_payload, f, ensure_ascii=False, indent=2)
+    logger.info(f"执行上下文已保存到: {context_file}")
     
     return portfolio
 
