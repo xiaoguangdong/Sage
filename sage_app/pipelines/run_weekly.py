@@ -21,6 +21,16 @@ from sage_core.features.market_features import MarketFeatures
 from sage_core.models.trend_model import create_trend_model
 from sage_core.models.rank_model import RankModelLGBM
 from sage_core.models.entry_model import EntryModelLR
+from sage_core.models.strategy_governance import (
+    ChampionChallengerEngine,
+    ChallengerConfig,
+    MultiAlphaChallengerStrategies,
+    SeedBalanceStrategy,
+    StrategyGovernanceConfig,
+    normalize_strategy_id,
+    save_strategy_outputs,
+)
+from sage_core.models.stock_selector import SelectionConfig
 from sage_core.portfolio.construction import PortfolioConstruction
 from sage_core.portfolio.risk_control import RiskControl
 from sage_core.backtest.walk_forward import WalkForwardBacktest
@@ -73,6 +83,13 @@ def load_config(config_dir: str | None = None) -> dict:
             config['risk_control'] = yaml.safe_load(f)
     except Exception as e:
         logger.warning(f"无法加载风险控制配置: {e}")
+
+    # 加载策略治理配置
+    try:
+        with open(f'{config_dir}/strategy_governance.yaml', 'r', encoding='utf-8') as f:
+            config['strategy_governance'] = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning(f"无法加载策略治理配置: {e}")
     
     return config
 
@@ -161,6 +178,62 @@ def calculate_features(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+def _build_governance_engine(config: dict) -> ChampionChallengerEngine:
+    governance_cfg = (config.get("strategy_governance") or {})
+    governance_raw = governance_cfg.get("strategy_governance", {})
+    challenger_weights = governance_cfg.get("challenger_weights", {})
+    seed_raw = governance_cfg.get("seed_balance_strategy", {})
+
+    active_champion_id = normalize_strategy_id(
+        governance_raw.get("active_champion_id", "seed_balance_strategy")
+    )
+    governance = StrategyGovernanceConfig(
+        active_champion_id=active_champion_id,
+        champion_source=governance_raw.get("champion_source", "manual"),
+        manual_effective_date=governance_raw.get("manual_effective_date"),
+        manual_reason=governance_raw.get("manual_reason"),
+        challengers=tuple(governance_raw.get("challengers", [
+            "balance_strategy_v1",
+            "positive_strategy_v1",
+            "value_strategy_v1",
+        ])),
+    )
+
+    challenger_config = ChallengerConfig(
+        positive_growth_weight=float(challenger_weights.get("positive_growth_weight", 0.7)),
+        positive_frontier_weight=float(challenger_weights.get("positive_frontier_weight", 0.3)),
+    )
+    selector_config = SelectionConfig(
+        model_type=seed_raw.get("model_type", "lgbm"),
+        label_horizons=tuple(seed_raw.get("label_horizons", [20, 60, 120])),
+        label_weights=tuple(seed_raw.get("label_weights", [0.5, 0.3, 0.2])),
+        risk_adjusted=bool(seed_raw.get("risk_adjusted", True)),
+        industry_col=seed_raw.get("industry_col", "industry_l1"),
+    )
+
+    seed_strategy = SeedBalanceStrategy(selector_config=selector_config)
+    challenger_strategies = MultiAlphaChallengerStrategies(config=challenger_config)
+    return ChampionChallengerEngine(
+        governance_config=governance,
+        seed_strategy=seed_strategy,
+        challenger_strategies=challenger_strategies,
+    )
+
+
+def _signals_to_ranked(champion_signals: pd.DataFrame) -> pd.DataFrame:
+    if champion_signals is None or champion_signals.empty:
+        return pd.DataFrame()
+    df_ranked = champion_signals.rename(
+        columns={
+            "ts_code": "code",
+            "score": "rank_score",
+        }
+    ).copy()
+    if "rank" not in df_ranked.columns:
+        df_ranked["rank"] = df_ranked["rank_score"].rank(ascending=False, method="first")
+    return df_ranked.sort_values("rank_score", ascending=False).reset_index(drop=True)
+
+
 def run_weekly_workflow(config: dict, df: pd.DataFrame):
     """
     运行每周工作流
@@ -184,18 +257,6 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         config.get('trend_model', {}).get('trend_model', {}).get('model_type', 'rule')
     )
     
-    rank_model_config = config.get('rank_model', {})
-    if rank_model_config.get('rank_model', {}).get('enabled', False):
-        rank_model = RankModelLGBM(rank_model_config.get('lgbm_params', {}))
-    else:
-        rank_model = None
-    
-    entry_model_config = config.get('entry_model', {})
-    if entry_model_config.get('entry_model', {}).get('enabled', False):
-        entry_model = EntryModelLR(entry_model_config.get('entry_model', {}))
-    else:
-        entry_model = None
-    
     # 4. 预测趋势状态
     logger.info("预测趋势状态...")
     # 统一股票代码字段
@@ -217,25 +278,59 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         trend_state = 1  # 默认震荡
         logger.warning("无法获取指数数据，使用默认趋势状态: 震荡")
     
-    # 5. 训练和预测（简化处理，实际需要使用历史数据训练）
-    if rank_model is not None:
-        logger.info("训练排序模型...")
-        # TODO: 实现训练逻辑
-    
-    if entry_model is not None:
-        logger.info("训练买卖点模型...")
-        # TODO: 实现训练逻辑
-    
-    # 6. 排序股票
-    if rank_model is not None and rank_model.is_trained:
-        logger.info("排序股票...")
-        df_ranked = rank_model.predict(df_features)
+    # 5. 运行Champion/Challenger四策略，执行层只读取Champion
+    logger.info("运行选股策略治理（Champion/Challenger）...")
+    governance_engine = _build_governance_engine(config)
+
+    if 'ts_code' not in df_features.columns and 'code' in df_features.columns:
+        df_features['ts_code'] = df_features['code']
+    if 'trade_date' not in df_features.columns and 'date' in df_features.columns:
+        df_features['trade_date'] = df_features['date']
+
+    if 'trade_date' in df_features.columns:
+        latest_trade_date = pd.to_datetime(df_features['trade_date'].max(), errors='coerce').strftime('%Y%m%d')
     else:
-        # 如果没有排序模型，使用简单排序
-        logger.info("使用简单排序...")
+        latest_trade_date = datetime.now().strftime('%Y%m%d')
+    seed_data = df_features.copy()
+    if 'ts_code' in seed_data.columns:
+        seed_data = seed_data[~seed_data['ts_code'].isin(index_candidates)].copy()
+
+    governance_output = governance_engine.run(
+        trade_date=latest_trade_date,
+        top_n=10,
+        seed_data=seed_data,
+        allocation_method="fixed",
+        regime={0: "bear", 1: "sideways", 2: "bull"}.get(trend_state, "sideways"),
+    )
+
+    champion_signals = governance_output["champion_signals"]
+    challenger_signals = governance_output["challenger_signals"]
+    active_champion_id = governance_output["active_champion_id"]
+    logger.info(
+        "选股治理完成: active_champion=%s, champion_count=%d",
+        active_champion_id,
+        len(champion_signals),
+    )
+
+    signals_root = Path("data/signals/stock_selector")
+    saved_paths = save_strategy_outputs(
+        output_root=signals_root,
+        trade_date=latest_trade_date,
+        champion_id=active_champion_id,
+        champion_signals=champion_signals,
+        challenger_signals=challenger_signals,
+    )
+    logger.info("选股信号已保存: %s", {k: str(v) for k, v in saved_paths.items()})
+
+    # 6. Champion信号转组合候选
+    df_ranked = _signals_to_ranked(champion_signals)
+    if df_ranked.empty:
+        logger.warning("Champion信号为空，回退到简单排序")
         df_ranked = df_features.copy()
         df_ranked['rank_score'] = np.random.rand(len(df_ranked))
         df_ranked['rank'] = df_ranked['rank_score'].rank(ascending=False)
+        if 'code' not in df_ranked.columns and 'ts_code' in df_ranked.columns:
+            df_ranked['code'] = df_ranked['ts_code']
     
     # 7. 构建组合
     logger.info("构建组合...")
@@ -296,7 +391,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         logger.info(f"  {row['code']}: 权重 {row['weight']:.2%}, 排名 {row['rank']}")
     
     # 10. 保存结果
-    output_dir = 'data/processed'
+    output_dir = 'data/portfolio'
     Path(output_dir).mkdir(exist_ok=True)
     
     output_file = f"{output_dir}/portfolio_{datetime.now().strftime('%Y%m%d')}.csv"

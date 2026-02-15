@@ -86,6 +86,14 @@ def _format_signal_frame(
     return _validate_signal_schema(data)
 
 
+def _normalize_trade_date(value: str | int | pd.Timestamp) -> str:
+    try:
+        ts = pd.to_datetime(value)
+        return ts.strftime("%Y%m%d")
+    except Exception:
+        return str(value)
+
+
 @dataclass
 class StrategyGovernanceConfig:
     active_champion_id: str = "seed_balance_strategy"
@@ -147,12 +155,13 @@ class SeedBalanceStrategy:
         predicted = self.selector.predict(data)
         date_col = self.selector_config.date_col
         if date_col in predicted.columns:
-            predicted = predicted[predicted[date_col].astype(str) == str(trade_date)]
+            date_norm = pd.to_datetime(predicted[date_col], errors="coerce").dt.strftime("%Y%m%d")
+            predicted = predicted[date_norm == _normalize_trade_date(trade_date)]
         return _format_signal_frame(
             raw=predicted,
             score_col="score",
             ts_code_col=self.selector_config.code_col,
-            trade_date=trade_date,
+            trade_date=_normalize_trade_date(trade_date),
             model_version=self.model_version,
             top_n=top_n,
         )
@@ -265,12 +274,20 @@ class ChampionChallengerEngine:
             active_champion_id or self.governance_config.normalized_active_champion_id()
         )
 
-        challengers = self.challenger_strategies.generate_signals(
-            trade_date=trade_date,
-            top_n=top_n,
-            allocation_method=allocation_method,
-            regime=regime,
-        )
+        try:
+            challengers = self.challenger_strategies.generate_signals(
+                trade_date=trade_date,
+                top_n=top_n,
+                allocation_method=allocation_method,
+                regime=regime,
+            )
+        except Exception as exc:
+            logger.warning("挑战者策略生成失败，已降级为空输出: %s", exc)
+            challengers = {
+                "balance_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
+                "positive_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
+                "value_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
+            }
 
         if champion_id == "seed_balance_strategy":
             if seed_data is None or seed_data.empty:
@@ -286,7 +303,7 @@ class ChampionChallengerEngine:
                 raise ValueError(f"无法获取冠军策略输出: {champion_id}")
 
         return {
-            "trade_date": str(trade_date),
+            "trade_date": _normalize_trade_date(trade_date),
             "active_champion_id": champion_id,
             "champion_signals": champion_signal,
             "challenger_signals": challengers,
