@@ -29,6 +29,9 @@ class DummyMultiAlphaSelector:
                 "value_score": 1.0 / i,
                 "growth_score": i / 10.0,
                 "frontier_score": (11 - i) / 10.0,
+                "rps_component": i / 10.0,
+                "elasticity_component": i / 20.0,
+                "not_priced_component": (11 - i) / 10.0,
                 "combined_score": (1.0 / i) * 0.4 + (i / 10.0) * 0.4 + ((11 - i) / 10.0) * 0.2,
             })
         return {"all_scores": pd.DataFrame(rows)}
@@ -78,13 +81,15 @@ class TestStrategyGovernance(unittest.TestCase):
         self.assertLessEqual(len(signals), 3)
         self.assertTrue(((signals["confidence"] >= 0) & (signals["confidence"] <= 1)).all())
 
-    def test_challenger_split_three_strategies(self):
+    def test_challenger_split_four_strategies(self):
         challengers = MultiAlphaChallengerStrategies(selector=DummyMultiAlphaSelector())
         outputs = challengers.generate_signals(trade_date="20260215", top_n=5)
-        self.assertEqual(set(outputs.keys()), {"balance_strategy_v1", "positive_strategy_v1", "value_strategy_v1"})
-        for frame in outputs.values():
+        expected = {"balance_strategy_v1", "positive_strategy_v1", "value_strategy_v1", "satellite_strategy_v1"}
+        self.assertEqual(set(outputs.keys()), expected)
+        for strategy_id, frame in outputs.items():
             self.assertEqual(list(frame.columns), ["trade_date", "ts_code", "score", "rank", "confidence", "model_version"])
             self.assertLessEqual(len(frame), 5)
+            self.assertTrue(frame["model_version"].str.startswith(f"{strategy_id}@").all())
 
     def test_engine_supports_manual_champion(self):
         config = SelectionConfig(

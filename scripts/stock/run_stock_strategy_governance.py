@@ -74,6 +74,7 @@ def main() -> None:
             "balance_strategy_v1",
             "positive_strategy_v1",
             "value_strategy_v1",
+            "satellite_strategy_v1",
         ])),
     )
 
@@ -81,6 +82,11 @@ def main() -> None:
     challenger_cfg = ChallengerConfig(
         positive_growth_weight=float(challenger_weight_raw.get("positive_growth_weight", 0.7)),
         positive_frontier_weight=float(challenger_weight_raw.get("positive_frontier_weight", 0.3)),
+        satellite_growth_weight=float(challenger_weight_raw.get("satellite_growth_weight", 0.35)),
+        satellite_frontier_weight=float(challenger_weight_raw.get("satellite_frontier_weight", 0.25)),
+        satellite_rps_weight=float(challenger_weight_raw.get("satellite_rps_weight", 0.20)),
+        satellite_elasticity_weight=float(challenger_weight_raw.get("satellite_elasticity_weight", 0.10)),
+        satellite_not_priced_weight=float(challenger_weight_raw.get("satellite_not_priced_weight", 0.10)),
     )
 
     seed_raw = cfg.get("seed_balance_strategy", {})

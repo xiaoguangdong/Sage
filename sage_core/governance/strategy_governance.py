@@ -28,6 +28,7 @@ SUPPORTED_STRATEGIES = (
     "balance_strategy_v1",
     "positive_strategy_v1",
     "value_strategy_v1",
+    "satellite_strategy_v1",
 )
 
 STRATEGY_ALIASES = {
@@ -234,6 +235,7 @@ class StrategyGovernanceConfig:
         "balance_strategy_v1",
         "positive_strategy_v1",
         "value_strategy_v1",
+        "satellite_strategy_v1",
     )
 
     def normalized_active_champion_id(self) -> str:
@@ -301,17 +303,23 @@ class SeedBalanceStrategy:
 class ChallengerConfig:
     positive_growth_weight: float = 0.7
     positive_frontier_weight: float = 0.3
+    satellite_growth_weight: float = 0.35
+    satellite_frontier_weight: float = 0.25
+    satellite_rps_weight: float = 0.20
+    satellite_elasticity_weight: float = 0.10
+    satellite_not_priced_weight: float = 0.10
     version_map: Dict[str, str] = field(
         default_factory=lambda: {
             "balance_strategy_v1": "v1.0.0",
             "positive_strategy_v1": "v1.0.0",
             "value_strategy_v1": "v1.0.0",
+            "satellite_strategy_v1": "v1.0.0",
         }
     )
 
 
 class MultiAlphaChallengerStrategies:
-    """Multi Alpha 拆分后的三个挑战者策略"""
+    """Multi Alpha 拆分后的挑战者策略集合"""
 
     def __init__(
         self,
@@ -330,6 +338,23 @@ class MultiAlphaChallengerStrategies:
         allocation_method: str = "fixed",
         regime: str = "sideways",
     ) -> Dict[str, pd.DataFrame]:
+        def _normalize_weights(weights: Dict[str, float], fallback: Dict[str, float]) -> Dict[str, float]:
+            cleaned = {}
+            for key, val in weights.items():
+                try:
+                    cleaned[key] = float(val)
+                except (TypeError, ValueError):
+                    cleaned[key] = 0.0
+            total = sum(v for v in cleaned.values() if np.isfinite(v) and v > 0)
+            if total <= 0:
+                return fallback.copy()
+            return {k: max(v, 0.0) / total for k, v in cleaned.items()}
+
+        def _safe_numeric(frame: pd.DataFrame, column: str) -> pd.Series:
+            if column not in frame.columns:
+                return pd.Series(0.0, index=frame.index, dtype=float)
+            return pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
+
         result = self.selector.select(
             trade_date=trade_date,
             top_n=max(top_n, 30),
@@ -342,21 +367,45 @@ class MultiAlphaChallengerStrategies:
                 "balance_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
                 "positive_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
                 "value_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
+                "satellite_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
             }
 
         data = all_scores.copy()
-        growth_w = float(self.config.positive_growth_weight)
-        frontier_w = float(self.config.positive_frontier_weight)
-        weight_sum = growth_w + frontier_w
-        if weight_sum <= 0:
-            growth_w, frontier_w = 0.7, 0.3
-            weight_sum = 1.0
-        growth_w = growth_w / weight_sum
-        frontier_w = frontier_w / weight_sum
+        positive_weights = _normalize_weights(
+            {
+                "growth": self.config.positive_growth_weight,
+                "frontier": self.config.positive_frontier_weight,
+            },
+            {"growth": 0.7, "frontier": 0.3},
+        )
 
         data["positive_score"] = (
-            pd.to_numeric(data["growth_score"], errors="coerce").fillna(0.0) * growth_w
-            + pd.to_numeric(data["frontier_score"], errors="coerce").fillna(0.0) * frontier_w
+            _safe_numeric(data, "growth_score") * positive_weights["growth"]
+            + _safe_numeric(data, "frontier_score") * positive_weights["frontier"]
+        )
+
+        satellite_weights = _normalize_weights(
+            {
+                "growth": self.config.satellite_growth_weight,
+                "frontier": self.config.satellite_frontier_weight,
+                "rps": self.config.satellite_rps_weight,
+                "elasticity": self.config.satellite_elasticity_weight,
+                "not_priced": self.config.satellite_not_priced_weight,
+            },
+            {
+                "growth": 0.35,
+                "frontier": 0.25,
+                "rps": 0.20,
+                "elasticity": 0.10,
+                "not_priced": 0.10,
+            },
+        )
+        data["satellite_score"] = (
+            _safe_numeric(data, "growth_score") * satellite_weights["growth"]
+            + _safe_numeric(data, "frontier_score") * satellite_weights["frontier"]
+            + _safe_numeric(data, "rps_component") * satellite_weights["rps"]
+            + _safe_numeric(data, "elasticity_component") * satellite_weights["elasticity"]
+            + _safe_numeric(data, "not_priced_component") * satellite_weights["not_priced"]
         )
 
         outputs = {}
@@ -364,6 +413,7 @@ class MultiAlphaChallengerStrategies:
             "balance_strategy_v1": "combined_score",
             "positive_strategy_v1": "positive_score",
             "value_strategy_v1": "value_score",
+            "satellite_strategy_v1": "satellite_score",
         }
         for strategy_id, score_col in score_map.items():
             version = self.config.version_map.get(strategy_id, "v1.0.0")
@@ -417,6 +467,7 @@ class ChampionChallengerEngine:
                 "balance_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
                 "positive_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
                 "value_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
+                "satellite_strategy_v1": pd.DataFrame(columns=SIGNAL_SCHEMA),
             }
 
         if champion_id == "seed_balance_strategy":

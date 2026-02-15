@@ -330,12 +330,18 @@ def _build_governance_engine(config: dict) -> ChampionChallengerEngine:
             "balance_strategy_v1",
             "positive_strategy_v1",
             "value_strategy_v1",
+            "satellite_strategy_v1",
         ])),
     )
 
     challenger_config = ChallengerConfig(
         positive_growth_weight=float(challenger_weights.get("positive_growth_weight", 0.7)),
         positive_frontier_weight=float(challenger_weights.get("positive_frontier_weight", 0.3)),
+        satellite_growth_weight=float(challenger_weights.get("satellite_growth_weight", 0.35)),
+        satellite_frontier_weight=float(challenger_weights.get("satellite_frontier_weight", 0.25)),
+        satellite_rps_weight=float(challenger_weights.get("satellite_rps_weight", 0.20)),
+        satellite_elasticity_weight=float(challenger_weights.get("satellite_elasticity_weight", 0.10)),
+        satellite_not_priced_weight=float(challenger_weights.get("satellite_not_priced_weight", 0.10)),
     )
     selector_config = SelectionConfig(
         model_type=seed_raw.get("model_type", "lgbm"),
