@@ -13,7 +13,7 @@ from datetime import datetime
 # 导入项目模块
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from scripts.data._shared.runtime import get_data_path
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 from sage_app.data.data_loader import DataLoader
 from sage_core.utils.column_normalizer import normalize_security_columns
 from sage_core.utils.logging_utils import setup_logging
@@ -21,7 +21,10 @@ from sage_core.data.universe import Universe
 from sage_core.features.price_features import PriceFeatures
 from sage_core.features.market_features import MarketFeatures
 from sage_core.trend.trend_model import create_trend_model
-from sage_core.stock_selection.rank_model import RankModelLGBM
+try:
+    from sage_core.stock_selection.rank_model import RankModelLGBM
+except ModuleNotFoundError:  # lightgbm 未安装时允许 weekly 链路继续运行
+    RankModelLGBM = None
 from sage_core.execution.entry_model import EntryModelLR
 from sage_core.execution.signal_contract import (
     apply_industry_overlay,
@@ -42,7 +45,6 @@ from sage_core.governance.strategy_governance import (
 from sage_core.stock_selection.stock_selector import SelectionConfig
 from sage_core.portfolio.construction import PortfolioConstruction
 from sage_core.portfolio.risk_control import RiskControl
-from sage_core.backtest.walk_forward import WalkForwardBacktest
 
 # 配置日志
 log_path = setup_logging("weekly")
@@ -122,6 +124,9 @@ def load_data(data_dir: str = 'data') -> pd.DataFrame:
     
     # 加载所有Baostock数据（默认读取raw目录全部parquet）
     df = loader.load_all_baostock_data()
+    if df is None or len(df) == 0:
+        logger.warning("Baostock raw 数据为空，回退读取 Tushare 日线/基础数据")
+        df = _load_tushare_fallback()
     
     if df is None or len(df) == 0:
         logger.error("无法加载数据")
@@ -133,9 +138,71 @@ def load_data(data_dir: str = 'data') -> pd.DataFrame:
     
     # 检查数据质量
     quality_report = loader.check_data_quality(df)
-    logger.info(f"数据质量报告: {quality_report}")
+    missing_values = quality_report.get("missing_values", {})
+    missing_nonzero = {k: int(v) for k, v in missing_values.items() if int(v) > 0}
+    date_range = quality_report.get("date_range")
+    stock_count = len(quality_report.get("stock_codes", []))
+    logger.info(
+        "数据质量报告: rows=%s, stock_count=%s, date_range=%s, missing_nonzero=%s",
+        quality_report.get("total_rows"),
+        stock_count,
+        date_range,
+        missing_nonzero,
+    )
     
     return df
+
+
+def _load_tushare_fallback(years: int = 2) -> pd.DataFrame:
+    """
+    当 raw/baostock 不可用时，使用 data/tushare 作为兜底输入。
+    """
+    tushare_root = get_tushare_root()
+    daily_dir = tushare_root / "daily"
+    daily_files = sorted(daily_dir.glob("daily_*.parquet"))
+    if not daily_files:
+        logger.warning("未找到 Tushare 日线文件: %s", daily_dir)
+        return pd.DataFrame()
+
+    selected = daily_files[-max(1, int(years)) :]
+    frames = []
+    for path in selected:
+        try:
+            frames.append(pd.read_parquet(path))
+        except Exception as exc:
+            logger.warning("读取日线失败: %s (%s)", path, exc)
+    if not frames:
+        return pd.DataFrame()
+
+    daily = pd.concat(frames, ignore_index=True)
+    rename_map = {"vol": "volume"}
+    for old, new in rename_map.items():
+        if old in daily.columns and new not in daily.columns:
+            daily[new] = daily[old]
+
+    basic_path = tushare_root / "daily_basic_all.parquet"
+    if basic_path.exists():
+        try:
+            import pyarrow.parquet as pq
+
+            basic_cols = ["ts_code", "trade_date", "turnover_rate_f", "total_mv"]
+            available_cols = set(pq.read_schema(basic_path).names)
+            selected_cols = [c for c in basic_cols if c in available_cols]
+            if not {"ts_code", "trade_date"}.issubset(set(selected_cols)):
+                selected_cols = []
+            basic = pd.read_parquet(basic_path, columns=selected_cols) if selected_cols else pd.DataFrame()
+            if "turnover_rate_f" in basic.columns and "turnover" not in basic.columns:
+                basic["turnover"] = pd.to_numeric(basic["turnover_rate_f"], errors="coerce")
+            if "total_mv" in basic.columns and "market_cap" not in basic.columns:
+                basic["market_cap"] = pd.to_numeric(basic["total_mv"], errors="coerce")
+            keep_cols = [c for c in ["ts_code", "trade_date", "turnover", "market_cap"] if c in basic.columns]
+            if len(keep_cols) >= 2:
+                daily = daily.merge(basic[keep_cols], on=["ts_code", "trade_date"], how="left")
+        except Exception as exc:
+            logger.warning("读取/合并 daily_basic_all 失败: %s", exc)
+
+    logger.info("Tushare fallback 加载完成: rows=%d, files=%d", len(daily), len(selected))
+    return daily
 
 
 def filter_universe(df: pd.DataFrame) -> pd.DataFrame:
@@ -509,7 +576,8 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     portfolio_for_risk = portfolio.copy()
     if "sector" not in portfolio_for_risk.columns and "industry_l1" in portfolio_for_risk.columns:
         portfolio_for_risk["sector"] = portfolio_for_risk["industry_l1"]
-    risk_checks = risk_control.check_portfolio_risk(portfolio_for_risk) if len(portfolio_for_risk) > 0 else {}
+    risk_checks_raw = risk_control.check_portfolio_risk(portfolio_for_risk) if len(portfolio_for_risk) > 0 else {}
+    risk_checks = {k: bool(v) for k, v in risk_checks_raw.items()}
     logger.info(
         "仓位管理: market_vol=%.2f%%, trend_pos=%.2f%%, vol_target_pos=%.2f%%, final_pos=%.2f%%",
         (market_volatility * 100.0) if market_volatility is not None and not np.isnan(market_volatility) else float('nan'),
@@ -569,6 +637,8 @@ def run_backtest_workflow(config: dict, df: pd.DataFrame):
     logger.info("开始回测工作流")
     logger.info("=" * 50)
     
+    from sage_core.backtest.walk_forward import WalkForwardBacktest
+
     # 创建模型
     trend_model = create_trend_model(
         config.get('trend_model', {}).get('trend_model', {}).get('model_type', 'rule')
@@ -576,7 +646,11 @@ def run_backtest_workflow(config: dict, df: pd.DataFrame):
     
     rank_model_config = config.get('rank_model', {})
     if rank_model_config.get('rank_model', {}).get('enabled', False):
-        rank_model = RankModelLGBM(rank_model_config.get('lgbm_params', {}))
+        if RankModelLGBM is None:
+            logger.warning("rank_model 启用但 lightgbm 不可用，回退为空模型")
+            rank_model = None
+        else:
+            rank_model = RankModelLGBM(rank_model_config.get('lgbm_params', {}))
     else:
         rank_model = None
     
