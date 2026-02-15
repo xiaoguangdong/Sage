@@ -237,12 +237,13 @@ python3 scripts/data/policy/policy_signal_enhanced.py
 
 示例：
 ```bash
-python3 scripts/data/concepts/build_concept_industry_mapping.py --min-ratio 0.2
+python3 scripts/data/concepts/build_concept_industry_mapping.py --min-ratio 0.05 --strict-ratio 0.2
 ```
 
 输出：
 - `data/processed/concepts/concept_industry_coverage.parquet`
 - `data/processed/concepts/concept_industry_primary.parquet`
+- `data/processed/concepts/concept_industry_primary_high_conf.parquet`
 - `data/processed/concepts/concept_industry_unmapped.parquet`
 
 输出：

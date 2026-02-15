@@ -18,6 +18,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from sage_core.industry.signal_indicators import MacroSignal, IndustryProsperity, NorthboundFlow
+from scripts.data.macro.aggregate_northbound_industry_flow import aggregate as aggregate_northbound_industry_flow
 
 
 def apply_delay(df: pd.DataFrame, date_col: str, delay_days: int) -> pd.DataFrame:
@@ -93,6 +94,11 @@ def export_macro_signals(
     flow_out = None
     industry_out = None
     try:
+        if tushare_root:
+            try:
+                aggregate_northbound_industry_flow(tushare_root=tushare_root)
+            except Exception:
+                pass
         northbound_dir = (tushare_root / "northbound") if tushare_root else None
         flow = NorthboundFlow(data_dir=northbound_dir)
         flow_df = flow.get_flow_signal()

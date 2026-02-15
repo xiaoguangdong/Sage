@@ -113,7 +113,8 @@ def build_stock_industry_map(members: pd.DataFrame, l1: pd.DataFrame) -> pd.Data
 def build_mapping(
     concept_df: pd.DataFrame,
     stock_map: pd.DataFrame,
-    min_ratio: float = 0.2,
+    min_ratio: float = 0.05,
+    strict_ratio: float = 0.2,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict]:
     merged = concept_df.merge(stock_map, on="ts_code", how="left")
     total_by_concept = merged.groupby("concept_code")["ts_code"].nunique().rename("total_stocks")
@@ -121,7 +122,9 @@ def build_mapping(
 
     if mapped.empty:
         coverage = pd.DataFrame(columns=["concept_code", "concept_name", "sw_industry", "stock_count", "stock_ratio"])
-        primary = pd.DataFrame(columns=["concept_code", "concept_name", "sw_industry", "stock_ratio", "total_stocks"])
+        primary = pd.DataFrame(
+            columns=["concept_code", "concept_name", "sw_industry", "stock_ratio", "total_stocks", "mapping_quality"]
+        )
         unmapped = total_by_concept.reset_index()
         report = {
             "total_concepts": int(total_by_concept.shape[0]),
@@ -145,8 +148,11 @@ def build_mapping(
     coverage = grouped.sort_values(["concept_code", "stock_ratio"], ascending=[True, False])
 
     primary = coverage.groupby("concept_code").head(1).copy()
+    primary["mapping_quality"] = "weak"
+    primary.loc[primary["stock_ratio"] >= float(min_ratio), "mapping_quality"] = "low"
+    primary.loc[primary["stock_ratio"] >= float(strict_ratio), "mapping_quality"] = "high"
     primary = primary[primary["stock_ratio"] >= min_ratio]
-    primary = primary[["concept_code", "concept_name", "sw_industry", "stock_ratio", "total_stocks"]]
+    primary = primary[["concept_code", "concept_name", "sw_industry", "stock_ratio", "total_stocks", "mapping_quality"]]
 
     mapped_concepts = set(primary["concept_code"].unique().tolist())
     all_concepts = set(total_by_concept.index.tolist())
@@ -154,11 +160,16 @@ def build_mapping(
     unmapped = total_by_concept.reset_index()
     unmapped = unmapped[unmapped["concept_code"].isin(unmapped_concepts)]
 
+    high_conf_concepts = int((primary["mapping_quality"] == "high").sum())
     report = {
         "total_concepts": int(len(all_concepts)),
         "mapped_concepts": int(len(mapped_concepts)),
         "coverage_rate": round(len(mapped_concepts) / len(all_concepts), 4) if all_concepts else 0,
         "min_ratio": min_ratio,
+        "strict_ratio": strict_ratio,
+        "high_conf_concepts": high_conf_concepts,
+        "high_conf_coverage_rate": round(high_conf_concepts / len(all_concepts), 4) if all_concepts else 0,
+        "mapping_quality_distribution": primary["mapping_quality"].value_counts().to_dict(),
     }
 
     return coverage, primary, unmapped, report
@@ -166,7 +177,8 @@ def build_mapping(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--min-ratio", type=float, default=0.2, help="主行业最小覆盖率阈值")
+    parser.add_argument("--min-ratio", type=float, default=0.05, help="主行业最小覆盖率阈值（放宽映射，建议0.05）")
+    parser.add_argument("--strict-ratio", type=float, default=0.2, help="高置信映射阈值（建议0.2）")
     parser.add_argument("--output-dir", type=str, default=None)
     args = parser.parse_args()
 
@@ -186,10 +198,13 @@ def main() -> None:
     member_df = load_sw_index_member(member_path)
     stock_map = build_stock_industry_map(member_df, l1_df)
 
-    coverage, primary, unmapped, report = build_mapping(concept_df, stock_map, min_ratio=args.min_ratio)
+    coverage, primary, unmapped, report = build_mapping(
+        concept_df, stock_map, min_ratio=args.min_ratio, strict_ratio=args.strict_ratio
+    )
 
     coverage.to_parquet(output_dir / "concept_industry_coverage.parquet", index=False)
     primary.to_parquet(output_dir / "concept_industry_primary.parquet", index=False)
+    primary[primary["mapping_quality"] == "high"].to_parquet(output_dir / "concept_industry_primary_high_conf.parquet", index=False)
     unmapped.to_parquet(output_dir / "concept_industry_unmapped.parquet", index=False)
     (output_dir / "concept_industry_mapping_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
