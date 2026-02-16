@@ -193,6 +193,187 @@ def prepare_crowding_penalty(
     return grouped
 
 
+def prepare_concept_bias_scores(concept_bias: pd.DataFrame) -> pd.DataFrame:
+    required = {"trade_date", "sw_industry"}
+    missing = required - set(concept_bias.columns)
+    if missing:
+        raise ValueError(f"concept_bias 缺少字段: {sorted(missing)}")
+
+    source = concept_bias.copy()
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+    source["sw_industry"] = source["sw_industry"].astype(str)
+
+    if "concept_bias_strength" in source.columns:
+        bias = pd.to_numeric(source["concept_bias_strength"], errors="coerce").fillna(0.0).clip(-1.0, 1.0)
+        source["concept_score"] = ((bias + 1.0) / 2.0).clip(0.0, 1.0)
+    elif "concept_score" in source.columns:
+        source["concept_score"] = pd.to_numeric(source["concept_score"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    elif "score" in source.columns:
+        source["concept_score"] = pd.to_numeric(source["score"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
+    else:
+        source["concept_score"] = 0.5
+
+    if "concept_confidence" in source.columns:
+        source["concept_confidence"] = pd.to_numeric(source["concept_confidence"], errors="coerce").fillna(0.0)
+    elif "concept_signal_confidence" in source.columns:
+        source["concept_confidence"] = pd.to_numeric(source["concept_signal_confidence"], errors="coerce").fillna(0.0)
+    elif "confidence" in source.columns:
+        source["concept_confidence"] = pd.to_numeric(source["confidence"], errors="coerce").fillna(0.0)
+    else:
+        source["concept_confidence"] = 0.0
+    source["concept_confidence"] = source["concept_confidence"].clip(0.0, 1.0)
+
+    return source[["trade_date", "sw_industry", "concept_score", "concept_confidence"]].dropna(
+        subset=["trade_date", "sw_industry"]
+    )
+
+
+def prepare_trend_dominant_state(
+    trend_gate: pd.DataFrame,
+    lookback_days: int = 5,
+    dominance_threshold: float = 0.6,
+) -> pd.DataFrame:
+    if trend_gate is None or trend_gate.empty:
+        return pd.DataFrame(columns=["trade_date", "dominant_state", "dominant_ratio"])
+    if "trade_date" not in trend_gate.columns:
+        raise ValueError("trend_gate 缺少 trade_date 字段")
+
+    source = trend_gate.copy()
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+    source = source.dropna(subset=["trade_date"]).sort_values("trade_date").drop_duplicates(subset=["trade_date"], keep="last")
+
+    if "trend_state" in source.columns:
+        state = source["trend_state"].astype(str).str.upper()
+    elif "trend_gate" in source.columns:
+        gate = pd.to_numeric(source["trend_gate"], errors="coerce").fillna(1.0)
+        state = pd.Series("RISK_ON", index=source.index)
+        state.loc[gate < 0.4] = "RISK_OFF"
+        state.loc[(gate >= 0.4) & (gate < 0.95)] = "NEUTRAL"
+    else:
+        raise ValueError("trend_gate 缺少 trend_state 或 trend_gate 字段")
+
+    state = state.replace({"BULL": "RISK_ON", "BEAR": "RISK_OFF"})
+    state = state.where(state.isin(["RISK_ON", "NEUTRAL", "RISK_OFF"]), "NEUTRAL")
+    source["trend_state"] = state
+
+    rows = []
+    states = source["trend_state"].tolist()
+    dates = source["trade_date"].tolist()
+    window = max(1, int(lookback_days))
+    threshold = float(dominance_threshold)
+    for idx, date in enumerate(dates):
+        segment = states[max(0, idx - window + 1): idx + 1]
+        total = len(segment)
+        risk_on_ratio = segment.count("RISK_ON") / total
+        neutral_ratio = segment.count("NEUTRAL") / total
+        risk_off_ratio = segment.count("RISK_OFF") / total
+        ratio_map = {"RISK_ON": risk_on_ratio, "NEUTRAL": neutral_ratio, "RISK_OFF": risk_off_ratio}
+        dominant_state, dominant_ratio = max(ratio_map.items(), key=lambda item: item[1])
+        if dominant_ratio < threshold:
+            dominant_state = "NEUTRAL"
+        rows.append(
+            {
+                "trade_date": date,
+                "dominant_state": dominant_state,
+                "dominant_ratio": float(dominant_ratio),
+                "risk_on_ratio": float(risk_on_ratio),
+                "neutral_ratio": float(neutral_ratio),
+                "risk_off_ratio": float(risk_off_ratio),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def blend_industry_scores_with_concept(
+    industry_scores: pd.DataFrame,
+    concept_bias: pd.DataFrame,
+    dominant_state: pd.DataFrame,
+    *,
+    risk_on_concept_weight: float = 0.6,
+    neutral_concept_weight: float = 0.3,
+    risk_off_concept_weight: float = 0.1,
+    concept_max_stale_days: int = 7,
+) -> pd.DataFrame:
+    required_scores = {"trade_date", "sw_industry", "score"}
+    missing_scores = required_scores - set(industry_scores.columns)
+    if missing_scores:
+        raise ValueError(f"industry_scores 缺少字段: {sorted(missing_scores)}")
+
+    scores = industry_scores.copy()
+    scores["trade_date"] = _normalize_trade_date(scores["trade_date"])
+    scores["trade_date_dt"] = pd.to_datetime(scores["trade_date"], format="%Y%m%d", errors="coerce")
+    scores["sw_industry"] = scores["sw_industry"].astype(str)
+    scores["score"] = pd.to_numeric(scores["score"], errors="coerce")
+    scores = scores.dropna(subset=["trade_date", "trade_date_dt", "sw_industry", "score"]).reset_index(drop=True)
+    scores["row_id"] = np.arange(len(scores))
+
+    concept = prepare_concept_bias_scores(concept_bias)
+    concept["trade_date_dt"] = pd.to_datetime(concept["trade_date"], format="%Y%m%d", errors="coerce")
+    concept = concept.dropna(subset=["trade_date_dt"]).sort_values(["sw_industry", "trade_date_dt"])
+
+    aligned_rows = []
+    stale_days = max(1, int(concept_max_stale_days))
+    for industry_name, group in scores.groupby("sw_industry"):
+        group_sorted = group.sort_values("trade_date_dt")
+        concept_group = concept[concept["sw_industry"] == industry_name][["trade_date_dt", "concept_score", "concept_confidence"]]
+        if concept_group.empty:
+            fill = group_sorted[["row_id"]].copy()
+            fill["concept_score"] = 0.5
+            fill["concept_confidence"] = 0.0
+            aligned_rows.append(fill)
+            continue
+        aligned = pd.merge_asof(
+            group_sorted[["row_id", "trade_date_dt"]],
+            concept_group.sort_values("trade_date_dt"),
+            on="trade_date_dt",
+            direction="backward",
+            tolerance=pd.Timedelta(days=stale_days),
+        )
+        aligned["concept_score"] = pd.to_numeric(aligned["concept_score"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
+        aligned["concept_confidence"] = (
+            pd.to_numeric(aligned["concept_confidence"], errors="coerce").fillna(0.0).clip(0.0, 1.0)
+        )
+        aligned_rows.append(aligned[["row_id", "concept_score", "concept_confidence"]])
+
+    aligned_all = pd.concat(aligned_rows, ignore_index=True) if aligned_rows else pd.DataFrame(columns=["row_id", "concept_score", "concept_confidence"])
+    scores = scores.merge(aligned_all, on="row_id", how="left")
+    scores["concept_score"] = scores["concept_score"].fillna(0.5).clip(0.0, 1.0)
+    scores["concept_confidence"] = scores["concept_confidence"].fillna(0.0).clip(0.0, 1.0)
+
+    state_df = dominant_state.copy() if dominant_state is not None else pd.DataFrame()
+    if not state_df.empty:
+        if "trade_date" not in state_df.columns:
+            raise ValueError("dominant_state 缺少 trade_date 字段")
+        state_col = "dominant_state" if "dominant_state" in state_df.columns else "trend_state"
+        state_df["trade_date"] = _normalize_trade_date(state_df["trade_date"])
+        state_df["state_for_blend"] = (
+            state_df[state_col].astype(str).str.upper().replace({"BULL": "RISK_ON", "BEAR": "RISK_OFF"})
+        )
+        state_df["state_for_blend"] = state_df["state_for_blend"].where(
+            state_df["state_for_blend"].isin(["RISK_ON", "NEUTRAL", "RISK_OFF"]), "NEUTRAL"
+        )
+        scores = scores.merge(state_df[["trade_date", "state_for_blend"]], on="trade_date", how="left")
+    else:
+        scores["state_for_blend"] = "NEUTRAL"
+    scores["state_for_blend"] = scores["state_for_blend"].fillna("NEUTRAL")
+
+    weights = {
+        "RISK_ON": float(risk_on_concept_weight),
+        "NEUTRAL": float(neutral_concept_weight),
+        "RISK_OFF": float(risk_off_concept_weight),
+    }
+    scores["concept_weight"] = scores["state_for_blend"].map(weights).fillna(float(neutral_concept_weight)).clip(0.0, 1.0)
+    scores["effective_concept_weight"] = (scores["concept_weight"] * scores["concept_confidence"]).clip(0.0, 1.0)
+    scores["base_score"] = scores["score"]
+    scores["score"] = (
+        scores["base_score"] * (1.0 - scores["effective_concept_weight"])
+        + scores["concept_score"] * scores["effective_concept_weight"]
+    ).clip(0.0, 1.0)
+    scores["rank"] = scores.groupby("trade_date")["score"].rank(ascending=False, method="first").astype(int)
+    return scores.drop(columns=["row_id", "trade_date_dt"]).sort_values(["trade_date", "rank"]).reset_index(drop=True)
+
+
 def _compound_return(series: pd.Series) -> float:
     if series is None or len(series) == 0:
         return np.nan

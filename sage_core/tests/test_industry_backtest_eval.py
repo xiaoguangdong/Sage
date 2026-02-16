@@ -3,11 +3,14 @@ from __future__ import annotations
 import pandas as pd
 
 from sage_core.industry.industry_backtest_eval import (
+    blend_industry_scores_with_concept,
     build_industry_score_series,
     evaluate_industry_rotation,
     prepare_benchmark_returns,
+    prepare_concept_bias_scores,
     prepare_crowding_penalty,
     prepare_industry_returns,
+    prepare_trend_dominant_state,
     prepare_trend_gate,
 )
 
@@ -163,3 +166,48 @@ def test_evaluate_industry_rotation_with_penalties():
     )
     assert not enhanced_detail.empty
     assert enhanced_summary["industry_cost_adjusted_total_return"] < baseline_summary["industry_cost_adjusted_total_return"]
+
+
+def test_prepare_trend_dominant_state_and_blend_scores():
+    trend_gate = pd.DataFrame(
+        [
+            {"trade_date": "2026-01-05", "trend_state": "RISK_ON"},
+            {"trade_date": "2026-01-06", "trend_state": "RISK_ON"},
+            {"trade_date": "2026-01-07", "trend_state": "RISK_OFF"},
+        ]
+    )
+    dominant = prepare_trend_dominant_state(trend_gate, lookback_days=2, dominance_threshold=0.6)
+    assert {"trade_date", "dominant_state", "dominant_ratio"}.issubset(dominant.columns)
+    state_map = dict(zip(dominant["trade_date"], dominant["dominant_state"]))
+    assert state_map["20260106"] == "RISK_ON"
+    assert state_map["20260107"] == "NEUTRAL"
+
+    concept = prepare_concept_bias_scores(
+        pd.DataFrame(
+            [
+                {"trade_date": "2026-01-06", "sw_industry": "电子", "concept_bias_strength": 1.0, "concept_signal_confidence": 1.0},
+                {"trade_date": "2026-01-06", "sw_industry": "煤炭", "concept_bias_strength": -1.0, "concept_signal_confidence": 1.0},
+            ]
+        )
+    )
+    scores = pd.DataFrame(
+        [
+            {"trade_date": "20260106", "sw_industry": "电子", "score": 0.60, "confidence": 0.8},
+            {"trade_date": "20260106", "sw_industry": "煤炭", "score": 0.55, "confidence": 0.8},
+            {"trade_date": "20260107", "sw_industry": "电子", "score": 0.60, "confidence": 0.8},
+            {"trade_date": "20260107", "sw_industry": "煤炭", "score": 0.55, "confidence": 0.8},
+        ]
+    )
+    blended = blend_industry_scores_with_concept(
+        industry_scores=scores,
+        concept_bias=concept,
+        dominant_state=dominant,
+        risk_on_concept_weight=0.6,
+        neutral_concept_weight=0.3,
+        risk_off_concept_weight=0.1,
+        concept_max_stale_days=10,
+    )
+    day_on = blended[blended["trade_date"] == "20260106"].set_index("sw_industry")
+    day_neutral = blended[blended["trade_date"] == "20260107"].set_index("sw_industry")
+    assert day_on.loc["电子", "score"] > day_neutral.loc["电子", "score"]
+    assert day_on.loc["煤炭", "score"] < day_neutral.loc["煤炭", "score"]
