@@ -216,8 +216,16 @@ def main() -> None:
         universe = _load_all_stocks_universe(data_root, end_date, exclude_st=args.exclude_st)
         if args.exclude_st:
             st_stocks = _load_st_stock_list(data_root, end_date)
-            # 加载日线数据用于新股过滤
-            daily_df = pd.read_parquet(data_root / "daily" / f"daily_{end_date[:4]}.parquet")
+            # 加载日线数据用于新股过滤（需要加载最近几年的数据）
+            daily_frames = []
+            for year in range(int(end_date[:4]) - 1, int(end_date[:4]) + 1):
+                daily_path = data_root / "daily" / f"daily_{year}.parquet"
+                if daily_path.exists():
+                    daily_frames.append(pd.read_parquet(daily_path))
+            if daily_frames:
+                daily_df = pd.concat(daily_frames, ignore_index=True)
+            else:
+                daily_df = pd.DataFrame()
             universe = _filter_st_and_new_stocks(universe, st_stocks, daily_df, min_list_days=60)
         print(f"股票池：全市场，共 {len(universe)} 只")
     
