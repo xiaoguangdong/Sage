@@ -638,13 +638,17 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     overlay_strength = float(overlay_resolved["overlay_strength"])
     mainline_strength = float(overlay_resolved["mainline_strength"])
     signal_weights = overlay_resolved["signal_weights"]
+    tilt_strength = float(overlay_resolved.get("tilt_strength", 0.0))
+    industry_tilts = overlay_resolved.get("industry_tilts", {})
     regime_name = overlay_resolved["regime_name"]
     logger.info(
-        "行业叠加参数: regime=%s, overlay_strength=%.3f, mainline_strength=%.3f, signal_weights=%s",
+        "行业叠加参数: regime=%s, overlay_strength=%.3f, mainline_strength=%.3f, tilt_strength=%.3f, signal_weights=%s, industry_tilt_count=%d",
         regime_name,
         overlay_strength,
         mainline_strength,
+        tilt_strength,
         signal_weights,
+        len(industry_tilts) if isinstance(industry_tilts, dict) else 0,
     )
 
     industry_snapshot, industry_score_snapshot, industry_snapshot_path, industry_score_snapshot_path = _build_and_load_industry_snapshot(
@@ -663,6 +667,8 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         signal_weights=signal_weights,
         overlay_strength=overlay_strength,
         mainline_strength=mainline_strength,
+        industry_tilts=industry_tilts if isinstance(industry_tilts, dict) else None,
+        tilt_strength=tilt_strength,
     )
     exec_signal_path = contract_dir / f"execution_signals_{latest_trade_date}.parquet"
     execution_signals.to_parquet(exec_signal_path, index=False)

@@ -105,6 +105,9 @@ def main() -> None:
     parser.add_argument("--hold-days", type=int, default=5)
     parser.add_argument("--rebalance-step", type=int, default=5)
     parser.add_argument("--cost-rate", type=float, default=0.005)
+    parser.add_argument("--max-full-annual-drop", type=float, default=0.02, help="相对景气基线允许的最大年化下降")
+    parser.add_argument("--max-full-mdd-increase", type=float, default=0.02, help="相对景气基线允许的最大回撤上升")
+    parser.add_argument("--min-bull-annual-improve", type=float, default=0.0, help="相对景气基线要求的最小牛市年化改善")
     args = parser.parse_args()
 
     risk_on_weights = _parse_float_list(args.risk_on_weights)
@@ -147,7 +150,6 @@ def main() -> None:
     if not industry_contract_path.exists():
         raise FileNotFoundError(f"未找到行业信号契约: {industry_contract_path}")
 
-    contract = pd.read_parquet(industry_contract_path)
     sw_daily = pd.read_parquet(sw_daily_path)
     sw_l1_map = pd.read_parquet(sw_l1_map_path)
     benchmark_df = pd.read_parquet(benchmark_path)
@@ -229,7 +231,19 @@ def main() -> None:
         ["delta_bull_annual_vs_prosperity", "delta_full_annual_vs_prosperity"],
         ascending=False,
     ).reset_index(drop=True)
-    best = results.iloc[0].to_dict() if not results.empty else {}
+    if results.empty:
+        feasible = pd.DataFrame()
+    else:
+        feasible = results[
+            (results["delta_full_annual_vs_prosperity"] >= -float(args.max_full_annual_drop))
+            & (results["delta_full_mdd_vs_prosperity"] <= float(args.max_full_mdd_increase))
+            & (results["delta_bull_annual_vs_prosperity"] >= float(args.min_bull_annual_improve))
+        ].copy()
+        feasible = feasible.sort_values(
+            ["delta_bull_annual_vs_prosperity", "delta_full_annual_vs_prosperity", "delta_full_mdd_vs_prosperity"],
+            ascending=[False, False, True],
+        ).reset_index(drop=True)
+    best = feasible.iloc[0].to_dict() if not feasible.empty else (results.iloc[0].to_dict() if not results.empty else {})
 
     report = {
         "baseline_prosperity_only": {
@@ -247,7 +261,13 @@ def main() -> None:
             "hold_days": int(args.hold_days),
             "rebalance_step": int(args.rebalance_step),
             "cost_rate": float(args.cost_rate),
+            "max_full_annual_drop": float(args.max_full_annual_drop),
+            "max_full_mdd_increase": float(args.max_full_mdd_increase),
+            "min_bull_annual_improve": float(args.min_bull_annual_improve),
         },
+        "feasible_count": int(len(feasible)),
+        "feasible_ratio": float(len(feasible) / max(1, len(results))) if not results.empty else 0.0,
+        "selection_mode": "feasible_first",
         "best": best,
     }
 
@@ -259,10 +279,16 @@ def main() -> None:
         json.dumps(results.head(10).to_dict(orient="records"), ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+    feasible_top10_path = output_dir / "bull_concept_weight_grid_feasible_top10.json"
+    feasible_top10_path.write_text(
+        json.dumps(feasible.head(10).to_dict(orient="records"), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
     print(f"已输出: {results_path}")
     print(f"已输出: {top10_path}")
+    print(f"已输出: {feasible_top10_path}")
     print(f"已输出: {report_path}")
     if best:
         print(json.dumps(best, ensure_ascii=False, indent=2))

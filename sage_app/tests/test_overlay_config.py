@@ -47,6 +47,25 @@ class TestOverlayConfig(unittest.TestCase):
         self.assertIn("policy_score", result["signal_weights"])
         self.assertIn("northbound_ratio", result["signal_weights"])
 
+    def test_resolve_industry_tilts(self):
+        cfg = {
+            "overlay": {
+                "tilt_strength": 0.2,
+                "industry_tilts": {"医药生物": 0.4},
+                "regime_overrides": {
+                    "bear": {
+                        "tilt_strength": 0.5,
+                        "industry_tilts": {"电子": -0.6, "医药生物": 0.8},
+                    }
+                },
+            }
+        }
+        result = resolve_industry_overlay_config(cfg, trend_state=0)
+        self.assertEqual(result["regime_name"], "bear")
+        self.assertAlmostEqual(result["tilt_strength"], 0.5)
+        self.assertAlmostEqual(result["industry_tilts"]["医药生物"], 0.8)
+        self.assertAlmostEqual(result["industry_tilts"]["电子"], -0.6)
+
 
 if __name__ == "__main__":
     unittest.main()

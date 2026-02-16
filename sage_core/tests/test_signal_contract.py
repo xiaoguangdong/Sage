@@ -158,3 +158,35 @@ def test_apply_industry_overlay_supports_mainline_score_snapshot():
     coal_score = out.loc[out["ts_code"] == "000002.SZ", "score_final"].iloc[0]
     assert elec_score > out.loc[out["ts_code"] == "000001.SZ", "score_raw"].iloc[0]
     assert coal_score < out.loc[out["ts_code"] == "000002.SZ", "score_raw"].iloc[0]
+
+
+def test_apply_industry_overlay_supports_regime_industry_tilt():
+    trade_date = "20260215"
+    champion = _sample_signal(trade_date, ["000001.SZ", "000002.SZ"], base_score=1.00)
+    champion["strategy_id"] = "seed_balance_strategy"
+    champion["is_champion"] = True
+    champion["signal_name"] = "stock_score"
+    champion["source"] = "champion_challenger"
+
+    stock_industry_map = pd.DataFrame(
+        [
+            {"ts_code": "000001.SZ", "industry_l1": "医药生物"},
+            {"ts_code": "000002.SZ", "industry_l1": "电子"},
+        ]
+    )
+
+    out = apply_industry_overlay(
+        stock_signals=champion,
+        industry_snapshot=pd.DataFrame(),
+        stock_industry_map=stock_industry_map,
+        overlay_strength=0.2,
+        tilt_strength=0.5,
+        industry_tilts={"医药生物": 0.8, "电子": -0.6},
+    )
+    assert "industry_tilt" in out.columns
+    med_row = out[out["ts_code"] == "000001.SZ"].iloc[0]
+    elec_row = out[out["ts_code"] == "000002.SZ"].iloc[0]
+    assert med_row["industry_tilt"] > 0
+    assert elec_row["industry_tilt"] < 0
+    assert med_row["score_final"] > med_row["score_raw"]
+    assert elec_row["score_final"] < elec_row["score_raw"]

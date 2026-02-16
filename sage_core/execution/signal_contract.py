@@ -115,6 +115,8 @@ def apply_industry_overlay(
     signal_weights: Optional[Dict[str, float]] = None,
     overlay_strength: float = 0.20,
     mainline_strength: float = 0.0,
+    industry_tilts: Optional[Dict[str, float]] = None,
+    tilt_strength: float = 0.0,
 ) -> pd.DataFrame:
     if stock_signals is None or stock_signals.empty:
         return pd.DataFrame(columns=list(stock_signals.columns) + ["industry_l1", "industry_overlay", "score_raw", "score_final"])
@@ -198,6 +200,19 @@ def apply_industry_overlay(
         out["industry_overlay"] = (
             base_strength * out["industry_overlay"] + mainline_strength * out[mainline_col]
         ).clip(-1.0, 1.0)
+
+    tilt_strength = min(1.0, max(0.0, float(tilt_strength)))
+    if tilt_strength > 0 and isinstance(industry_tilts, dict) and len(industry_tilts) > 0:
+        cleaned_tilts = {}
+        for key, raw in industry_tilts.items():
+            try:
+                cleaned_tilts[str(key)] = max(-1.0, min(1.0, float(raw)))
+            except (TypeError, ValueError):
+                continue
+        out["industry_tilt"] = out["industry_l1"].map(cleaned_tilts).fillna(0.0).clip(-1.0, 1.0)
+        out["industry_overlay"] = (out["industry_overlay"] + tilt_strength * out["industry_tilt"]).clip(-1.0, 1.0)
+    else:
+        out["industry_tilt"] = 0.0
 
     out["score_final"] = out["score_raw"] * (1.0 + float(overlay_strength) * out["industry_overlay"])
     return out

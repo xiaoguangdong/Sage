@@ -60,6 +60,7 @@ industry_signals:
   overlay:
     overlay_strength: 0.20
     mainline_strength: 0.35
+    tilt_strength: 0.0
     signal_weights:
       policy_score: 0.4
       concept_bias: 0.3
@@ -68,9 +69,42 @@ industry_signals:
       bull:
         overlay_strength: 0.25
         mainline_strength: 0.50
+        tilt_strength: 0.08
+        signal_weights:
+          policy_score: 0.25
+          concept_bias: 0.55
+          northbound_ratio: 0.20
+        industry_tilts:
+          电子: 0.35
+          计算机: 0.35
+          通信: 0.30
+          机械设备: 0.20
+          汽车: 0.15
       sideways:
         overlay_strength: 0.20
         mainline_strength: 0.35
+        tilt_strength: 0.05
+        signal_weights:
+          policy_score: 0.45
+          concept_bias: 0.20
+          northbound_ratio: 0.35
+        industry_tilts:
+          医药生物: 0.25
+          食品饮料: 0.20
+          公用事业: 0.20
+          银行: 0.15
       bear:
         overlay_strength: 0.15
         mainline_strength: 0.20
+        tilt_strength: 0.10
+        signal_weights:
+          policy_score: 0.50
+          concept_bias: 0.10
+          northbound_ratio: 0.40
+        industry_tilts:
+          医药生物: 0.45
+          公用事业: 0.40
+          银行: 0.30
+          煤炭: 0.20
+          电子: -0.35
+          计算机: -0.40
