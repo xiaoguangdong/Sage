@@ -446,6 +446,60 @@ def _build_and_load_industry_snapshot(
     return snapshot, score_snapshot, snapshot_path, score_snapshot_path
 
 
+def _load_stock_industry_map_fallback(reference_trade_date: str | None = None) -> pd.DataFrame:
+    """
+    当特征侧缺失行业字段时，回退使用申万L1成分映射（sw_index_member + sw_industry_l1）。
+    """
+    tushare_root = get_tushare_root()
+    member_path = tushare_root / "sw_industry" / "sw_index_member.parquet"
+    l1_path = tushare_root / "sw_industry" / "sw_industry_l1.parquet"
+    if not member_path.exists() or not l1_path.exists():
+        return pd.DataFrame(columns=["ts_code", "industry_l1"])
+
+    try:
+        members = pd.read_parquet(member_path)
+        l1 = pd.read_parquet(l1_path)
+    except Exception as exc:
+        logger.warning("读取申万映射回退文件失败: %s", exc)
+        return pd.DataFrame(columns=["ts_code", "industry_l1"])
+
+    required_member = {"index_code", "con_code"}
+    required_l1 = {"index_code"}
+    if not required_member.issubset(members.columns) or not required_l1.issubset(l1.columns):
+        return pd.DataFrame(columns=["ts_code", "industry_l1"])
+
+    l1_name_col = "industry_name" if "industry_name" in l1.columns else ("index_name" if "index_name" in l1.columns else None)
+    if l1_name_col is None:
+        return pd.DataFrame(columns=["ts_code", "industry_l1"])
+
+    members = members.copy()
+    members["index_code"] = members["index_code"].astype(str)
+    members["ts_code"] = members["con_code"].astype(str)
+
+    ref_date = pd.to_datetime(reference_trade_date, errors="coerce")
+    if pd.notna(ref_date):
+        in_date = pd.to_datetime(members.get("in_date"), errors="coerce")
+        out_date = pd.to_datetime(members.get("out_date"), errors="coerce")
+        active_mask = (in_date.isna() | (in_date <= ref_date)) & (out_date.isna() | (out_date > ref_date))
+        members = members[active_mask].copy()
+
+    l1 = l1[["index_code", l1_name_col]].rename(columns={l1_name_col: "industry_l1"}).copy()
+    l1["index_code"] = l1["index_code"].astype(str)
+    mapped = members.merge(l1, on="index_code", how="left")
+    mapped = mapped.dropna(subset=["ts_code", "industry_l1"]).copy()
+    if mapped.empty:
+        return pd.DataFrame(columns=["ts_code", "industry_l1"])
+
+    if "in_date" in mapped.columns:
+        mapped["in_date"] = pd.to_datetime(mapped["in_date"], errors="coerce")
+        mapped = mapped.sort_values(["ts_code", "in_date"]).groupby("ts_code", as_index=False).tail(1)
+    else:
+        mapped = mapped.drop_duplicates(subset=["ts_code"], keep="last")
+
+    mapped["industry_l1"] = mapped["industry_l1"].astype(str)
+    return mapped[["ts_code", "industry_l1"]].reset_index(drop=True)
+
+
 def run_weekly_workflow(config: dict, df: pd.DataFrame):
     """
     运行每周工作流
@@ -659,6 +713,17 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         default_half_life_days=float(default_half_life),
     )
     stock_industry_map = build_stock_industry_map_from_features(df_features)
+    feature_industry_map_rows = len(stock_industry_map)
+    fallback_industry_map = _load_stock_industry_map_fallback(latest_trade_date)
+    if stock_industry_map.empty and not fallback_industry_map.empty:
+        stock_industry_map = fallback_industry_map
+        logger.info("行业映射回退生效（申万L1成分）: rows=%d", len(stock_industry_map))
+    elif not fallback_industry_map.empty:
+        stock_industry_map = pd.concat([stock_industry_map, fallback_industry_map], ignore_index=True)
+        stock_industry_map = stock_industry_map.dropna(subset=["ts_code", "industry_l1"]).drop_duplicates(subset=["ts_code"], keep="first")
+        logger.info("行业映射补全完成: feature_rows=%d, fallback_rows=%d, merged_rows=%d", feature_industry_map_rows, len(fallback_industry_map), len(stock_industry_map))
+    if stock_industry_map.empty:
+        logger.warning("行业映射为空，行业叠加将退化为无行业覆盖")
     execution_signals = apply_industry_overlay(
         stock_signals=champion_contract,
         industry_snapshot=industry_snapshot,
