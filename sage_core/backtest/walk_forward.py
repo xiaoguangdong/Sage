@@ -3,7 +3,7 @@ Walk-forward回测模块
 """
 import pandas as pd
 import numpy as np
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 from datetime import datetime, timedelta
 
