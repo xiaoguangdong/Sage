@@ -69,6 +69,100 @@ def prepare_industry_returns(sw_daily: pd.DataFrame, sw_l1_map: Optional[pd.Data
     return source[["trade_date", "sw_industry", "industry_return"]].copy()
 
 
+def prepare_prosperity_scores(
+    sw_daily: pd.DataFrame,
+    sw_l1_map: Optional[pd.DataFrame] = None,
+    momentum_window: int = 20,
+    amount_window: int = 20,
+    volatility_window: int = 20,
+) -> pd.DataFrame:
+    required = {"trade_date", "ts_code"}
+    missing = required - set(sw_daily.columns)
+    if missing:
+        raise ValueError(f"sw_daily 缺少字段: {sorted(missing)}")
+
+    source = sw_daily.copy()
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+    source["ts_code"] = source["ts_code"].astype(str)
+
+    if "pct_change" in source.columns:
+        source["industry_return"] = pd.to_numeric(source["pct_change"], errors="coerce") / 100.0
+    elif "pct_chg" in source.columns:
+        source["industry_return"] = pd.to_numeric(source["pct_chg"], errors="coerce") / 100.0
+    elif "close" in source.columns:
+        source = source.sort_values(["ts_code", "trade_date"])
+        source["industry_return"] = source.groupby("ts_code")["close"].pct_change()
+    else:
+        raise ValueError("sw_daily 需要 pct_change/pct_chg/close 之一")
+
+    if "amount" in source.columns:
+        source["amount"] = pd.to_numeric(source["amount"], errors="coerce")
+    else:
+        source["amount"] = np.nan
+
+    if sw_l1_map is not None and not sw_l1_map.empty and {"index_code", "industry_name"}.issubset(sw_l1_map.columns):
+        map_df = sw_l1_map[["index_code", "industry_name"]].dropna().drop_duplicates()
+        map_df["index_code"] = map_df["index_code"].astype(str)
+        source = source.merge(map_df, left_on="ts_code", right_on="index_code", how="left")
+        source["sw_industry"] = source["industry_name"]
+    elif "name" in source.columns:
+        source["sw_industry"] = source["name"]
+    else:
+        source["sw_industry"] = source["ts_code"]
+
+    source = source.dropna(subset=["trade_date", "sw_industry", "industry_return"])
+    source = (
+        source.groupby(["trade_date", "sw_industry"], as_index=False)
+        .agg(industry_return=("industry_return", "mean"), amount=("amount", "mean"))
+        .sort_values(["sw_industry", "trade_date"])
+    )
+    source["trade_date_dt"] = pd.to_datetime(source["trade_date"], format="%Y%m%d", errors="coerce")
+    source = source.dropna(subset=["trade_date_dt"]).reset_index(drop=True)
+
+    momentum_w = max(5, int(momentum_window))
+    amount_w = max(5, int(amount_window))
+    volatility_w = max(5, int(volatility_window))
+
+    source["momentum"] = source.groupby("sw_industry")["industry_return"].transform(
+        lambda s: (1.0 + s).rolling(momentum_w, min_periods=max(5, momentum_w // 2)).apply(np.prod, raw=True) - 1.0
+    )
+    source["volatility"] = source.groupby("sw_industry")["industry_return"].transform(
+        lambda s: s.rolling(volatility_w, min_periods=max(5, volatility_w // 2)).std()
+    )
+    amount_ma = source.groupby("sw_industry")["amount"].transform(
+        lambda s: s.rolling(amount_w, min_periods=max(5, amount_w // 2)).mean()
+    )
+    source["amount_ratio"] = (source["amount"] / amount_ma).replace([np.inf, -np.inf], np.nan)
+
+    def _rank_pct(series: pd.Series, ascending: bool = True) -> pd.Series:
+        if series.notna().sum() == 0:
+            return pd.Series(np.nan, index=series.index)
+        return series.rank(pct=True, ascending=ascending, method="average")
+
+    source["momentum_rank"] = source.groupby("trade_date")["momentum"].transform(_rank_pct)
+    source["amount_rank"] = source.groupby("trade_date")["amount_ratio"].transform(_rank_pct)
+    source["stability_rank"] = source.groupby("trade_date")["volatility"].transform(lambda s: _rank_pct(s, ascending=False))
+
+    source["momentum_rank"] = source["momentum_rank"].fillna(0.5).clip(0.0, 1.0)
+    source["amount_rank"] = source["amount_rank"].fillna(0.5).clip(0.0, 1.0)
+    source["stability_rank"] = source["stability_rank"].fillna(0.5).clip(0.0, 1.0)
+
+    source["score"] = (
+        source["momentum_rank"] * 0.5
+        + source["amount_rank"] * 0.3
+        + source["stability_rank"] * 0.2
+    ).clip(0.0, 1.0)
+    has_momentum = source["momentum"].notna().astype(float)
+    has_amount = source["amount_ratio"].notna().astype(float)
+    has_vol = source["volatility"].notna().astype(float)
+    source["confidence"] = ((has_momentum + has_amount + has_vol) / 3.0).clip(0.0, 1.0)
+    source["rank"] = source.groupby("trade_date")["score"].rank(ascending=False, method="first").astype(int)
+
+    return source[["trade_date", "sw_industry", "score", "confidence", "rank"]].sort_values(
+        ["trade_date", "rank"]
+    ).reset_index(drop=True)
+
+
 def prepare_benchmark_returns(index_df: pd.DataFrame) -> pd.DataFrame:
     source = index_df.copy()
     if "trade_date" not in source.columns:

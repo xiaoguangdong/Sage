@@ -20,6 +20,7 @@ from sage_core.industry.industry_backtest_eval import (
     prepare_concept_bias_scores,
     prepare_crowding_penalty,
     prepare_industry_returns,
+    prepare_prosperity_scores,
     prepare_trend_dominant_state,
     prepare_trend_gate,
 )
@@ -64,6 +65,9 @@ def main() -> None:
     parser.add_argument("--neutral-concept-weight", type=float, default=0.3, help="震荡主导时概念权重")
     parser.add_argument("--risk-off-concept-weight", type=float, default=0.1, help="熊市主导时概念权重")
     parser.add_argument("--concept-max-stale-days", type=int, default=7, help="概念信号最大沿用天数")
+    parser.add_argument("--prosperity-momentum-window", type=int, default=20, help="景气评分动量窗口")
+    parser.add_argument("--prosperity-amount-window", type=int, default=20, help="景气评分成交额窗口")
+    parser.add_argument("--prosperity-volatility-window", type=int, default=20, help="景气评分波动窗口")
     args = parser.parse_args()
 
     tushare_root = get_tushare_root()
@@ -207,18 +211,14 @@ def main() -> None:
             dominance_threshold=args.trend_dominance_threshold,
         )
         concept_bias = prepare_concept_bias_scores(pd.read_parquet(concept_bias_path))
-        prosperity_scores = scores
-        prosperity_score_mode = "full_score_fallback"
-        if "signal_name" in contract.columns:
-            prosperity_contract = contract[contract["signal_name"] != "concept_bias"].copy()
-            if not prosperity_contract.empty:
-                candidate_scores = build_industry_score_series(prosperity_contract)
-                candidate_days = candidate_scores["trade_date"].nunique()
-                total_days = scores["trade_date"].nunique()
-                coverage = candidate_days / max(1, total_days)
-                if coverage >= 0.7:
-                    prosperity_scores = candidate_scores
-                    prosperity_score_mode = "exclude_concept_bias"
+        prosperity_scores = prepare_prosperity_scores(
+            sw_daily,
+            sw_l1_map,
+            momentum_window=args.prosperity_momentum_window,
+            amount_window=args.prosperity_amount_window,
+            volatility_window=args.prosperity_volatility_window,
+        )
+        prosperity_score_mode = "sw_daily_prosperity_v1"
         blended_scores = blend_industry_scores_with_concept(
             prosperity_scores,
             concept_bias,
@@ -278,6 +278,9 @@ def main() -> None:
                 "neutral_concept_weight": args.neutral_concept_weight,
                 "risk_off_concept_weight": args.risk_off_concept_weight,
                 "concept_max_stale_days": args.concept_max_stale_days,
+                "prosperity_momentum_window": args.prosperity_momentum_window,
+                "prosperity_amount_window": args.prosperity_amount_window,
+                "prosperity_volatility_window": args.prosperity_volatility_window,
             },
             "delta": {
                 "overlay_minus_baseline": {

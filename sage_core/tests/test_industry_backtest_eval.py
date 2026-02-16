@@ -10,6 +10,7 @@ from sage_core.industry.industry_backtest_eval import (
     prepare_concept_bias_scores,
     prepare_crowding_penalty,
     prepare_industry_returns,
+    prepare_prosperity_scores,
     prepare_trend_dominant_state,
     prepare_trend_gate,
 )
@@ -106,6 +107,34 @@ def test_prepare_trend_gate_and_crowding_penalty():
     crowd = prepare_crowding_penalty(sw_daily, sw_l1_map, z_threshold=1.0, penalty_factor=0.8, roll_window=10)
     assert {"trade_date", "sw_industry", "crowding_penalty"}.issubset(crowd.columns)
     assert (crowd["crowding_penalty"] < 1.0).any()
+
+
+def test_prepare_prosperity_scores():
+    dates = pd.date_range("2025-01-01", periods=40, freq="B")
+    rows = []
+    for idx, date in enumerate(dates):
+        date_str = date.strftime("%Y%m%d")
+        rows.append({"trade_date": date_str, "ts_code": "801010.SI", "pct_change": 0.5 + idx * 0.01, "amount": 1000 + idx * 5})
+        rows.append({"trade_date": date_str, "ts_code": "801020.SI", "pct_change": -0.2 + idx * 0.005, "amount": 800 + idx * 3})
+    sw_daily = pd.DataFrame(rows)
+    sw_l1_map = pd.DataFrame(
+        [
+            {"index_code": "801010.SI", "industry_name": "行业A"},
+            {"index_code": "801020.SI", "industry_name": "行业B"},
+        ]
+    )
+    scores = prepare_prosperity_scores(
+        sw_daily,
+        sw_l1_map,
+        momentum_window=10,
+        amount_window=10,
+        volatility_window=10,
+    )
+    assert not scores.empty
+    assert {"trade_date", "sw_industry", "score", "confidence", "rank"}.issubset(scores.columns)
+    assert scores["score"].between(0.0, 1.0).all()
+    assert scores["confidence"].between(0.0, 1.0).all()
+    assert scores["trade_date"].nunique() >= 20
 
 
 def test_evaluate_industry_rotation_with_penalties():
