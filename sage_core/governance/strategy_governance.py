@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 import logging
 
 import numpy as np
@@ -1039,13 +1039,29 @@ def format_report_markdown(
 
 
 class SeedBalanceStrategy:
-    """豆包硬指标均衡策略（Champion默认）"""
+    """豆包四因子均衡策略（Champion默认）
+
+    四因子权重体系：
+    - 质量因子（30%）：ROIC、毛利率、现金流/净利润、资产负债率
+    - 成长因子（30%）：营收增速、净利润增速、PEG、利润加速度
+    - 动量因子（20%）：相对行业超额收益、成交额分位数
+    - 低波动因子（20%）：波动率、最大回撤、下行波动率
+    """
+
+    # 豆包四因子权重
+    DOUBAO_WEIGHTS = {
+        'quality': 0.30,
+        'growth': 0.30,
+        'momentum': 0.20,
+        'low_vol': 0.20,
+    }
 
     def __init__(
         self,
         selector_config: Optional[SelectionConfig] = None,
         strategy_id: str = "seed_balance_strategy",
         version: str = "v1.0.0",
+        use_doubao_scoring: bool = True,
     ):
         if selector_config is None:
             selector_config = SelectionConfig(
@@ -1060,6 +1076,7 @@ class SeedBalanceStrategy:
         self.model_version = f"{self.strategy_id}@{version}"
         self.selector = StockSelector(self.selector_config)
         self.is_trained = False
+        self.use_doubao_scoring = use_doubao_scoring
 
     def fit(self, train_df: pd.DataFrame) -> None:
         try:
@@ -1072,19 +1089,88 @@ class SeedBalanceStrategy:
             self.selector.fit(train_df)
             self.is_trained = True
 
+    def _calculate_doubao_score(self, df: pd.DataFrame) -> pd.Series:
+        """
+        计算豆包四因子综合评分
+
+        Args:
+            df: 包含各因子评分的 DataFrame
+
+        Returns:
+            综合评分 Series
+        """
+        score = pd.Series(0.0, index=df.index)
+
+        # 质量因子（30%）
+        quality_cols = ['quality_score', 'roe_zscore', 'gross_margin_zscore', 'roic_zscore']
+        quality_score = self._aggregate_zscore(df, quality_cols)
+        score += quality_score * self.DOUBAO_WEIGHTS['quality']
+
+        # 成长因子（30%）
+        growth_cols = ['growth_score', 'revenue_yoy_zscore', 'profit_yoy_zscore', 'profit_yoy_accel_zscore']
+        growth_score = self._aggregate_zscore(df, growth_cols)
+        score += growth_score * self.DOUBAO_WEIGHTS['growth']
+
+        # 动量因子（20%）
+        momentum_cols = ['momentum_score', 'excess_return_vs_industry_20d_zscore', 'amt_quantile_zscore']
+        momentum_score = self._aggregate_zscore(df, momentum_cols)
+        score += momentum_score * self.DOUBAO_WEIGHTS['momentum']
+
+        # 低波动因子（20%）
+        low_vol_cols = ['low_vol_score', 'volatility_zscore', 'max_dd_zscore', 'downside_vol_zscore']
+        low_vol_score = self._aggregate_zscore(df, low_vol_cols)
+        score += low_vol_score * self.DOUBAO_WEIGHTS['low_vol']
+
+        return score
+
+    def _aggregate_zscore(self, df: pd.DataFrame, cols: List[str]) -> pd.Series:
+        """
+        聚合多个 z-score 列
+
+        Args:
+            df: 数据 DataFrame
+            cols: 列名列表
+
+        Returns:
+            聚合后的评分
+        """
+        available_cols = [c for c in cols if c in df.columns]
+        if not available_cols:
+            return pd.Series(0.0, index=df.index)
+
+        # 取均值
+        scores = df[available_cols].mean(axis=1)
+        return scores.fillna(0)
+
     def generate_signals(self, data: pd.DataFrame, trade_date: str, top_n: int = 10) -> pd.DataFrame:
         if data is None or data.empty:
             raise ValueError("seed_balance_strategy 输入数据为空")
         if not self.is_trained:
             self.fit(data)
+
         predicted = self.selector.predict(data)
         date_col = self.selector_config.date_col
         if date_col in predicted.columns:
             date_norm = pd.to_datetime(predicted[date_col], errors="coerce").dt.strftime("%Y%m%d")
             predicted = predicted[date_norm == _normalize_trade_date(trade_date)]
+
+        # 使用豆包四因子评分（如果启用且有相关特征）
+        if self.use_doubao_scoring:
+            # 检查是否有豆包评分列
+            if 'doubao_champion_score' in predicted.columns:
+                score_col = 'doubao_champion_score'
+            else:
+                # 动态计算豆包评分
+                doubao_score = self._calculate_doubao_score(predicted)
+                predicted = predicted.copy()
+                predicted['doubao_score'] = doubao_score
+                score_col = 'doubao_score'
+        else:
+            score_col = "score"
+
         return _format_signal_frame(
             raw=predicted,
-            score_col="score",
+            score_col=score_col,
             ts_code_col=self.selector_config.code_col,
             trade_date=_normalize_trade_date(trade_date),
             model_version=self.model_version,
