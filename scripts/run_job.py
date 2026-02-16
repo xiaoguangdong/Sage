@@ -24,6 +24,7 @@ JOB_SCRIPTS = {
     "industry_signal_quality": PROJECT_ROOT / "scripts" / "monitoring" / "check_industry_signal_quality.py",
     "ths_daily_completeness": PROJECT_ROOT / "scripts" / "monitoring" / "check_ths_daily_completeness.py",
     "ths_daily_monthly_full": PROJECT_ROOT / "scripts" / "data" / "run_ths_daily_monthly_full.py",
+    "champion_challenger_backtest": PROJECT_ROOT / "scripts" / "backtest" / "backtest_champion_challenger.py",
 }
 
 
