@@ -6,7 +6,9 @@ from sage_core.industry.industry_backtest_eval import (
     build_industry_score_series,
     evaluate_industry_rotation,
     prepare_benchmark_returns,
+    prepare_crowding_penalty,
     prepare_industry_returns,
+    prepare_trend_gate,
 )
 
 
@@ -71,3 +73,93 @@ def test_evaluate_industry_rotation_outputs_required_metrics():
     assert "industry_cost_adjusted_total_return" in summary
     assert "industry_max_drawdown" in summary
     assert {"sw_industry", "drawdown_contribution", "drawdown_share"}.issubset(contribution.columns)
+
+
+def test_prepare_trend_gate_and_crowding_penalty():
+    index_df = pd.DataFrame(
+        {
+            "trade_date": pd.date_range("2025-01-01", periods=80, freq="B").strftime("%Y%m%d"),
+            "close": [100 + i * 0.2 for i in range(80)],
+        }
+    )
+    trend_gate = prepare_trend_gate(index_df, neutral_multiplier=0.6, risk_off_multiplier=0.2)
+    assert {"trade_date", "trend_gate", "trend_state"}.issubset(trend_gate.columns)
+    assert trend_gate["trend_gate"].between(0.0, 1.0).all()
+
+    sw_daily = pd.DataFrame(
+        {
+            "trade_date": pd.date_range("2025-01-01", periods=40, freq="B").strftime("%Y%m%d").tolist() * 2,
+            "ts_code": ["801010.SI"] * 40 + ["801020.SI"] * 40,
+            "amount": [1000] * 39 + [20000] + [800] * 40,
+            "pct_change": [0.5] * 39 + [5.0] + [0.3] * 40,
+        }
+    )
+    sw_l1_map = pd.DataFrame(
+        [
+            {"index_code": "801010.SI", "industry_name": "行业A"},
+            {"index_code": "801020.SI", "industry_name": "行业B"},
+        ]
+    )
+    crowd = prepare_crowding_penalty(sw_daily, sw_l1_map, z_threshold=1.0, penalty_factor=0.8, roll_window=10)
+    assert {"trade_date", "sw_industry", "crowding_penalty"}.issubset(crowd.columns)
+    assert (crowd["crowding_penalty"] < 1.0).any()
+
+
+def test_evaluate_industry_rotation_with_penalties():
+    contract = pd.DataFrame(
+        [
+            {"trade_date": "2026-01-01", "sw_industry": "行业A", "score": 0.9, "confidence": 0.9},
+            {"trade_date": "2026-01-01", "sw_industry": "行业B", "score": 0.2, "confidence": 0.9},
+            {"trade_date": "2026-01-08", "sw_industry": "行业A", "score": 0.9, "confidence": 0.9},
+            {"trade_date": "2026-01-08", "sw_industry": "行业B", "score": 0.2, "confidence": 0.9},
+            {"trade_date": "2026-01-15", "sw_industry": "行业A", "score": 0.9, "confidence": 0.9},
+            {"trade_date": "2026-01-15", "sw_industry": "行业B", "score": 0.2, "confidence": 0.9},
+        ]
+    )
+    scores = build_industry_score_series(contract)
+
+    dates = pd.date_range("2026-01-01", periods=25, freq="B")
+    ret_rows = []
+    for date in dates:
+        date_str = date.strftime("%Y%m%d")
+        ret_rows.append({"trade_date": date_str, "sw_industry": "行业A", "industry_return": 0.01})
+        ret_rows.append({"trade_date": date_str, "sw_industry": "行业B", "industry_return": 0.002})
+    industry_returns = pd.DataFrame(ret_rows)
+    benchmark_returns = pd.DataFrame({"trade_date": [d.strftime("%Y%m%d") for d in dates], "benchmark_return": [0.004] * len(dates)})
+
+    baseline_detail, _, baseline_summary = evaluate_industry_rotation(
+        industry_scores=scores,
+        industry_returns=industry_returns,
+        benchmark_returns=benchmark_returns,
+        top_n=1,
+        hold_days=2,
+        rebalance_step=5,
+        cost_rate=0.001,
+    )
+    assert not baseline_detail.empty
+
+    trend_gate = pd.DataFrame({"trade_date": baseline_detail["trade_date"], "trend_gate": 0.5})
+    crowd_penalty = pd.DataFrame(
+        {
+            "trade_date": baseline_detail["trade_date"],
+            "sw_industry": "行业A",
+            "crowding_penalty": 0.7,
+        }
+    )
+    enhanced_detail, _, enhanced_summary = evaluate_industry_rotation(
+        industry_scores=scores,
+        industry_returns=industry_returns,
+        benchmark_returns=benchmark_returns,
+        top_n=1,
+        hold_days=2,
+        rebalance_step=5,
+        cost_rate=0.001,
+        trend_gate=trend_gate,
+        crowding_penalty=crowd_penalty,
+        enable_exposure_penalty=True,
+        exposure_penalty_window=2,
+        exposure_penalty_threshold=0.5,
+        exposure_penalty_factor=0.8,
+    )
+    assert not enhanced_detail.empty
+    assert enhanced_summary["industry_cost_adjusted_total_return"] < baseline_summary["industry_cost_adjusted_total_return"]

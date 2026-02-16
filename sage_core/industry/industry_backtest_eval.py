@@ -94,6 +94,105 @@ def prepare_benchmark_returns(index_df: pd.DataFrame) -> pd.DataFrame:
     return source[["trade_date", "benchmark_return"]].drop_duplicates(subset=["trade_date"])
 
 
+def prepare_trend_gate(
+    index_df: pd.DataFrame,
+    neutral_multiplier: float = 0.6,
+    risk_off_multiplier: float = 0.2,
+) -> pd.DataFrame:
+    source = index_df.copy()
+    if "trade_date" not in source.columns:
+        if "date" in source.columns:
+            source["trade_date"] = source["date"]
+        elif "datetime" in source.columns:
+            source["trade_date"] = source["datetime"]
+        else:
+            raise ValueError("index_df 缺少字段: ['trade_date']，且未找到 date/datetime")
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+
+    if "close" in source.columns:
+        close = pd.to_numeric(source["close"], errors="coerce")
+    else:
+        raise ValueError("index_df 需要 close 字段用于趋势门控")
+
+    source = source.sort_values("trade_date").reset_index(drop=True)
+    source["close"] = close
+    source["ma20"] = source["close"].rolling(20, min_periods=20).mean()
+    source["ma60"] = source["close"].rolling(60, min_periods=60).mean()
+
+    gate = pd.Series(1.0, index=source.index)
+    bull_mask = (source["close"] > source["ma20"]) & (source["ma20"] > source["ma60"])
+    neutral_mask = (source["close"] > source["ma60"]) & (~bull_mask)
+    risk_off_mask = ~bull_mask & ~neutral_mask
+    gate.loc[neutral_mask] = float(neutral_multiplier)
+    gate.loc[risk_off_mask] = float(risk_off_multiplier)
+
+    state = pd.Series("RISK_ON", index=source.index)
+    state.loc[neutral_mask] = "NEUTRAL"
+    state.loc[risk_off_mask] = "RISK_OFF"
+    return pd.DataFrame(
+        {
+            "trade_date": source["trade_date"],
+            "trend_gate": gate.clip(lower=0.0, upper=1.0),
+            "trend_state": state,
+        }
+    ).dropna(subset=["trade_date"])
+
+
+def prepare_crowding_penalty(
+    sw_daily: pd.DataFrame,
+    sw_l1_map: Optional[pd.DataFrame] = None,
+    z_threshold: float = 1.5,
+    penalty_factor: float = 0.8,
+    roll_window: int = 20,
+) -> pd.DataFrame:
+    source = sw_daily.copy()
+    if "trade_date" not in source.columns:
+        raise ValueError("sw_daily 缺少 trade_date 字段")
+    if "ts_code" not in source.columns:
+        raise ValueError("sw_daily 缺少 ts_code 字段")
+    if "amount" not in source.columns:
+        raise ValueError("sw_daily 缺少 amount 字段")
+
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+    source["ts_code"] = source["ts_code"].astype(str)
+    source["amount"] = pd.to_numeric(source["amount"], errors="coerce")
+    if "pct_change" in source.columns:
+        source["pct_return"] = pd.to_numeric(source["pct_change"], errors="coerce") / 100.0
+    elif "pct_chg" in source.columns:
+        source["pct_return"] = pd.to_numeric(source["pct_chg"], errors="coerce") / 100.0
+    elif "close" in source.columns:
+        source = source.sort_values(["ts_code", "trade_date"])
+        source["pct_return"] = source.groupby("ts_code")["close"].pct_change()
+    else:
+        source["pct_return"] = 0.0
+
+    if sw_l1_map is not None and not sw_l1_map.empty and {"index_code", "industry_name"}.issubset(sw_l1_map.columns):
+        map_df = sw_l1_map[["index_code", "industry_name"]].dropna().drop_duplicates()
+        map_df["index_code"] = map_df["index_code"].astype(str)
+        source = source.merge(map_df, left_on="ts_code", right_on="index_code", how="left")
+        source["sw_industry"] = source["industry_name"]
+    elif "name" in source.columns:
+        source["sw_industry"] = source["name"]
+    else:
+        source["sw_industry"] = source["ts_code"]
+
+    source = source.sort_values(["sw_industry", "trade_date"])
+    roll_mean = source.groupby("sw_industry")["amount"].transform(lambda s: s.rolling(roll_window, min_periods=5).mean())
+    roll_std = source.groupby("sw_industry")["amount"].transform(lambda s: s.rolling(roll_window, min_periods=5).std())
+    source["crowding_z"] = (source["amount"] - roll_mean) / roll_std.replace(0.0, np.nan)
+    source["crowding_z"] = source["crowding_z"].replace([np.inf, -np.inf], np.nan).fillna(0.0)
+    source["is_overcrowded"] = (source["crowding_z"] >= float(z_threshold)) & (source["pct_return"] >= 0.03)
+    source["crowding_penalty"] = np.where(source["is_overcrowded"], float(penalty_factor), 1.0)
+
+    grouped = (
+        source.groupby(["trade_date", "sw_industry"], as_index=False)
+        .agg(crowding_penalty=("crowding_penalty", "min"), crowding_z=("crowding_z", "mean"), is_overcrowded=("is_overcrowded", "max"))
+    )
+    grouped["is_overcrowded"] = grouped["is_overcrowded"].astype(bool)
+    grouped["crowding_penalty"] = grouped["crowding_penalty"].clip(lower=0.0, upper=1.0)
+    return grouped
+
+
 def _compound_return(series: pd.Series) -> float:
     if series is None or len(series) == 0:
         return np.nan
@@ -134,6 +233,12 @@ def evaluate_industry_rotation(
     hold_days: int = 5,
     rebalance_step: int = 5,
     cost_rate: float = 0.005,
+    trend_gate: Optional[pd.DataFrame] = None,
+    crowding_penalty: Optional[pd.DataFrame] = None,
+    enable_exposure_penalty: bool = False,
+    exposure_penalty_window: int = 12,
+    exposure_penalty_threshold: float = 0.6,
+    exposure_penalty_factor: float = 0.85,
 ) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, float]]:
     score_required = {"trade_date", "sw_industry", "score"}
     ret_required = {"trade_date", "sw_industry", "industry_return"}
@@ -158,6 +263,28 @@ def evaluate_industry_rotation(
         benchmark["trade_date"] = _normalize_trade_date(benchmark["trade_date"])
         benchmark["benchmark_return"] = pd.to_numeric(benchmark["benchmark_return"], errors="coerce")
         benchmark = benchmark.dropna(subset=["trade_date", "benchmark_return"])
+
+    trend_gate_map: Dict[str, float] = {}
+    if trend_gate is not None and not trend_gate.empty:
+        gate_df = trend_gate.copy()
+        if "trade_date" not in gate_df.columns:
+            raise ValueError("trend_gate 缺少 trade_date 字段")
+        if "trend_gate" not in gate_df.columns:
+            if "gate_multiplier" in gate_df.columns:
+                gate_df["trend_gate"] = gate_df["gate_multiplier"]
+            else:
+                raise ValueError("trend_gate 缺少 trend_gate/gate_multiplier 字段")
+        gate_df["trade_date"] = _normalize_trade_date(gate_df["trade_date"])
+        gate_df["trend_gate"] = pd.to_numeric(gate_df["trend_gate"], errors="coerce").fillna(1.0).clip(0.0, 1.0)
+        trend_gate_map = dict(zip(gate_df["trade_date"], gate_df["trend_gate"]))
+
+    crowding_df = pd.DataFrame()
+    if crowding_penalty is not None and not crowding_penalty.empty:
+        crowding_df = crowding_penalty.copy()
+        if not {"trade_date", "sw_industry", "crowding_penalty"}.issubset(crowding_df.columns):
+            raise ValueError("crowding_penalty 缺少字段: trade_date/sw_industry/crowding_penalty")
+        crowding_df["trade_date"] = _normalize_trade_date(crowding_df["trade_date"])
+        crowding_df["crowding_penalty"] = pd.to_numeric(crowding_df["crowding_penalty"], errors="coerce").fillna(1.0).clip(0.0, 1.0)
 
     trade_dates = sorted(returns["trade_date"].dropna().unique().tolist())
     date_to_idx = {date: idx for idx, date in enumerate(trade_dates)}
@@ -202,6 +329,7 @@ def evaluate_industry_rotation(
     detail_rows = []
     drawdown_contrib: Dict[str, float] = {}
     prev_selected: Optional[set[str]] = None
+    selected_history: list[set[str]] = []
 
     for date in candidate_dates:
         day_scores = scores[scores["trade_date"] == date].copy()
@@ -215,7 +343,40 @@ def evaluate_industry_rotation(
         if selected.empty:
             continue
 
-        portfolio_return = float(selected["future_return"].mean())
+        selected = selected.copy()
+        selected["crowding_penalty"] = 1.0
+        if not crowding_df.empty:
+            selected = selected.merge(
+                crowding_df[["trade_date", "sw_industry", "crowding_penalty"]],
+                on=["trade_date", "sw_industry"],
+                how="left",
+                suffixes=("", "_crowd"),
+            )
+            if "crowding_penalty_crowd" in selected.columns:
+                selected["crowding_penalty"] = pd.to_numeric(selected["crowding_penalty_crowd"], errors="coerce").fillna(1.0)
+                selected = selected.drop(columns=["crowding_penalty_crowd"])
+            selected["crowding_penalty"] = selected["crowding_penalty"].clip(0.0, 1.0)
+
+        selected["exposure_penalty"] = 1.0
+        if enable_exposure_penalty:
+            history_window = selected_history[-max(1, int(exposure_penalty_window)) :]
+            for idx, row in selected.iterrows():
+                industry_name = str(row["sw_industry"])
+                if history_window:
+                    hit_count = sum(1 for prev_set in history_window if industry_name in prev_set)
+                    ratio = hit_count / len(history_window)
+                else:
+                    ratio = 0.0
+                if ratio >= float(exposure_penalty_threshold):
+                    selected.at[idx, "exposure_penalty"] = float(exposure_penalty_factor)
+
+        selected["effective_return"] = (
+            selected["future_return"]
+            * selected["crowding_penalty"]
+            * selected["exposure_penalty"]
+        )
+        gate_multiplier = float(trend_gate_map.get(date, 1.0))
+        portfolio_return = float(selected["effective_return"].mean()) * gate_multiplier
 
         hold_start = date_to_idx[date] + 1
         hold_end = hold_start + int(hold_days)
@@ -236,13 +397,14 @@ def evaluate_industry_rotation(
             overlap = len(prev_selected.intersection(selected_set))
             turnover = 1.0 - overlap / max(1, int(top_n))
         prev_selected = selected_set
+        selected_history.append(selected_set)
 
         cost = float(turnover) * float(cost_rate)
         net_excess_return = excess_return - cost
         rank_ic = _safe_spearman(merged["score"], merged["future_return"])
 
         for _, row in selected.iterrows():
-            contribution = float(row["future_return"] - benchmark_return) / max(1, int(top_n))
+            contribution = float(row["effective_return"] * gate_multiplier - benchmark_return) / max(1, int(top_n))
             if contribution < 0:
                 key = str(row["sw_industry"])
                 drawdown_contrib[key] = drawdown_contrib.get(key, 0.0) + abs(contribution)
@@ -258,6 +420,9 @@ def evaluate_industry_rotation(
                 "cost": cost,
                 "net_excess_return": net_excess_return,
                 "rank_ic": rank_ic,
+                "trend_gate": gate_multiplier,
+                "crowding_penalty_mean": float(selected["crowding_penalty"].mean()),
+                "exposure_penalty_mean": float(selected["exposure_penalty"].mean()),
             }
         )
 
@@ -320,5 +485,8 @@ def evaluate_industry_rotation(
         "industry_max_drawdown": max_drawdown,
         "industry_rank_ic_mean": rank_ic_mean,
         "industry_rank_ic_ir": rank_ic_ir,
+        "trend_gate_mean": float(detail["trend_gate"].mean()) if "trend_gate" in detail.columns else 1.0,
+        "crowding_penalty_mean": float(detail["crowding_penalty_mean"].mean()) if "crowding_penalty_mean" in detail.columns else 1.0,
+        "exposure_penalty_mean": float(detail["exposure_penalty_mean"].mean()) if "exposure_penalty_mean" in detail.columns else 1.0,
     }
     return detail, contribution, summary
