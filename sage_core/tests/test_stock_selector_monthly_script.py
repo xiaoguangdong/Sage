@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from types import SimpleNamespace
 
 import numpy as np
@@ -7,6 +9,7 @@ import pandas as pd
 from scripts.stock.run_stock_selector_monthly import (
     _evaluate_holdout_predictions,
     _extract_feature_importance,
+    _load_industry_map,
     _latest_weekly_trade_date,
     _split_train_valid_by_date,
 )
@@ -62,6 +65,25 @@ class TestStockSelectorMonthlyScript(unittest.TestCase):
         self.assertIn("top_n_excess_return", metrics)
         self.assertIn("rank_ic_mean", metrics)
         self.assertGreaterEqual(metrics["days"], 1.0)
+
+    def test_load_industry_map_supports_ts_code_schema(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            northbound = root / "northbound"
+            northbound.mkdir(parents=True, exist_ok=True)
+            df = pd.DataFrame({
+                "ts_code": ["000001.SZ", "000001.SZ", "000002.SZ"],
+                "in_date": ["20200101", "20240101", "20200101"],
+                "out_date": ["", "", ""],
+                "industry_name": ["银行", "银行", "电子"],
+            })
+            df.to_parquet(northbound / "sw_constituents.parquet", index=False)
+            mapping = _load_industry_map(root, "20260213")
+            self.assertEqual(set(mapping["ts_code"]), {"000001.SZ", "000002.SZ"})
+            self.assertEqual(
+                mapping.set_index("ts_code").loc["000002.SZ", "industry_l1"],
+                "电子",
+            )
 
 
 if __name__ == "__main__":

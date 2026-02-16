@@ -47,6 +47,20 @@ def _read_parquet(path: Path, columns: Optional[Sequence[str]] = None) -> pd.Dat
     return pd.read_parquet(path, columns=list(columns) if columns else None)
 
 
+def _parquet_columns(path: Path) -> List[str]:
+    if not path.exists():
+        return []
+    try:
+        import pyarrow.parquet as pq  # type: ignore
+
+        return list(pq.ParquetFile(path).schema.names)
+    except Exception:
+        try:
+            return list(pd.read_parquet(path).columns)
+        except Exception:
+            return []
+
+
 def _find_latest_trade_date(daily_dir: Path, as_of_date: Optional[str] = None) -> str:
     candidates = sorted(daily_dir.glob("daily_*.parquet"))
     if not candidates:
@@ -151,19 +165,41 @@ def _load_northbound_panel(data_root: Path, start_date: str, end_date: str, univ
 
 def _load_industry_map(data_root: Path, as_of_trade_date: str) -> pd.DataFrame:
     path = data_root / "northbound" / "sw_constituents.parquet"
-    cols = ["con_code", "in_date", "out_date", "industry_name"]
+    available_cols = set(_parquet_columns(path))
+    code_col = "con_code" if "con_code" in available_cols else ("ts_code" if "ts_code" in available_cols else None)
+    if code_col is None or "industry_name" not in available_cols:
+        return pd.DataFrame(columns=["ts_code", "industry_l1"])
+
+    cols = [code_col, "industry_name"]
+    if "in_date" in available_cols:
+        cols.append("in_date")
+    if "out_date" in available_cols:
+        cols.append("out_date")
     df = _read_parquet(path, columns=cols)
     if df.empty:
         return pd.DataFrame(columns=["ts_code", "industry_l1"])
 
-    as_of = _to_yyyymmdd(as_of_trade_date)
-    df["in_date"] = df["in_date"].astype(str)
-    df["out_date"] = df["out_date"].fillna("").astype(str)
-    active = df[(df["in_date"] <= as_of) & ((df["out_date"] == "") | (df["out_date"] > as_of))].copy()
+    if "in_date" in df.columns:
+        as_of = _to_yyyymmdd(as_of_trade_date)
+        df["in_date"] = df["in_date"].astype(str)
+        if "out_date" in df.columns:
+            df["out_date"] = df["out_date"].fillna("").astype(str)
+        else:
+            df["out_date"] = ""
+        active = df[(df["in_date"] <= as_of) & ((df["out_date"] == "") | (df["out_date"] > as_of))].copy()
+    else:
+        active = df.copy()
     if active.empty:
         return pd.DataFrame(columns=["ts_code", "industry_l1"])
-    active = active.sort_values(["con_code", "in_date"]).groupby("con_code", as_index=False).tail(1)
-    active = active.rename(columns={"con_code": "ts_code", "industry_name": "industry_l1"})
+
+    sort_cols = [code_col]
+    if "in_date" in active.columns:
+        sort_cols.append("in_date")
+    active = active.sort_values(sort_cols).groupby(code_col, as_index=False).tail(1)
+    active = active.rename(columns={code_col: "ts_code", "industry_name": "industry_l1"})
+    active["ts_code"] = active["ts_code"].astype(str)
+    active["industry_l1"] = active["industry_l1"].astype(str)
+    active = active.dropna(subset=["ts_code", "industry_l1"]).drop_duplicates(subset=["ts_code"], keep="last")
     return active[["ts_code", "industry_l1"]]
 
 

@@ -354,6 +354,7 @@ class StockSelector:
         y = training_frame["label"].values
 
         if use_ranking_group:
+            y = self._to_lgbm_rank_labels(y)
             groups = (
                 training_frame.groupby(date_col, sort=True)
                 .size()
@@ -371,6 +372,14 @@ class StockSelector:
             valid_sets=[dataset],
             callbacks=[lgb.log_evaluation(period=50)],
         )
+
+    def _to_lgbm_rank_labels(self, y: np.ndarray) -> np.ndarray:
+        series = pd.Series(y, dtype="float64").replace([np.inf, -np.inf], np.nan)
+        if series.notna().sum() == 0:
+            return np.zeros(len(series), dtype=np.int32)
+        ranked = series.rank(pct=True, method="first").fillna(0.0)
+        labels = np.floor(ranked.to_numpy() * 30.0).astype(np.int32)
+        return np.clip(labels, 0, 30).astype(np.int32)
 
     def _fit_xgb(self, X: np.ndarray, y: np.ndarray) -> None:
         try:
