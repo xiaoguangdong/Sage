@@ -1182,6 +1182,12 @@ class SeedBalanceStrategy:
 class ChallengerConfig:
     positive_growth_weight: float = 0.7
     positive_frontier_weight: float = 0.3
+    # 卫星策略四因子权重（按文档要求）
+    satellite_growth_factor_weight: float = 0.40    # 景气成长因子（40%）
+    satellite_event_factor_weight: float = 0.30    # 事件驱动因子（30%）
+    satellite_momentum_factor_weight: float = 0.20 # 量价动量因子（20%）
+    satellite_chip_factor_weight: float = 0.10    # 筹码结构因子（10%）
+    # 保留旧权重作为回退（已废弃）
     satellite_growth_weight: float = 0.35
     satellite_frontier_weight: float = 0.25
     satellite_rps_weight: float = 0.20
@@ -1265,27 +1271,35 @@ class MultiAlphaChallengerStrategies:
 
         satellite_weights = _normalize_weights(
             {
-                "growth": self.config.satellite_growth_weight,
-                "frontier": self.config.satellite_frontier_weight,
-                "rps": self.config.satellite_rps_weight,
-                "elasticity": self.config.satellite_elasticity_weight,
-                "not_priced": self.config.satellite_not_priced_weight,
+                "growth_factor": self.config.satellite_growth_factor_weight,
+                "event_factor": self.config.satellite_event_factor_weight,
+                "momentum_factor": self.config.satellite_momentum_factor_weight,
+                "chip_factor": self.config.satellite_chip_factor_weight,
             },
             {
-                "growth": 0.35,
-                "frontier": 0.25,
-                "rps": 0.20,
-                "elasticity": 0.10,
-                "not_priced": 0.10,
+                "growth_factor": 0.40,   # 景气成长因子
+                "event_factor": 0.30,    # 事件驱动因子
+                "momentum_factor": 0.20, # 量价动量因子
+                "chip_factor": 0.10,    # 筹码结构因子
             },
         )
-        data["satellite_score"] = (
-            _safe_numeric(data, "growth_score") * satellite_weights["growth"]
-            + _safe_numeric(data, "frontier_score") * satellite_weights["frontier"]
-            + _safe_numeric(data, "rps_component") * satellite_weights["rps"]
-            + _safe_numeric(data, "elasticity_component") * satellite_weights["elasticity"]
-            + _safe_numeric(data, "not_priced_component") * satellite_weights["not_priced"]
-        )
+
+        # 卫星策略四因子评分（按文档要求）
+        # 如果有 satellite_score（由 SatelliteFeatures 计算），直接使用
+        # 否则使用旧逻辑回退
+        if "satellite_score" in data.columns:
+            # 使用 SatelliteFeatures 计算的完整评分
+            pass
+        else:
+            # 回退：使用简化评分
+            data["satellite_score"] = (
+                _safe_numeric(data, "growth_score") * satellite_weights["growth_factor"]
+                + _safe_numeric(data, "frontier_score") * satellite_weights["event_factor"]
+                + _safe_numeric(data, "momentum_factor_score", 
+                               _safe_numeric(data, "rps_component")) * satellite_weights["momentum_factor"]
+                + _safe_numeric(data, "chip_factor_score",
+                               _safe_numeric(data, "not_priced_component")) * satellite_weights["chip_factor"]
+            )
 
         outputs = {}
         score_map = {

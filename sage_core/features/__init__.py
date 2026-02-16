@@ -8,6 +8,7 @@ from .market_features import MarketFeatures
 from .fundamental_features import FundamentalFeatures
 from .flow_features import FlowFeatures
 from .industry_features import IndustryFeatures
+from .satellite_features import SatelliteFeatures
 from .pipeline import FeaturePipeline, FeaturePipelineResult
 
 __all__ = [
@@ -21,6 +22,7 @@ __all__ = [
     "FundamentalFeatures",
     "FlowFeatures",
     "IndustryFeatures",
+    "SatelliteFeatures",
     "FeaturePipeline",
     "FeaturePipelineResult",
 ]
