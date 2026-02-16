@@ -34,6 +34,7 @@ from sage_core.execution.signal_contract import (
     build_stock_signal_contract,
     select_champion_signals,
 )
+from sage_core.execution.unified_signal_contract import build_unified_signal_contract
 from sage_core.governance.strategy_governance import (
     ChampionChallengerEngine,
     ChallengerConfig,
@@ -672,6 +673,24 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         len(execution_signals),
     )
 
+    unified_contract = build_unified_signal_contract(
+        trade_date=latest_trade_date,
+        stock_contract=signal_contract,
+        industry_contract=industry_snapshot,
+        trend_result=trend_result if isinstance(trend_result, dict) else None,
+        include_challengers=True,
+    )
+    unified_contract_dir = get_data_path("signals", "contracts", ensure=True)
+    unified_contract_path = unified_contract_dir / f"unified_signal_contract_{latest_trade_date}.parquet"
+    unified_contract_latest_path = unified_contract_dir / "unified_signal_contract_latest.parquet"
+    unified_contract.to_parquet(unified_contract_path, index=False)
+    unified_contract.to_parquet(unified_contract_latest_path, index=False)
+    logger.info(
+        "统一信号契约已生成: path=%s, rows=%d",
+        unified_contract_path,
+        len(unified_contract),
+    )
+
     # 7. Champion执行信号转组合候选
     df_ranked = _signals_to_ranked(execution_signals)
     if df_ranked.empty:
@@ -761,6 +780,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         "active_champion_id": active_champion_id,
         "signal_contract_path": str(contract_path),
         "execution_signal_path": str(exec_signal_path),
+        "unified_signal_contract_path": str(unified_contract_path),
         "industry_snapshot_path": str(industry_snapshot_path) if industry_snapshot_path.exists() else None,
         "industry_score_snapshot_path": str(industry_score_snapshot_path) if industry_score_snapshot_path.exists() else None,
         "industry_overlay_config": {

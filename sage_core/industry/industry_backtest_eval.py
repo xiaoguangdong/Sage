@@ -1,0 +1,324 @@
+from __future__ import annotations
+
+from typing import Dict, Iterable, Optional, Tuple
+
+import numpy as np
+import pandas as pd
+
+
+def _normalize_trade_date(series: pd.Series) -> pd.Series:
+    return pd.to_datetime(series, errors="coerce").dt.strftime("%Y%m%d")
+
+
+def build_industry_score_series(industry_contract: pd.DataFrame) -> pd.DataFrame:
+    required = {"trade_date", "sw_industry", "score", "confidence"}
+    missing = required - set(industry_contract.columns)
+    if missing:
+        raise ValueError(f"industry_contract 缺少字段: {sorted(missing)}")
+
+    source = industry_contract.copy()
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+    source["score"] = pd.to_numeric(source["score"], errors="coerce")
+    source["confidence"] = pd.to_numeric(source["confidence"], errors="coerce")
+    source = source.dropna(subset=["trade_date", "sw_industry", "score", "confidence"])
+
+    grouped = source.groupby(["trade_date", "sw_industry"], as_index=False).apply(
+        lambda frame: pd.Series(
+            {
+                "score": float((frame["score"] * frame["confidence"]).sum() / frame["confidence"].sum())
+                if float(frame["confidence"].sum()) > 0
+                else float(frame["score"].mean())
+            }
+        )
+    )
+    grouped["rank"] = grouped.groupby("trade_date")["score"].rank(ascending=False, method="first").astype(int)
+    return grouped.sort_values(["trade_date", "rank"]).reset_index(drop=True)
+
+
+def prepare_industry_returns(sw_daily: pd.DataFrame, sw_l1_map: Optional[pd.DataFrame] = None) -> pd.DataFrame:
+    required = {"trade_date", "ts_code"}
+    missing = required - set(sw_daily.columns)
+    if missing:
+        raise ValueError(f"sw_daily 缺少字段: {sorted(missing)}")
+
+    source = sw_daily.copy()
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+
+    if "pct_change" in source.columns:
+        source["industry_return"] = pd.to_numeric(source["pct_change"], errors="coerce") / 100.0
+    elif "pct_chg" in source.columns:
+        source["industry_return"] = pd.to_numeric(source["pct_chg"], errors="coerce") / 100.0
+    elif "close" in source.columns:
+        source = source.sort_values(["ts_code", "trade_date"])
+        source["industry_return"] = source.groupby("ts_code")["close"].pct_change()
+    else:
+        raise ValueError("sw_daily 需要 pct_change/pct_chg/close 之一")
+
+    if sw_l1_map is not None and not sw_l1_map.empty and {"index_code", "industry_name"}.issubset(sw_l1_map.columns):
+        map_df = sw_l1_map[["index_code", "industry_name"]].dropna().drop_duplicates()
+        map_df["index_code"] = map_df["index_code"].astype(str)
+        source["ts_code"] = source["ts_code"].astype(str)
+        source = source.merge(map_df, left_on="ts_code", right_on="index_code", how="left")
+        source["sw_industry"] = source["industry_name"]
+    elif "name" in source.columns:
+        source["sw_industry"] = source["name"]
+    else:
+        source["sw_industry"] = source["ts_code"].astype(str)
+
+    source = source.dropna(subset=["trade_date", "sw_industry", "industry_return"])
+    return source[["trade_date", "sw_industry", "industry_return"]].copy()
+
+
+def prepare_benchmark_returns(index_df: pd.DataFrame) -> pd.DataFrame:
+    source = index_df.copy()
+    if "trade_date" not in source.columns:
+        if "date" in source.columns:
+            source["trade_date"] = source["date"]
+        elif "datetime" in source.columns:
+            source["trade_date"] = source["datetime"]
+        else:
+            raise ValueError("index_df 缺少字段: ['trade_date']，且未找到 date/datetime")
+    source["trade_date"] = _normalize_trade_date(source["trade_date"])
+
+    if "pct_chg" in source.columns:
+        source["benchmark_return"] = pd.to_numeric(source["pct_chg"], errors="coerce") / 100.0
+    elif "pct_change" in source.columns:
+        source["benchmark_return"] = pd.to_numeric(source["pct_change"], errors="coerce") / 100.0
+    elif "close" in source.columns:
+        source = source.sort_values("trade_date")
+        source["benchmark_return"] = pd.to_numeric(source["close"], errors="coerce").pct_change()
+    else:
+        raise ValueError("index_df 需要 pct_chg/pct_change/close 之一")
+
+    source = source.dropna(subset=["trade_date", "benchmark_return"])
+    return source[["trade_date", "benchmark_return"]].drop_duplicates(subset=["trade_date"])
+
+
+def _compound_return(series: pd.Series) -> float:
+    if series is None or len(series) == 0:
+        return np.nan
+    values = pd.to_numeric(series, errors="coerce").dropna()
+    if values.empty:
+        return np.nan
+    return float(np.prod(1.0 + values.values) - 1.0)
+
+
+def _safe_spearman(x: pd.Series, y: pd.Series) -> float:
+    if x is None or y is None or len(x) < 3 or len(y) < 3:
+        return np.nan
+    rank_x = x.rank(pct=True)
+    rank_y = y.rank(pct=True)
+    corr = rank_x.corr(rank_y, method="pearson")
+    return float(corr) if pd.notna(corr) else np.nan
+
+
+def _max_drawdown(cumulative: Iterable[float]) -> float:
+    peak = None
+    max_dd = 0.0
+    for value in cumulative:
+        if peak is None or value > peak:
+            peak = value
+        if peak and peak != 0:
+            drawdown = value / peak - 1.0
+            if drawdown < max_dd:
+                max_dd = float(drawdown)
+    return abs(max_dd)
+
+
+def evaluate_industry_rotation(
+    *,
+    industry_scores: pd.DataFrame,
+    industry_returns: pd.DataFrame,
+    benchmark_returns: Optional[pd.DataFrame] = None,
+    top_n: int = 2,
+    hold_days: int = 5,
+    rebalance_step: int = 5,
+    cost_rate: float = 0.005,
+) -> Tuple[pd.DataFrame, pd.DataFrame, Dict[str, float]]:
+    score_required = {"trade_date", "sw_industry", "score"}
+    ret_required = {"trade_date", "sw_industry", "industry_return"}
+    if not score_required.issubset(industry_scores.columns):
+        raise ValueError(f"industry_scores 缺少字段: {sorted(score_required - set(industry_scores.columns))}")
+    if not ret_required.issubset(industry_returns.columns):
+        raise ValueError(f"industry_returns 缺少字段: {sorted(ret_required - set(industry_returns.columns))}")
+
+    scores = industry_scores.copy()
+    returns = industry_returns.copy()
+    scores["trade_date"] = _normalize_trade_date(scores["trade_date"])
+    returns["trade_date"] = _normalize_trade_date(returns["trade_date"])
+    scores = scores.dropna(subset=["trade_date", "sw_industry", "score"])
+    returns = returns.dropna(subset=["trade_date", "sw_industry", "industry_return"])
+
+    returns["industry_return"] = pd.to_numeric(returns["industry_return"], errors="coerce")
+    returns = returns.dropna(subset=["industry_return"])
+
+    benchmark = None
+    if benchmark_returns is not None and not benchmark_returns.empty:
+        benchmark = benchmark_returns.copy()
+        benchmark["trade_date"] = _normalize_trade_date(benchmark["trade_date"])
+        benchmark["benchmark_return"] = pd.to_numeric(benchmark["benchmark_return"], errors="coerce")
+        benchmark = benchmark.dropna(subset=["trade_date", "benchmark_return"])
+
+    trade_dates = sorted(returns["trade_date"].dropna().unique().tolist())
+    date_to_idx = {date: idx for idx, date in enumerate(trade_dates)}
+
+    future_rows = []
+    for current_date in trade_dates:
+        start_idx = date_to_idx[current_date] + 1
+        end_idx = start_idx + int(hold_days)
+        if end_idx > len(trade_dates):
+            continue
+        hold_dates = trade_dates[start_idx:end_idx]
+        future_slice = returns[returns["trade_date"].isin(hold_dates)]
+        future_group = future_slice.groupby("sw_industry", as_index=False)["industry_return"].apply(_compound_return)
+        future_group = future_group.rename(columns={"industry_return": "future_return"})
+        future_group["trade_date"] = current_date
+        future_rows.append(future_group)
+
+    if not future_rows:
+        empty_detail = pd.DataFrame(columns=[
+            "trade_date", "selected_industries", "portfolio_return", "benchmark_return",
+            "excess_return", "turnover", "cost", "net_excess_return", "rank_ic",
+        ])
+        empty_contrib = pd.DataFrame(columns=["sw_industry", "drawdown_contribution", "drawdown_share"])
+        empty_summary = {
+            "periods": 0,
+            "industry_hit_rate": 0.0,
+            "industry_excess_total_return": 0.0,
+            "industry_excess_annual_return": 0.0,
+            "industry_cost_adjusted_total_return": 0.0,
+            "industry_cost_adjusted_annual_return": 0.0,
+            "industry_turnover_mean": 0.0,
+            "industry_max_drawdown": 0.0,
+            "industry_rank_ic_mean": 0.0,
+            "industry_rank_ic_ir": 0.0,
+        }
+        return empty_detail, empty_contrib, empty_summary
+
+    future_all = pd.concat(future_rows, ignore_index=True)
+    candidate_dates = sorted(set(scores["trade_date"]).intersection(set(future_all["trade_date"])))
+    candidate_dates = candidate_dates[:: max(1, int(rebalance_step))]
+
+    detail_rows = []
+    drawdown_contrib: Dict[str, float] = {}
+    prev_selected: Optional[set[str]] = None
+
+    for date in candidate_dates:
+        day_scores = scores[scores["trade_date"] == date].copy()
+        day_future = future_all[future_all["trade_date"] == date].copy()
+        merged = day_scores.merge(day_future, on=["trade_date", "sw_industry"], how="inner")
+        if merged.empty:
+            continue
+
+        merged = merged.sort_values("score", ascending=False)
+        selected = merged.head(int(top_n))
+        if selected.empty:
+            continue
+
+        portfolio_return = float(selected["future_return"].mean())
+
+        hold_start = date_to_idx[date] + 1
+        hold_end = hold_start + int(hold_days)
+        hold_dates = trade_dates[hold_start:hold_end]
+        if benchmark is not None:
+            benchmark_slice = benchmark[benchmark["trade_date"].isin(hold_dates)]
+            benchmark_return = _compound_return(benchmark_slice["benchmark_return"])
+        else:
+            benchmark_return = float(day_future["future_return"].mean())
+        if pd.isna(benchmark_return):
+            benchmark_return = float(day_future["future_return"].mean())
+
+        excess_return = portfolio_return - benchmark_return
+        selected_set = set(selected["sw_industry"].astype(str).tolist())
+        if prev_selected is None:
+            turnover = 1.0
+        else:
+            overlap = len(prev_selected.intersection(selected_set))
+            turnover = 1.0 - overlap / max(1, int(top_n))
+        prev_selected = selected_set
+
+        cost = float(turnover) * float(cost_rate)
+        net_excess_return = excess_return - cost
+        rank_ic = _safe_spearman(merged["score"], merged["future_return"])
+
+        for _, row in selected.iterrows():
+            contribution = float(row["future_return"] - benchmark_return) / max(1, int(top_n))
+            if contribution < 0:
+                key = str(row["sw_industry"])
+                drawdown_contrib[key] = drawdown_contrib.get(key, 0.0) + abs(contribution)
+
+        detail_rows.append(
+            {
+                "trade_date": date,
+                "selected_industries": "|".join(sorted(selected_set)),
+                "portfolio_return": portfolio_return,
+                "benchmark_return": benchmark_return,
+                "excess_return": excess_return,
+                "turnover": turnover,
+                "cost": cost,
+                "net_excess_return": net_excess_return,
+                "rank_ic": rank_ic,
+            }
+        )
+
+    detail = pd.DataFrame(detail_rows)
+    if detail.empty:
+        return evaluate_industry_rotation(
+            industry_scores=industry_scores.iloc[0:0],
+            industry_returns=industry_returns.iloc[0:0],
+            benchmark_returns=benchmark_returns.iloc[0:0] if benchmark_returns is not None else None,
+            top_n=top_n,
+            hold_days=hold_days,
+            rebalance_step=rebalance_step,
+            cost_rate=cost_rate,
+        )
+
+    periods = len(detail)
+    total_days = periods * int(hold_days)
+    gross_curve = (1.0 + detail["excess_return"].fillna(0.0)).cumprod()
+    net_curve = (1.0 + detail["net_excess_return"].fillna(0.0)).cumprod()
+
+    gross_total = float(gross_curve.iloc[-1] - 1.0)
+    net_total = float(net_curve.iloc[-1] - 1.0)
+    annual_factor = 252.0 / max(1, total_days)
+    gross_annual = float((1.0 + gross_total) ** annual_factor - 1.0)
+    net_annual = float((1.0 + net_total) ** annual_factor - 1.0)
+
+    hit_rate = float((detail["excess_return"] > 0).mean())
+    turnover_mean = float(detail["turnover"].mean())
+    max_drawdown = float(_max_drawdown(net_curve.tolist()))
+
+    rank_ic_series = pd.to_numeric(detail["rank_ic"], errors="coerce").dropna()
+    rank_ic_mean = float(rank_ic_series.mean()) if not rank_ic_series.empty else 0.0
+    if len(rank_ic_series) > 1 and float(rank_ic_series.std(ddof=0)) > 0:
+        periods_per_year = 252.0 / max(1, int(hold_days))
+        rank_ic_ir = float(rank_ic_series.mean() / rank_ic_series.std(ddof=0) * np.sqrt(periods_per_year))
+    else:
+        rank_ic_ir = 0.0
+
+    contrib_rows = [
+        {"sw_industry": industry, "drawdown_contribution": value}
+        for industry, value in sorted(drawdown_contrib.items(), key=lambda item: item[1], reverse=True)
+    ]
+    contribution = pd.DataFrame(contrib_rows)
+    if not contribution.empty:
+        total_contrib = float(contribution["drawdown_contribution"].sum())
+        contribution["drawdown_share"] = (
+            contribution["drawdown_contribution"] / total_contrib if total_contrib > 0 else 0.0
+        )
+    else:
+        contribution = pd.DataFrame(columns=["sw_industry", "drawdown_contribution", "drawdown_share"])
+
+    summary = {
+        "periods": int(periods),
+        "industry_hit_rate": hit_rate,
+        "industry_excess_total_return": gross_total,
+        "industry_excess_annual_return": gross_annual,
+        "industry_cost_adjusted_total_return": net_total,
+        "industry_cost_adjusted_annual_return": net_annual,
+        "industry_turnover_mean": turnover_mean,
+        "industry_max_drawdown": max_drawdown,
+        "industry_rank_ic_mean": rank_ic_mean,
+        "industry_rank_ic_ir": rank_ic_ir,
+    }
+    return detail, contribution, summary
