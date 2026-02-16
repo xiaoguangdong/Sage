@@ -404,9 +404,12 @@ class StockSelector:
         self.model = lgb.train(
             params,
             dataset,
-            num_boost_round=int(params.get("num_boost_round", 200)),
+            num_boost_round=int(params.get("num_boost_round", 500)),
             valid_sets=[dataset],
-            callbacks=[lgb.log_evaluation(period=50)],
+            callbacks=[
+                lgb.log_evaluation(period=50),
+                lgb.early_stopping(stopping_rounds=int(params.get("early_stopping_rounds", 50)), verbose=True),
+            ],
         )
 
     def _to_lgbm_rank_labels(self, y: np.ndarray) -> np.ndarray:
