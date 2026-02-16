@@ -97,14 +97,14 @@ class StockSelector:
             raise ValueError("训练数据为空，请检查输入数据与标签窗口")
 
         self.feature_cols = feature_cols
-        X = train_df[feature_cols].values
-        y = train_df["label"].values
 
         if self.config.model_type == "rule":
             self._fit_rule(train_df, feature_cols)
         elif self.config.model_type == "lgbm":
-            self._fit_lgbm(X, y)
+            self._fit_lgbm(train_df, feature_cols)
         elif self.config.model_type == "xgb":
+            X = train_df[feature_cols].values
+            y = train_df["label"].values
             self._fit_xgb(X, y)
         else:
             raise ValueError(f"未知模型类型: {self.config.model_type}")
@@ -330,14 +330,40 @@ class StockSelector:
         score = sum(zscores)
         return score.to_numpy()
 
-    def _fit_lgbm(self, X: np.ndarray, y: np.ndarray) -> None:
+    def _fit_lgbm(self, train_df: pd.DataFrame, feature_cols: Sequence[str]) -> None:
         try:
             import lightgbm as lgb
         except ModuleNotFoundError as exc:
             raise ModuleNotFoundError("未安装 lightgbm，请先安装依赖") from exc
 
         params = dict(self.config.lgbm_params)
-        dataset = lgb.Dataset(X, label=y)
+        date_col = self.config.date_col
+        code_col = self.config.code_col
+        objective = str(params.get("objective", "regression")).lower()
+        rank_objectives = {"lambdarank", "rank_xendcg", "xendcg"}
+        use_ranking_group = objective in rank_objectives and date_col in train_df.columns
+
+        training_frame = train_df
+        if use_ranking_group:
+            sort_cols = [date_col]
+            if code_col in train_df.columns:
+                sort_cols.append(code_col)
+            training_frame = train_df.sort_values(sort_cols).reset_index(drop=True)
+
+        X = training_frame[list(feature_cols)].values
+        y = training_frame["label"].values
+
+        if use_ranking_group:
+            groups = (
+                training_frame.groupby(date_col, sort=True)
+                .size()
+                .astype(int)
+                .tolist()
+            )
+            dataset = lgb.Dataset(X, label=y, group=groups)
+        else:
+            dataset = lgb.Dataset(X, label=y)
+
         self.model = lgb.train(
             params,
             dataset,

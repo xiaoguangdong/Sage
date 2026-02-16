@@ -44,6 +44,18 @@ seed_balance_strategy:
   label_weights: [0.5, 0.3, 0.2]
   risk_adjusted: true
   industry_col: industry_l1
+  industry_rank: true
+  rank_mode: industry
+  lgbm_params:
+    objective: lambdarank
+    metric: ndcg
+    learning_rate: 0.05
+    num_leaves: 31
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 5
+    num_boost_round: 300
+    verbosity: -1
 
 # 行业信号契约对齐配置（run_weekly 自动按 trade_date 构建）
 industry_signals:

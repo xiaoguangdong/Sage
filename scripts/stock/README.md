@@ -12,6 +12,8 @@ python scripts/run_job.py stock_monthly -- \
 ./venv/bin/python scripts/stock/run_stock_selector_monthly.py \
   --as-of-date 20260213 \
   --train-lookback-days 900 \
+  --valid-days 120 \
+  --eval-top-n 10 \
   --top-n 10 \
   --allow-rule-fallback
 ```
@@ -22,6 +24,7 @@ python scripts/run_job.py stock_monthly -- \
   - `weekly_signals_<date>.parquet`
   - `feature_importance_<date>.parquet`
   - `training_summary_<date>.json`
+  - `validation_predictions_<date>.parquet`（启用留出验证时）
   - `models/stock_selector_<model_type>_<date>.*`
 
 ## 仅更新周信号（使用最近一次训练模型）

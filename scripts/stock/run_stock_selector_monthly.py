@@ -304,6 +304,109 @@ def _extract_feature_importance(selector: StockSelector) -> pd.DataFrame:
     return df
 
 
+def _fit_selector_with_fallback(
+    selector_cfg: SelectionConfig,
+    train_df: pd.DataFrame,
+    allow_rule_fallback: bool = False,
+) -> tuple[StockSelector, SelectionConfig, bool]:
+    selector = StockSelector(selector_cfg)
+    effective_cfg = selector_cfg
+    fallback_used = False
+    try:
+        selector.fit(train_df)
+    except ModuleNotFoundError:
+        if not allow_rule_fallback:
+            raise
+        effective_cfg = replace(selector_cfg, model_type="rule")
+        selector = StockSelector(effective_cfg)
+        selector.fit(train_df)
+        fallback_used = True
+    return selector, effective_cfg, fallback_used
+
+
+def _calc_future_return(df: pd.DataFrame, horizon: int = 20) -> pd.Series:
+    out = df[["ts_code", "trade_date", "close"]].copy()
+    out = out.sort_values(["ts_code", "trade_date"])
+    future_ret = out.groupby("ts_code")["close"].shift(-horizon) / out["close"] - 1.0
+    return future_ret.astype(float)
+
+
+def _split_train_valid_by_date(df: pd.DataFrame, valid_days: int) -> tuple[pd.DataFrame, pd.DataFrame]:
+    if valid_days <= 0:
+        return df.copy(), pd.DataFrame(columns=df.columns)
+    dates = sorted(df["trade_date"].astype(str).unique().tolist())
+    if len(dates) <= valid_days:
+        return pd.DataFrame(columns=df.columns), df.copy()
+    split_point = dates[-valid_days]
+    train_df = df[df["trade_date"].astype(str) < split_point].copy()
+    valid_df = df[df["trade_date"].astype(str) >= split_point].copy()
+    return train_df, valid_df
+
+
+def _evaluate_holdout_predictions(
+    panel: pd.DataFrame,
+    pred: pd.DataFrame,
+    top_n: int = 10,
+    label_horizon: int = 20,
+) -> Dict[str, float]:
+    if panel.empty or pred.empty:
+        return {}
+
+    eval_df = pred.copy()
+    ret20 = _calc_future_return(panel, horizon=label_horizon)
+    panel_key = panel[["ts_code", "trade_date"]].copy()
+    panel_key["future_return"] = ret20
+    eval_df = eval_df.merge(panel_key, on=["ts_code", "trade_date"], how="left")
+    eval_df["future_return"] = pd.to_numeric(eval_df["future_return"], errors="coerce")
+    eval_df["score"] = pd.to_numeric(eval_df["score"], errors="coerce")
+    eval_df = eval_df.dropna(subset=["score", "future_return"])
+    if eval_df.empty:
+        return {}
+
+    daily_rank_ic = (
+        eval_df.groupby("trade_date")
+        .apply(
+            lambda g: g["score"].rank(pct=True).corr(
+                g["future_return"].rank(pct=True),
+                method="pearson",
+            )
+        )
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
+
+    top_daily = (
+        eval_df.sort_values(["trade_date", "score"], ascending=[True, False])
+        .groupby("trade_date", as_index=False)
+        .head(max(int(top_n), 1))
+        .groupby("trade_date", as_index=False)["future_return"]
+        .mean()
+        .rename(columns={"future_return": "top_return"})
+    )
+    all_daily = (
+        eval_df.groupby("trade_date", as_index=False)["future_return"]
+        .mean()
+        .rename(columns={"future_return": "all_return"})
+    )
+    compare = top_daily.merge(all_daily, on="trade_date", how="inner")
+    compare["excess_return"] = compare["top_return"] - compare["all_return"]
+    if compare.empty:
+        return {}
+
+    ic_mean = float(daily_rank_ic.mean()) if not daily_rank_ic.empty else float("nan")
+    ic_std = float(daily_rank_ic.std()) if len(daily_rank_ic) > 1 else float("nan")
+    return {
+        "days": float(compare["trade_date"].nunique()),
+        "rank_ic_mean": ic_mean,
+        "rank_ic_std": ic_std,
+        "rank_ic_ir": float(ic_mean / (ic_std + 1e-12)) if np.isfinite(ic_mean) and np.isfinite(ic_std) else float("nan"),
+        "top_n_avg_return": float(compare["top_return"].mean()),
+        "universe_avg_return": float(compare["all_return"].mean()),
+        "top_n_excess_return": float(compare["excess_return"].mean()),
+        "top_n_win_rate": float((compare["excess_return"] > 0).mean()),
+    }
+
+
 def _save_model_artifact(selector: StockSelector, path: Path) -> str:
     path.parent.mkdir(parents=True, exist_ok=True)
     model = selector.model
@@ -336,6 +439,10 @@ def _build_selector_config(config_path: Path) -> SelectionConfig:
         label_weights=tuple(raw.get("label_weights", [0.5, 0.3, 0.2])),
         risk_adjusted=bool(raw.get("risk_adjusted", True)),
         industry_col=raw.get("industry_col", "industry_l1"),
+        rank_mode=raw.get("rank_mode", "industry"),
+        industry_rank=bool(raw.get("industry_rank", True)),
+        lgbm_params=raw.get("lgbm_params", SelectionConfig().lgbm_params),
+        xgb_params=raw.get("xgb_params", SelectionConfig().xgb_params),
     )
 
 
@@ -364,6 +471,8 @@ def main() -> None:
     parser.add_argument("--train-lookback-days", type=int, default=900, help="训练回看天数")
     parser.add_argument("--top-n", type=int, default=10, help="最新周信号TopN")
     parser.add_argument("--allow-rule-fallback", action="store_true", help="lgbm/xgb不可用时回退rule")
+    parser.add_argument("--valid-days", type=int, default=120, help="训练后留出验证交易日数量（0表示关闭）")
+    parser.add_argument("--eval-top-n", type=int, default=10, help="验证集TopN收益评估口径")
     parser.add_argument("--data-dir", type=str, default=None, help="Tushare数据根目录")
     parser.add_argument("--output-root", type=str, default=None, help="输出目录，默认 data/signals/stock_selector/monthly")
     args = parser.parse_args()
@@ -384,18 +493,30 @@ def main() -> None:
     if panel.empty:
         raise ValueError("训练面板为空")
 
-    selector = StockSelector(selector_cfg)
-    effective_cfg = selector_cfg
-    fallback_used = False
-    try:
-        selector.fit(panel)
-    except ModuleNotFoundError:
-        if not args.allow_rule_fallback:
-            raise
-        effective_cfg = replace(selector_cfg, model_type="rule")
-        selector = StockSelector(effective_cfg)
-        selector.fit(panel)
-        fallback_used = True
+    train_panel, valid_panel = _split_train_valid_by_date(panel, int(args.valid_days))
+    validation_metrics: Dict[str, float] = {}
+    validation_prediction_path = None
+    if not train_panel.empty and not valid_panel.empty:
+        eval_selector, _, _ = _fit_selector_with_fallback(
+            selector_cfg=selector_cfg,
+            train_df=train_panel,
+            allow_rule_fallback=args.allow_rule_fallback,
+        )
+        valid_pred = eval_selector.predict(valid_panel)
+        validation_metrics = _evaluate_holdout_predictions(
+            panel=panel,
+            pred=valid_pred,
+            top_n=int(args.eval_top_n),
+            label_horizon=int(selector_cfg.label_horizons[0]) if selector_cfg.label_horizons else 20,
+        )
+    else:
+        valid_pred = pd.DataFrame()
+
+    selector, effective_cfg, fallback_used = _fit_selector_with_fallback(
+        selector_cfg=selector_cfg,
+        train_df=panel,
+        allow_rule_fallback=args.allow_rule_fallback,
+    )
 
     signal_trade_date = _latest_weekly_trade_date(panel["trade_date"].unique().tolist())
     weekly_signals = selector.select_top(panel, top_n=int(args.top_n), trade_date=signal_trade_date).copy()
@@ -417,11 +538,15 @@ def main() -> None:
     signal_path = output_root / f"weekly_signals_{signal_trade_date}.parquet"
     importance_path = output_root / f"feature_importance_{end_date}.parquet"
     summary_path = output_root / f"training_summary_{end_date}.json"
+    validation_pred_path = output_root / f"validation_predictions_{end_date}.parquet"
     model_path = model_dir / f"{model_version}"
     metadata_path = model_dir / f"{model_version}.meta.json"
 
     weekly_signals.to_parquet(signal_path, index=False)
     importance.to_parquet(importance_path, index=False)
+    if not valid_pred.empty:
+        valid_pred.to_parquet(validation_pred_path, index=False)
+        validation_prediction_path = str(validation_pred_path)
     model_saved_path = _save_model_artifact(selector, model_path)
     metadata = {
         "model_version": model_version,
@@ -440,6 +565,12 @@ def main() -> None:
         "fallback_used": fallback_used,
         "selector_config": asdict(effective_cfg),
         "train_range": {"start_date": start_date, "end_date": end_date},
+        "validation": {
+            "valid_days": int(args.valid_days),
+            "eval_top_n": int(args.eval_top_n),
+            "metrics": validation_metrics,
+            "prediction_file": validation_prediction_path,
+        },
         "signal_trade_date": signal_trade_date,
         "rows": int(len(panel)),
         "codes": int(panel["ts_code"].nunique()),
