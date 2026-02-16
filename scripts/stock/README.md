@@ -36,6 +36,29 @@ python scripts/run_job.py stock_weekly -- --top-n 10
   --top-n 10
 ```
 
+## 选股模型基准对比（Rule / LGBM / XGB）
+
+```bash
+python scripts/run_job.py stock_benchmark -- \
+  --as-of-date 20260213 \
+  --train-lookback-days 900 \
+  --valid-days 120 \
+  --eval-top-n 10 \
+  --models rule,lgbm,xgb
+
+./venv/bin/python scripts/stock/run_stock_model_benchmark.py \
+  --as-of-date 20260213 \
+  --train-lookback-days 900 \
+  --valid-days 120 \
+  --eval-top-n 10 \
+  --models rule,lgbm,xgb
+```
+
+- 默认输出目录：`data/backtest/stock_selector/benchmark/`
+  - `stock_model_benchmark_<run_id>.json`
+  - `stock_model_benchmark_<run_id>.parquet`
+  - `stock_model_benchmark_latest.json`
+
 ## APScheduler 调度（月度重训 + 周度信号）
 
 ```bash

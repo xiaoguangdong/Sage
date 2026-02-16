@@ -15,6 +15,7 @@
 4. 任务编排统一入口：
    - `python scripts/run_job.py weekly_pipeline`
    - `python scripts/run_job.py stock_monthly -- --top-n 10`
+   - `python scripts/run_job.py stock_benchmark -- --models rule,lgbm,xgb`
    - `python scripts/run_job.py broker_submit -- --broker pingan`（默认 dry-run）
 
 ## 代码结构与职责

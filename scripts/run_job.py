@@ -13,6 +13,7 @@ JOB_SCRIPTS = {
     "weekly_pipeline": PROJECT_ROOT / "sage_app" / "pipelines" / "run_weekly.py",
     "stock_monthly": PROJECT_ROOT / "scripts" / "stock" / "run_stock_selector_monthly.py",
     "stock_weekly": PROJECT_ROOT / "scripts" / "stock" / "run_stock_selector_weekly_signal.py",
+    "stock_benchmark": PROJECT_ROOT / "scripts" / "stock" / "run_stock_model_benchmark.py",
     "stock_governance": PROJECT_ROOT / "scripts" / "stock" / "run_stock_strategy_governance.py",
     "broker_submit": PROJECT_ROOT / "scripts" / "stock" / "run_broker_execution.py",
     "trend_scheduler": PROJECT_ROOT / "sage_app" / "pipelines" / "trend_signal_scheduler.py",
