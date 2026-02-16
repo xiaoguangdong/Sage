@@ -22,6 +22,16 @@ class SelectionConfig:
     industry_rank: bool = True
     industry_col: Optional[str] = "industry_l1"
     rank_mode: str = "industry"  # industry / market / auto
+    
+    # P0: 行业中性化标签（防过拟合核心）
+    label_neutralized: bool = True  # 标签 = 个股收益 - 行业平均收益
+    market_neutralized: bool = False  # 标签 = 个股收益 - 市场平均收益
+    
+    # P2: 因子 IC 筛选（防过拟合）
+    ic_filter_enabled: bool = True   # 启用 IC 筛选
+    ic_threshold: float = 0.02       # IC 阈值（|IC| > 0.02）
+    ic_ir_threshold: float = 0.3     # IC_IR 阈值
+    max_corr_threshold: float = 0.7  # 共线性阈值
 
     # 列名配置
     date_col: str = "trade_date"
@@ -38,11 +48,16 @@ class SelectionConfig:
     lgbm_params: Dict[str, object] = field(default_factory=lambda: {
         "objective": "regression",
         "metric": "rmse",
-        "learning_rate": 0.05,
-        "num_leaves": 31,
-        "feature_fraction": 0.8,
-        "bagging_fraction": 0.8,
+        "learning_rate": 0.02,        # ↓ 降低学习率
+        "num_leaves": 15,             # ↓ 从31降到15，降低复杂度
+        "max_depth": 4,               # ↓ 限制树深
+        "min_data_in_leaf": 500,      # ↑ 防过拟合核心参数
+        "feature_fraction": 0.6,      # ↓ 特征采样
+        "bagging_fraction": 0.6,      # ↓ 数据采样
         "bagging_freq": 5,
+        "lambda_l1": 1.0,             # L1 正则
+        "lambda_l2": 10.0,            # L2 正则（增强）
+        "min_gain_to_split": 0.01,    # 分裂最小增益
         "verbosity": -1,
     })
     xgb_params: Dict[str, object] = field(default_factory=lambda: {
@@ -96,6 +111,11 @@ class StockSelector:
         if train_df.empty:
             raise ValueError("训练数据为空，请检查输入数据与标签窗口")
 
+        # P2: 因子 IC 筛选（防过拟合）
+        feature_cols = self._filter_features_by_ic(train_df, list(feature_cols))
+        if not feature_cols:
+            raise ValueError("IC筛选后无有效因子，请降低 ic_threshold")
+        
         self.feature_cols = feature_cols
 
         if self.config.model_type == "rule":
@@ -257,6 +277,22 @@ class StockSelector:
 
         for horizon, weight in zip(horizons, weights):
             future_ret = group[price_col].shift(-horizon) / df[price_col] - 1
+            
+            # P0: 行业中性化（防过拟合核心）
+            if cfg.label_neutralized and cfg.industry_col and cfg.industry_col in df.columns:
+                # 计算行业平均收益（按日期+行业分组）
+                df_temp = df.copy()
+                df_temp['_future_ret'] = future_ret.values if hasattr(future_ret, 'values') else future_ret
+                industry_mean = df_temp.groupby([date_col, cfg.industry_col])['_future_ret'].transform('mean')
+                # 行业中性化：个股收益 - 行业平均收益
+                future_ret = future_ret - industry_mean
+            elif cfg.market_neutralized:
+                # 市场中性化
+                df_temp = df.copy()
+                df_temp['_future_ret'] = future_ret.values if hasattr(future_ret, 'values') else future_ret
+                market_mean = df_temp.groupby(date_col)['_future_ret'].transform('mean')
+                future_ret = future_ret - market_mean
+            
             if cfg.risk_adjusted:
                 label = future_ret / (vol + 1e-8)
             else:
@@ -492,6 +528,84 @@ class StockSelector:
                 continue
             usable.append(col)
         return usable
+
+    def _filter_features_by_ic(self, df: pd.DataFrame, feature_cols: List[str], label_col: str = "label") -> List[str]:
+        """
+        P2: 因子 IC 筛选（防过拟合）
+        
+        筛选条件：
+        1. |IC| > ic_threshold
+        2. IC_IR > ic_ir_threshold
+        3. 共线性过滤（|corr| < max_corr_threshold）
+        """
+        if not self.config.ic_filter_enabled:
+            return feature_cols
+        
+        date_col = self.config.date_col
+        if label_col not in df.columns:
+            return feature_cols
+        
+        # 1. 计算 IC（按日期截面）
+        ic_series = {}
+        for col in feature_cols:
+            if col not in df.columns:
+                continue
+            ic_list = []
+            for date, group in df.groupby(date_col):
+                if len(group) < 30:  # 样本太少跳过
+                    continue
+                valid = group[[col, label_col]].dropna()
+                if len(valid) < 20:
+                    continue
+                ic = valid[col].corr(valid[label_col], method="spearman")
+                if not np.isnan(ic):
+                    ic_list.append(ic)
+            if ic_list:
+                ic_series[col] = pd.Series(ic_list)
+        
+        if not ic_series:
+            return feature_cols
+        
+        # 2. IC 筛选
+        selected = []
+        ic_stats = {}
+        for col, ics in ic_series.items():
+            mean_ic = ics.mean()
+            ic_ir = ics.mean() / (ics.std() + 1e-8) if ics.std() > 0 else 0
+            ic_stats[col] = {"mean_ic": mean_ic, "ic_ir": ic_ir}
+            
+            # 筛选条件
+            if abs(mean_ic) >= self.config.ic_threshold:
+                if ic_ir >= self.config.ic_ir_threshold:
+                    selected.append(col)
+        
+        logger.info(f"IC筛选: {len(feature_cols)} -> {len(selected)} 因子")
+        
+        # 3. 共线性过滤
+        if len(selected) > 1:
+            corr_matrix = df[selected].corr().abs()
+            final_selected = []
+            for col in selected:
+                # 检查与已选因子的相关性
+                high_corr = False
+                for sel in final_selected:
+                    if corr_matrix.loc[col, sel] > self.config.max_corr_threshold:
+                        high_corr = True
+                        # 保留 IC 更高的因子
+                        if abs(ic_stats[col]["mean_ic"]) > abs(ic_stats[sel]["mean_ic"]):
+                            final_selected.remove(sel)
+                            final_selected.append(col)
+                        break
+                if not high_corr:
+                    final_selected.append(col)
+            selected = final_selected
+        
+        logger.info(f"共线性过滤: {len(selected)} 因子")
+        
+        # 保存 IC 统计信息
+        self.feature_ic_stats = ic_stats
+        
+        return selected if selected else feature_cols
 
     def _fill_missing_features(self, df: pd.DataFrame, feature_cols: Sequence[str], fit: bool) -> pd.DataFrame:
         date_col = self.config.date_col
