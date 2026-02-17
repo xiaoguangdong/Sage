@@ -601,8 +601,18 @@ class StockSelector:
                 if ic_ir >= self.config.ic_ir_threshold:
                     selected.append(col)
         
+        # 最小特征数保障：不足时按 |IC| 排序补充
+        min_count = max(self.config.min_feature_count, 5)
+        if len(selected) < min_count and ic_stats:
+            ranked = sorted(ic_stats.items(), key=lambda x: abs(x[1]["mean_ic"]), reverse=True)
+            for col, _ in ranked:
+                if col not in selected:
+                    selected.append(col)
+                if len(selected) >= min_count:
+                    break
+
         logger.info(f"IC筛选: {len(feature_cols)} -> {len(selected)} 因子")
-        
+
         # 3. 共线性过滤
         if len(selected) > 1:
             corr_matrix = df[selected].corr().abs()
