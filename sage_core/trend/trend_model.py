@@ -60,8 +60,10 @@ class TrendModelConfig:
     min_hold_periods: int = 10          # 状态切换后强制保持N天
 
     # P0: 极端行情熔断
-    circuit_breaker_1d: float = -0.05   # 单日跌幅阈值（强制RISK_OFF）
-    circuit_breaker_3d: float = -0.08   # 连续3日累计跌幅阈值
+    circuit_breaker_1d: float = -0.035  # 单日跌幅阈值（强制RISK_OFF）
+    circuit_breaker_3d: float = -0.06   # 连续3日累计跌幅阈值
+    circuit_breaker_5d: float = -0.08   # 连续5日累计跌幅阈值
+    circuit_breaker_drawdown: float = -0.08  # 从20日高点回撤阈值
     circuit_breaker_hold: int = 5       # 熔断后强制RISK_OFF天数
 
     # P1: 波动率自适应退出宽容期
@@ -115,6 +117,9 @@ class TrendModelRuleV2:
         # P0: 熔断用日收益率
         daily_ret = close.pct_change()
         ret_3d = close.pct_change(3)
+        ret_5d = close.pct_change(5)
+        rolling_high = close.rolling(20, min_periods=1).max()
+        drawdown = (close - rolling_high) / rolling_high
 
         # P1: 波动率自适应
         vol_current = daily_ret.rolling(cfg.vol_window, min_periods=cfg.vol_window).std()
@@ -150,14 +155,15 @@ class TrendModelRuleV2:
             # P0: 极端行情熔断（优先级最高，覆盖一切）
             dr = daily_ret.iloc[i]
             r3 = ret_3d.iloc[i]
-            if not pd.isna(dr) and dr <= cfg.circuit_breaker_1d:
-                state = 0
-                hold_count = cfg.circuit_breaker_hold
-                fail_count = 0
-                confirm_count = 0
-                states.append(state)
-                continue
-            if not pd.isna(r3) and r3 <= cfg.circuit_breaker_3d:
+            r5 = ret_5d.iloc[i]
+            dd = drawdown.iloc[i]
+            _tripped = False
+            for _val, _th in [(dr, cfg.circuit_breaker_1d), (r3, cfg.circuit_breaker_3d),
+                              (r5, cfg.circuit_breaker_5d), (dd, cfg.circuit_breaker_drawdown)]:
+                if not pd.isna(_val) and _val <= _th:
+                    _tripped = True
+                    break
+            if _tripped:
                 state = 0
                 hold_count = cfg.circuit_breaker_hold
                 fail_count = 0

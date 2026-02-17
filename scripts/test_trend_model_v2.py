@@ -30,7 +30,7 @@ def load_hs300_data():
     df['date'] = pd.to_datetime(df['date'])
 
     # 筛选2020-2026年
-    df = df[(df['date'] >= '2020-01-01') & (df['date'] <= '2026-12-31')]
+    df = df[(df['date'] >= '2020-01-01') & (df['date'] <= '2026-12-31')].reset_index(drop=True)
 
     print(f"数据范围: {df['date'].min()} 至 {df['date'].max()}")
     print(f"数据量: {len(df)} 条")
