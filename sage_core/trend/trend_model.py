@@ -59,6 +59,20 @@ class TrendModelConfig:
     # 最小持续期
     min_hold_periods: int = 10          # 状态切换后强制保持N天
 
+    # P0: 极端行情熔断
+    circuit_breaker_1d: float = -0.05   # 单日跌幅阈值（强制RISK_OFF）
+    circuit_breaker_3d: float = -0.08   # 连续3日累计跌幅阈值
+    circuit_breaker_hold: int = 5       # 熔断后强制RISK_OFF天数
+
+    # P1: 波动率自适应退出宽容期
+    vol_adaptive: bool = True           # 是否启用波动率自适应
+    vol_window: int = 20                # 当前波动率窗口
+    vol_median_window: int = 120        # 中位波动率窗口
+
+    # P2: 多时间框架确认
+    mtf_enabled: bool = True            # 是否启用多时间框架
+    ma_weekly: int = 13                 # 周线级别均线（≈60日/5）
+
     # 仓位映射
     position_risk_on: Tuple[float, float] = (0.70, 0.95)
     position_neutral: Tuple[float, float] = (0.30, 0.60)
@@ -98,6 +112,17 @@ class TrendModelRuleV2:
         ma_medium = close.rolling(cfg.ma_medium, min_periods=cfg.ma_medium).mean()
         slope = ma_short.diff()
 
+        # P0: 熔断用日收益率
+        daily_ret = close.pct_change()
+        ret_3d = close.pct_change(3)
+
+        # P1: 波动率自适应
+        vol_current = daily_ret.rolling(cfg.vol_window, min_periods=cfg.vol_window).std()
+        vol_median = vol_current.rolling(cfg.vol_median_window, min_periods=cfg.vol_median_window).median()
+
+        # P2: 多时间框架（周线级别均线）
+        ma_weekly = close.rolling(cfg.ma_weekly * 5, min_periods=cfg.ma_weekly * 5).mean()
+
         # 状态机遍历
         states = []
         trend_strength_list = []
@@ -122,9 +147,45 @@ class TrendModelRuleV2:
             ts = self._calc_strength(cl, ms, mm, sl)
             trend_strength_list.append(ts)
 
+            # P0: 极端行情熔断（优先级最高，覆盖一切）
+            dr = daily_ret.iloc[i]
+            r3 = ret_3d.iloc[i]
+            if not pd.isna(dr) and dr <= cfg.circuit_breaker_1d:
+                state = 0
+                hold_count = cfg.circuit_breaker_hold
+                fail_count = 0
+                confirm_count = 0
+                states.append(state)
+                continue
+            if not pd.isna(r3) and r3 <= cfg.circuit_breaker_3d:
+                state = 0
+                hold_count = cfg.circuit_breaker_hold
+                fail_count = 0
+                confirm_count = 0
+                states.append(state)
+                continue
+
             # 硬条件判断（与原版均线确认一致）
             bull = (ms > mm) and (cl > ms) and (sl > 0)
             bear = (ms < mm) and (cl < ms) and (sl < 0)
+
+            # P1: 波动率自适应退出宽容期
+            vc = vol_current.iloc[i]
+            vm = vol_median.iloc[i]
+            if cfg.vol_adaptive and not pd.isna(vc) and not pd.isna(vm) and vm > 0:
+                vol_ratio = vm / max(vc, 1e-8)  # 波动率越高，ratio越小，宽容期越短
+                adaptive_tolerance = max(3, int(cfg.exit_tolerance * np.clip(vol_ratio, 0.5, 1.5)))
+            else:
+                adaptive_tolerance = cfg.exit_tolerance
+
+            # P2: 多时间框架确认
+            mw = ma_weekly.iloc[i]
+            if cfg.mtf_enabled and not pd.isna(mw):
+                weekly_bull = cl > mw
+                weekly_bear = cl < mw
+            else:
+                weekly_bull = True
+                weekly_bear = True
 
             # 最小持续期：强制保持
             if hold_count > 0:
@@ -134,14 +195,14 @@ class TrendModelRuleV2:
 
             # 状态机
             if state == 1:  # 震荡态
-                if bull:
+                if bull and weekly_bull:  # P2: 周线确认
                     confirm_count += 1
                     if confirm_count >= cfg.confirmation_periods:
                         state = 2
                         hold_count = cfg.min_hold_periods
                         confirm_count = 0
                         fail_count = 0
-                elif bear:
+                elif bear and weekly_bear:  # P2: 周线确认
                     confirm_count += 1
                     if confirm_count >= cfg.confirmation_periods:
                         state = 0
@@ -153,10 +214,10 @@ class TrendModelRuleV2:
 
             elif state == 2:  # 牛市态
                 if bull:
-                    fail_count = 0  # 条件满足，重置宽容计数
+                    fail_count = 0
                 else:
                     fail_count += 1
-                    if fail_count >= cfg.exit_tolerance:
+                    if fail_count >= adaptive_tolerance:  # P1: 自适应宽容期
                         state = 1
                         fail_count = 0
                         confirm_count = 0
@@ -166,7 +227,7 @@ class TrendModelRuleV2:
                     fail_count = 0
                 else:
                     fail_count += 1
-                    if fail_count >= cfg.exit_tolerance:
+                    if fail_count >= adaptive_tolerance:  # P1: 自适应宽容期
                         state = 1
                         fail_count = 0
                         confirm_count = 0
