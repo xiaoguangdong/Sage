@@ -60,6 +60,7 @@ class SelectionConfig:
         "lambda_l2": 10.0,            # L2 正则（增强）
         "min_gain_to_split": 0.01,    # 分裂最小增益
         "verbosity": -1,
+        "seed": 42,
     })
     xgb_params: Dict[str, object] = field(default_factory=lambda: {
         "objective": "reg:squarederror",

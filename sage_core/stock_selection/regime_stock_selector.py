@@ -48,10 +48,16 @@ class RegimeSelectionConfig:
     # 最小样本量（低于此值回退到全量模型）
     min_samples_per_regime: int = 200
 
-    # 软分配权重（其他 regime 样本的权重）
-    soft_weight_same: float = 1.0     # 目标 regime 样本权重
-    soft_weight_adjacent: float = 0.3  # 相邻 regime 样本权重
-    soft_weight_opposite: float = 0.05 # 对立 regime 样本权重
+    # 硬分配 vs 软分配
+    hard_assignment: bool = True  # True=只用对应regime数据，False=全量+软权重
+
+    # 软分配权重（hard_assignment=False 时生效）
+    soft_weight_same: float = 1.0
+    soft_weight_adjacent: float = 0.3
+    soft_weight_opposite: float = 0.05
+
+    # 时间衰减（半衰期，交易日数；0=不衰减）
+    time_decay_half_life: int = 500  # ~2年交易日
 
 
 class RegimeStockSelector:
@@ -122,7 +128,7 @@ class RegimeStockSelector:
         self.fallback_model = StockSelector(copy.deepcopy(self.config.base_config))
         self.fallback_model.fit(df)
 
-        # 按 regime 分别训练（软分配：全量数据 + 样本权重）
+        # 按 regime 分别训练
         for regime in [RISK_OFF, NEUTRAL, RISK_ON]:
             name = REGIME_NAMES[regime]
             n_target = int((regime_labels == regime).sum())
@@ -136,16 +142,25 @@ class RegimeStockSelector:
                 self.models[regime] = self.fallback_model
                 continue
 
-            # 构建软分配权重
-            weights = self._build_soft_weights(regime_labels, regime)
-            n_dates = df[df[date_col].isin(
-                df[regime_labels == regime][date_col].unique()
-            )][date_col].nunique() if date_col in df.columns else 0
-            logger.info(f"[{name}] 软分配训练: {n_target} 目标样本, {len(df)} 总样本, {n_dates} 交易日")
-
             sub_config = self._make_sub_config(regime)
             model = StockSelector(sub_config)
-            model.fit(df, sample_weight=weights)
+
+            if self.config.hard_assignment:
+                # 硬分配：只用对应 regime 的数据
+                mask = regime_labels == regime
+                df_regime = df[mask].reset_index(drop=True)
+                dates_regime = df_regime[date_col] if date_col in df_regime.columns else None
+                weights = self._build_time_decay_weights(dates_regime)
+                n_dates = df_regime[date_col].nunique() if date_col in df_regime.columns else 0
+                logger.info(f"[{name}] 硬分配训练: {n_target} 样本, {n_dates} 交易日")
+                model.fit(df_regime, sample_weight=weights)
+            else:
+                # 软分配：全量数据 + 软权重 × 时间衰减
+                dates_series = df[date_col] if date_col in df.columns else None
+                weights = self._build_soft_weights(regime_labels, regime, dates=dates_series)
+                logger.info(f"[{name}] 软分配训练: {n_target} 目标样本, {len(df)} 总样本")
+                model.fit(df, sample_weight=weights)
+
             self.models[regime] = model
 
             # 记录特征信息
@@ -166,11 +181,22 @@ class RegimeStockSelector:
         self._log_summary()
         return self
 
-    def _build_soft_weights(self, regime_labels: pd.Series, target_regime: int) -> np.ndarray:
-        """构建软分配权重：目标regime权重高，相邻regime次之，对立regime最低"""
+    def _build_time_decay_weights(self, dates: Optional[pd.Series] = None) -> Optional[np.ndarray]:
+        """纯时间衰减权重（硬分配用）"""
+        cfg = self.config
+        if cfg.time_decay_half_life <= 0 or dates is None:
+            return None
+        ts = pd.to_datetime(dates)
+        days_ago = (ts.max() - ts).dt.days.values.astype(float)
+        half_life_cal = cfg.time_decay_half_life * 365.0 / 252.0
+        return np.power(0.5, days_ago / half_life_cal)
+
+    def _build_soft_weights(
+        self, regime_labels: pd.Series, target_regime: int, dates: Optional[pd.Series] = None
+    ) -> np.ndarray:
+        """构建软分配权重 × 时间衰减权重"""
         cfg = self.config
         weights = np.full(len(regime_labels), cfg.soft_weight_opposite)
-        # 相邻 regime（NEUTRAL 与两端都相邻）
         adjacent = {
             RISK_OFF: [NEUTRAL],
             NEUTRAL: [RISK_OFF, RISK_ON],
@@ -179,6 +205,15 @@ class RegimeStockSelector:
         for adj in adjacent.get(target_regime, []):
             weights[regime_labels == adj] = cfg.soft_weight_adjacent
         weights[regime_labels == target_regime] = cfg.soft_weight_same
+
+        # 时间衰减
+        if cfg.time_decay_half_life > 0 and dates is not None:
+            ts = pd.to_datetime(dates)
+            max_date = ts.max()
+            days_ago = (max_date - ts).dt.days.values.astype(float)
+            decay = np.power(0.5, days_ago / (cfg.time_decay_half_life * 365.0 / 252.0))
+            weights = weights * decay
+
         return weights
 
     def predict(self, df: pd.DataFrame, regime: int) -> pd.DataFrame:
