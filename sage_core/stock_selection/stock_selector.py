@@ -31,6 +31,7 @@ class SelectionConfig:
     ic_filter_enabled: bool = True   # 启用 IC 筛选
     ic_threshold: float = 0.02       # IC 阈值（|IC| > 0.02）
     ic_ir_threshold: float = 0.3     # IC_IR 阈值
+    ic_hit_rate_threshold: float = 0.55  # IC 胜率阈值（IC>0 的月份占比）
     max_corr_threshold: float = 0.7  # 共线性阈值
 
     # 列名配置
@@ -93,13 +94,16 @@ class StockSelector:
     # -----------------------------
     # 公共入口
     # -----------------------------
-    def fit(self, df: pd.DataFrame) -> "StockSelector":
+    def fit(self, df: pd.DataFrame, sample_weight: Optional[np.ndarray] = None) -> "StockSelector":
         df_features = self.prepare_features(df)
         labels = self.build_labels(df_features)
 
         train_df = df_features.copy()
         train_df["label"] = labels
-        train_df = train_df.dropna(subset=["label"])
+        if sample_weight is not None:
+            train_df["_sample_weight"] = sample_weight
+        valid_mask = train_df["label"].notna()
+        train_df = train_df[valid_mask]
 
         feature_cols = self._infer_feature_cols(train_df)
         train_df = self._coerce_numeric_features(train_df, feature_cols)
@@ -121,7 +125,8 @@ class StockSelector:
         if self.config.model_type == "rule":
             self._fit_rule(train_df, feature_cols)
         elif self.config.model_type == "lgbm":
-            self._fit_lgbm(train_df, feature_cols)
+            weights = train_df["_sample_weight"].values if "_sample_weight" in train_df.columns else None
+            self._fit_lgbm(train_df, feature_cols, sample_weight=weights)
         elif self.config.model_type == "xgb":
             X = train_df[feature_cols].values
             y = train_df["label"].values
@@ -366,7 +371,7 @@ class StockSelector:
         score = sum(zscores)
         return score.to_numpy()
 
-    def _fit_lgbm(self, train_df: pd.DataFrame, feature_cols: Sequence[str]) -> None:
+    def _fit_lgbm(self, train_df: pd.DataFrame, feature_cols: Sequence[str], sample_weight: Optional[np.ndarray] = None) -> None:
         try:
             import lightgbm as lgb
         except ModuleNotFoundError as exc:
@@ -401,6 +406,8 @@ class StockSelector:
 
         X_train, X_val = X[~val_mask], X[val_mask]
         y_train, y_val = y[~val_mask], y[val_mask]
+        w_train = sample_weight[~val_mask] if sample_weight is not None else None
+        w_val = sample_weight[val_mask] if sample_weight is not None else None
 
         if use_ranking_group:
             y_train = self._to_lgbm_rank_labels(y_train)
@@ -413,11 +420,11 @@ class StockSelector:
                 training_frame[val_mask].groupby(date_col, sort=True)
                 .size().astype(int).tolist()
             )
-            dataset = lgb.Dataset(X_train, label=y_train, group=train_groups)
-            val_dataset = lgb.Dataset(X_val, label=y_val, group=val_groups, reference=dataset)
+            dataset = lgb.Dataset(X_train, label=y_train, weight=w_train, group=train_groups)
+            val_dataset = lgb.Dataset(X_val, label=y_val, weight=w_val, group=val_groups, reference=dataset)
         else:
-            dataset = lgb.Dataset(X_train, label=y_train)
-            val_dataset = lgb.Dataset(X_val, label=y_val, reference=dataset)
+            dataset = lgb.Dataset(X_train, label=y_train, weight=w_train)
+            val_dataset = lgb.Dataset(X_val, label=y_val, weight=w_val, reference=dataset)
 
         self.model = lgb.train(
             params,
@@ -594,12 +601,14 @@ class StockSelector:
         for col, ics in ic_series.items():
             mean_ic = ics.mean()
             ic_ir = ics.mean() / (ics.std() + 1e-8) if ics.std() > 0 else 0
-            ic_stats[col] = {"mean_ic": mean_ic, "ic_ir": ic_ir}
-            
-            # 筛选条件
+            hit_rate = float((ics > 0).mean()) if len(ics) > 0 else 0
+            ic_stats[col] = {"mean_ic": mean_ic, "ic_ir": ic_ir, "hit_rate": hit_rate}
+
+            # 筛选条件：IC + IC_IR + 稳定性
             if abs(mean_ic) >= self.config.ic_threshold:
                 if ic_ir >= self.config.ic_ir_threshold:
-                    selected.append(col)
+                    if hit_rate >= self.config.ic_hit_rate_threshold:
+                        selected.append(col)
         
         # 最小特征数保障：不足时按 |IC| 排序补充
         min_count = max(self.config.min_feature_count, 5)

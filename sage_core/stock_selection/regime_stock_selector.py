@@ -48,6 +48,11 @@ class RegimeSelectionConfig:
     # 最小样本量（低于此值回退到全量模型）
     min_samples_per_regime: int = 200
 
+    # 软分配权重（其他 regime 样本的权重）
+    soft_weight_same: float = 1.0     # 目标 regime 样本权重
+    soft_weight_adjacent: float = 0.3  # 相邻 regime 样本权重
+    soft_weight_opposite: float = 0.05 # 对立 regime 样本权重
+
 
 class RegimeStockSelector:
     """分 Regime 选股器（Mixture of Experts）"""
@@ -117,28 +122,30 @@ class RegimeStockSelector:
         self.fallback_model = StockSelector(copy.deepcopy(self.config.base_config))
         self.fallback_model.fit(df)
 
-        # 按 regime 分别训练
+        # 按 regime 分别训练（软分配：全量数据 + 样本权重）
         for regime in [RISK_OFF, NEUTRAL, RISK_ON]:
             name = REGIME_NAMES[regime]
-            mask = regime_labels == regime
-            df_regime = df[mask]
-            n_samples = len(df_regime)
+            n_target = int((regime_labels == regime).sum())
 
-            self.train_stats[regime] = {"n_samples": n_samples}
+            self.train_stats[regime] = {"n_samples": n_target}
 
-            if n_samples < self.config.min_samples_per_regime:
+            if n_target < self.config.min_samples_per_regime:
                 logger.warning(
-                    f"[{name}] 样本不足 ({n_samples} < {self.config.min_samples_per_regime})，使用全量模型"
+                    f"[{name}] 样本不足 ({n_target} < {self.config.min_samples_per_regime})，使用全量模型"
                 )
                 self.models[regime] = self.fallback_model
                 continue
 
-            n_dates = df_regime[date_col].nunique() if date_col in df_regime.columns else 0
-            logger.info(f"[{name}] 训练: {n_samples} 样本, {n_dates} 交易日")
+            # 构建软分配权重
+            weights = self._build_soft_weights(regime_labels, regime)
+            n_dates = df[df[date_col].isin(
+                df[regime_labels == regime][date_col].unique()
+            )][date_col].nunique() if date_col in df.columns else 0
+            logger.info(f"[{name}] 软分配训练: {n_target} 目标样本, {len(df)} 总样本, {n_dates} 交易日")
 
             sub_config = self._make_sub_config(regime)
             model = StockSelector(sub_config)
-            model.fit(df_regime)
+            model.fit(df, sample_weight=weights)
             self.models[regime] = model
 
             # 记录特征信息
@@ -158,6 +165,21 @@ class RegimeStockSelector:
         self.is_trained = True
         self._log_summary()
         return self
+
+    def _build_soft_weights(self, regime_labels: pd.Series, target_regime: int) -> np.ndarray:
+        """构建软分配权重：目标regime权重高，相邻regime次之，对立regime最低"""
+        cfg = self.config
+        weights = np.full(len(regime_labels), cfg.soft_weight_opposite)
+        # 相邻 regime（NEUTRAL 与两端都相邻）
+        adjacent = {
+            RISK_OFF: [NEUTRAL],
+            NEUTRAL: [RISK_OFF, RISK_ON],
+            RISK_ON: [NEUTRAL],
+        }
+        for adj in adjacent.get(target_regime, []):
+            weights[regime_labels == adj] = cfg.soft_weight_adjacent
+        weights[regime_labels == target_regime] = cfg.soft_weight_same
+        return weights
 
     def predict(self, df: pd.DataFrame, regime: int) -> pd.DataFrame:
         """
