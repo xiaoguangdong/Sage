@@ -58,7 +58,13 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     train_end = pd.Timestamp(bt_start)
     df_train = df_all[df_all["trade_date"] < train_end].copy()
 
-    trend = TrendModelRuleV2(TrendModelConfig())
+    # 使用与test_trend_model_v2.py一致的配置（更敏感，识别及时）
+    cfg_trend = TrendModelConfig(
+        confirmation_periods=3,
+        exit_tolerance=5,
+        min_hold_periods=7,
+    )
+    trend = TrendModelRuleV2(cfg_trend)
     idx_train = idx[idx["date"] < train_end].copy()
     res = trend.predict(idx_train, return_history=True)
     d2s = dict(zip(pd.to_datetime(idx_train["date"]).values, res.diagnostics["states"]))

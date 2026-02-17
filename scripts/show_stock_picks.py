@@ -37,17 +37,19 @@ def load_data():
     basic = pd.read_parquet(os.path.join(DATA_ROOT, "daily_basic_all.parquet"))
     basic["trade_date"] = pd.to_datetime(basic["trade_date"], format="%Y%m%d")
 
-    ind_path = os.path.join(DATA_ROOT, "sw_industry", "sw_industry_l1.parquet")
-    ind = pd.read_parquet(ind_path) if os.path.exists(ind_path) else pd.DataFrame()
-
     # merge
     cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"] if c in basic.columns]
     df = stk.merge(basic[cols], on=["ts_code", "trade_date"], how="left")
-    if not ind.empty and "ts_code" in ind.columns:
-        ic = "industry_name" if "industry_name" in ind.columns else "industry_l1"
-        if ic in ind.columns:
-            df = df.merge(ind[["ts_code", ic]].drop_duplicates("ts_code"), on="ts_code", how="left")
-            df.rename(columns={ic: "industry_l1"}, inplace=True)
+
+    member_path = os.path.join(DATA_ROOT, "sw_industry", "sw_index_member.parquet")
+    ind_path = os.path.join(DATA_ROOT, "sw_industry", "sw_industry_l1.parquet")
+    if os.path.exists(member_path) and os.path.exists(ind_path):
+        member = pd.read_parquet(member_path)
+        ind = pd.read_parquet(ind_path)
+        current = member[member["is_new"] == "Y"][["index_code", "con_code"]].drop_duplicates("con_code")
+        current = current.merge(ind[["index_code", "industry_name"]], on="index_code", how="left")
+        df = df.merge(current[["con_code", "industry_name"]].rename(columns={"con_code": "ts_code", "industry_name": "industry_l1"}),
+                      on="ts_code", how="left")
 
     # 股票名称
     name_path = os.path.join(DATA_ROOT, "stock_basic.parquet")
@@ -67,8 +69,13 @@ def main():
     train_end = pd.Timestamp(BT_START)
     df_train = df_all[df_all["trade_date"] < train_end].copy()
 
-    # regime labels
-    trend = TrendModelRuleV2(TrendModelConfig())
+    # regime labels（使用与test_trend_model_v2.py一致的配置）
+    cfg_trend = TrendModelConfig(
+        confirmation_periods=3,
+        exit_tolerance=5,
+        min_hold_periods=7,
+    )
+    trend = TrendModelRuleV2(cfg_trend)
     idx_train = idx[idx["date"] < train_end].copy()
     res = trend.predict(idx_train, return_history=True)
     d2s = dict(zip(pd.to_datetime(idx_train["date"]).values, res.diagnostics["states"]))
