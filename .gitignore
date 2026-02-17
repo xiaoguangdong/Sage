@@ -37,7 +37,9 @@ sage_core/data/.DS_Store
 logs/
 session/
 checkpoints/
-images/
+images/*
+!images/backtest/
+!images/trend_model/
 *.csv
 *.parquet
 *.log
