@@ -15,8 +15,8 @@ class SelectionConfig:
     model_type: str = "rule"  # rule / lgbm / xgb
 
     # 标签配置
-    label_horizons: Tuple[int, ...] = (120,)
-    label_weights: Tuple[float, ...] = (1.0,)
+    label_horizons: Tuple[int, ...] = (10, 20)
+    label_weights: Tuple[float, ...] = (0.4, 0.6)
     risk_adjusted: bool = True
     vol_window: int = 20
     industry_rank: bool = True
@@ -389,23 +389,42 @@ class StockSelector:
         X = training_frame[list(feature_cols)].values
         y = training_frame["label"].values
 
-        if use_ranking_group:
-            y = self._to_lgbm_rank_labels(y)
-            groups = (
-                training_frame.groupby(date_col, sort=True)
-                .size()
-                .astype(int)
-                .tolist()
-            )
-            dataset = lgb.Dataset(X, label=y, group=groups)
+        # 按时间切分训练/验证集（最后20%日期做验证）
+        val_ratio = 0.2
+        if date_col in training_frame.columns:
+            dates_sorted = sorted(training_frame[date_col].unique())
+            val_start = dates_sorted[int(len(dates_sorted) * (1 - val_ratio))]
+            val_mask = training_frame[date_col] >= val_start
         else:
-            dataset = lgb.Dataset(X, label=y)
+            n = len(training_frame)
+            val_mask = pd.Series([False] * int(n * (1 - val_ratio)) + [True] * (n - int(n * (1 - val_ratio))))
+
+        X_train, X_val = X[~val_mask], X[val_mask]
+        y_train, y_val = y[~val_mask], y[val_mask]
+
+        if use_ranking_group:
+            y_train = self._to_lgbm_rank_labels(y_train)
+            y_val = self._to_lgbm_rank_labels(y_val)
+            train_groups = (
+                training_frame[~val_mask].groupby(date_col, sort=True)
+                .size().astype(int).tolist()
+            )
+            val_groups = (
+                training_frame[val_mask].groupby(date_col, sort=True)
+                .size().astype(int).tolist()
+            )
+            dataset = lgb.Dataset(X_train, label=y_train, group=train_groups)
+            val_dataset = lgb.Dataset(X_val, label=y_val, group=val_groups, reference=dataset)
+        else:
+            dataset = lgb.Dataset(X_train, label=y_train)
+            val_dataset = lgb.Dataset(X_val, label=y_val, reference=dataset)
 
         self.model = lgb.train(
             params,
             dataset,
             num_boost_round=int(params.get("num_boost_round", 500)),
-            valid_sets=[dataset],
+            valid_sets=[val_dataset],
+            valid_names=["val"],
             callbacks=[
                 lgb.log_evaluation(period=50),
                 lgb.early_stopping(stopping_rounds=int(params.get("early_stopping_rounds", 50)), verbose=True),
