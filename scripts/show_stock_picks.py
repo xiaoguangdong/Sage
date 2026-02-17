@@ -51,12 +51,11 @@ def load_data():
         df = df.merge(current[["con_code", "industry_name"]].rename(columns={"con_code": "ts_code", "industry_name": "industry_l1"}),
                       on="ts_code", how="left")
 
-    # 股票名称
-    name_path = os.path.join(DATA_ROOT, "stock_basic.parquet")
+    # 股票名称（从同花顺概念成员表获取）
+    name_path = os.path.join(DATA_ROOT, "concepts", "ths_member.parquet")
     if os.path.exists(name_path):
-        names = pd.read_parquet(name_path)
-        if "name" in names.columns and "ts_code" in names.columns:
-            df = df.merge(names[["ts_code", "name"]].drop_duplicates("ts_code"), on="ts_code", how="left")
+        names = pd.read_parquet(name_path)[["con_code", "con_name"]].drop_duplicates("con_code")
+        df = df.merge(names.rename(columns={"con_code": "ts_code", "con_name": "name"}), on="ts_code", how="left")
 
     return idx, df
 
