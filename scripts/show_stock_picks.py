@@ -1,0 +1,194 @@
+"""展示回测期间每期选股结果（单一模型 vs Regime模型）"""
+import os, sys, copy, logging, warnings
+import numpy as np, pandas as pd
+
+warnings.filterwarnings("ignore")
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
+from sage_core.stock_selection.regime_stock_selector import (
+    RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
+)
+from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
+
+logging.basicConfig(level=logging.WARNING)
+DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
+
+BT_START, BT_END = "2024-09-10", "2026-01-01"
+TRAIN_YEARS = [2020, 2021, 2022, 2023, 2024]
+HOLD_DAYS, TOP_N = 20, 30
+
+
+def load_data():
+    idx = pd.read_parquet(os.path.join(DATA_ROOT, "index", "index_000300_SH_ohlc.parquet"))
+    idx["date"] = pd.to_datetime(idx["date"])
+    idx = idx.sort_values("date").reset_index(drop=True)
+
+    frames = []
+    for y in TRAIN_YEARS + [2025, 2026]:
+        p = os.path.join(DATA_ROOT, "daily", f"daily_{y}.parquet")
+        if os.path.exists(p):
+            frames.append(pd.read_parquet(p))
+    stk = pd.concat(frames, ignore_index=True)
+    stk["trade_date"] = pd.to_datetime(stk["trade_date"], format="%Y%m%d")
+    if "turnover" not in stk.columns and "vol" in stk.columns:
+        stk["turnover"] = stk["vol"]
+
+    basic = pd.read_parquet(os.path.join(DATA_ROOT, "daily_basic_all.parquet"))
+    basic["trade_date"] = pd.to_datetime(basic["trade_date"], format="%Y%m%d")
+
+    ind_path = os.path.join(DATA_ROOT, "sw_industry", "sw_industry_l1.parquet")
+    ind = pd.read_parquet(ind_path) if os.path.exists(ind_path) else pd.DataFrame()
+
+    # merge
+    cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"] if c in basic.columns]
+    df = stk.merge(basic[cols], on=["ts_code", "trade_date"], how="left")
+    if not ind.empty and "ts_code" in ind.columns:
+        ic = "industry_name" if "industry_name" in ind.columns else "industry_l1"
+        if ic in ind.columns:
+            df = df.merge(ind[["ts_code", ic]].drop_duplicates("ts_code"), on="ts_code", how="left")
+            df.rename(columns={ic: "industry_l1"}, inplace=True)
+
+    # 股票名称
+    name_path = os.path.join(DATA_ROOT, "stock_basic.parquet")
+    if os.path.exists(name_path):
+        names = pd.read_parquet(name_path)
+        if "name" in names.columns and "ts_code" in names.columns:
+            df = df.merge(names[["ts_code", "name"]].drop_duplicates("ts_code"), on="ts_code", how="left")
+
+    return idx, df
+
+
+def main():
+    print("加载数据...")
+    idx, df_all = load_data()
+    has_name = "name" in df_all.columns
+
+    train_end = pd.Timestamp(BT_START)
+    df_train = df_all[df_all["trade_date"] < train_end].copy()
+
+    # regime labels
+    trend = TrendModelRuleV2(TrendModelConfig())
+    idx_train = idx[idx["date"] < train_end].copy()
+    res = trend.predict(idx_train, return_history=True)
+    d2s = dict(zip(pd.to_datetime(idx_train["date"]).values, res.diagnostics["states"]))
+    df_train["regime"] = df_train["trade_date"].map(lambda d: d2s.get(pd.Timestamp(d), 1))
+
+    # train
+    cfg = SelectionConfig(model_type="lgbm", label_neutralized=True,
+                          ic_filter_enabled=True, ic_threshold=0.02,
+                          ic_ir_threshold=0.3, industry_col="industry_l1")
+    print("训练单一模型...")
+    single = StockSelector(copy.deepcopy(cfg))
+    single.fit(df_train)
+
+    print("训练Regime模型...")
+    regime_model = RegimeStockSelector(RegimeSelectionConfig(base_config=copy.deepcopy(cfg)))
+    regime_model.fit(df_train, df_train["regime"])
+
+    # bt regime
+    idx_bt = idx[idx["date"] <= BT_END].copy()
+    res_bt = trend.predict(idx_bt, return_history=True)
+    d2s_bt = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
+
+    bt_dates = sorted(df_all[(df_all["trade_date"] >= BT_START) & (df_all["trade_date"] <= BT_END)]["trade_date"].unique())
+    rb_dates = bt_dates[::HOLD_DAYS]
+
+    all_picks = []
+
+    for i, rb in enumerate(rb_dates):
+        hold_end = rb_dates[i + 1] if i + 1 < len(rb_dates) else bt_dates[-1]
+        df_day = df_all[df_all["trade_date"] == rb]
+        if len(df_day) < 50:
+            continue
+        regime = d2s_bt.get(pd.Timestamp(rb), 1)
+        rname = REGIME_NAMES.get(regime, "?")
+
+        try:
+            pred_s = single.predict(df_day)
+            top_s = pred_s.nlargest(TOP_N, "score")
+
+            pred_r = regime_model.predict(df_day, regime)
+            top_r = pred_r.nlargest(TOP_N, "score")
+
+            # 计算持仓期收益
+            hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]
+            def calc_ret(codes):
+                rets = {}
+                for c in codes:
+                    s = hold[hold["ts_code"] == c].sort_values("trade_date")
+                    if len(s) >= 2:
+                        rets[c] = s["close"].iloc[-1] / s["close"].iloc[0] - 1
+                return rets
+
+            rets_s = calc_ret(top_s["ts_code"].tolist())
+            rets_r = calc_ret(top_r["ts_code"].tolist())
+
+            # 记录
+            for code, row in top_s.set_index("ts_code").iterrows():
+                name = df_day[df_day["ts_code"] == code]["name"].iloc[0] if has_name and code in df_day["ts_code"].values else ""
+                ind = df_day[df_day["ts_code"] == code]["industry_l1"].iloc[0] if "industry_l1" in df_day.columns and code in df_day["ts_code"].values else ""
+                all_picks.append({
+                    "调仓日": str(rb)[:10], "模型": "单一", "regime": rname,
+                    "ts_code": code, "名称": name, "行业": ind,
+                    "score": round(row["score"], 4),
+                    "持仓收益": round(rets_s.get(code, 0), 4),
+                })
+            for code, row in top_r.set_index("ts_code").iterrows():
+                name = df_day[df_day["ts_code"] == code]["name"].iloc[0] if has_name and code in df_day["ts_code"].values else ""
+                ind = df_day[df_day["ts_code"] == code]["industry_l1"].iloc[0] if "industry_l1" in df_day.columns and code in df_day["ts_code"].values else ""
+                all_picks.append({
+                    "调仓日": str(rb)[:10], "模型": "Regime", "regime": rname,
+                    "ts_code": code, "名称": name, "行业": ind,
+                    "score": round(row["score"], 4),
+                    "持仓收益": round(rets_r.get(code, 0), 4),
+                })
+
+            # 打印摘要
+            overlap = set(top_s["ts_code"]) & set(top_r["ts_code"])
+            avg_s = np.mean(list(rets_s.values())) if rets_s else 0
+            avg_r = np.mean(list(rets_r.values())) if rets_r else 0
+            print(f"\n{'='*70}")
+            print(f"调仓日: {str(rb)[:10]}  [{rname}]  重叠: {len(overlap)}/{TOP_N}")
+            print(f"  单一模型 avg={avg_s:+.2%}  |  Regime模型 avg={avg_r:+.2%}")
+
+            # Top 10
+            print(f"  --- 单一模型 Top10 ---")
+            for _, r in top_s.head(10).iterrows():
+                c = r["ts_code"]
+                nm = df_day[df_day["ts_code"]==c]["name"].iloc[0] if has_name and c in df_day["ts_code"].values else ""
+                ret = rets_s.get(c, 0)
+                print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
+
+            print(f"  --- Regime模型 Top10 ---")
+            for _, r in top_r.head(10).iterrows():
+                c = r["ts_code"]
+                nm = df_day[df_day["ts_code"]==c]["name"].iloc[0] if has_name and c in df_day["ts_code"].values else ""
+                ret = rets_r.get(c, 0)
+                print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
+
+        except Exception as e:
+            print(f"  {str(rb)[:10]} 失败: {e}")
+
+    # 保存CSV
+    df_picks = pd.DataFrame(all_picks)
+    out = os.path.join(os.path.dirname(__file__), "..", "data", "backtest_picks.csv")
+    os.makedirs(os.path.dirname(out), exist_ok=True)
+    df_picks.to_csv(out, index=False, encoding="utf-8-sig")
+    print(f"\n选股明细已保存: {out}")
+    print(f"总记录: {len(df_picks)}, 调仓期数: {df_picks['调仓日'].nunique()}")
+
+    # 汇总统计
+    print(f"\n{'='*70}")
+    print("行业分布统计（全部调仓期合计）")
+    for model in ["单一", "Regime"]:
+        sub = df_picks[df_picks["模型"] == model]
+        ind_counts = sub["行业"].value_counts().head(10)
+        print(f"\n  [{model}模型] Top10行业:")
+        for ind, cnt in ind_counts.items():
+            avg = sub[sub["行业"] == ind]["持仓收益"].mean()
+            print(f"    {ind:8s}: {cnt:3d}次  avg_ret={avg:+.2%}")
+
+
+if __name__ == "__main__":
+    main()
