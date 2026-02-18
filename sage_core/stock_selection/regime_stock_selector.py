@@ -37,9 +37,9 @@ class RegimeSelectionConfig:
 
     # 各 regime 的 LightGBM 参数覆盖（key: regime int）
     regime_lgbm_overrides: Dict[int, Dict] = field(default_factory=lambda: {
-        RISK_ON: {"min_data_in_leaf": 500, "lambda_l2": 10.0},
-        NEUTRAL: {"min_data_in_leaf": 500, "lambda_l2": 10.0},
-        RISK_OFF: {"min_data_in_leaf": 800, "lambda_l2": 15.0},
+        RISK_ON: {"min_data_in_leaf": 200, "lambda_l2": 5.0},
+        NEUTRAL: {"min_data_in_leaf": 200, "lambda_l2": 5.0},
+        RISK_OFF: {"min_data_in_leaf": 300, "lambda_l2": 8.0},
     })
 
     # 趋势模型配置

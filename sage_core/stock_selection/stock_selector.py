@@ -29,15 +29,19 @@ class SelectionConfig:
     
     # P2: 因子 IC 筛选（防过拟合）
     ic_filter_enabled: bool = True   # 启用 IC 筛选
-    ic_threshold: float = 0.02       # IC 阈值（|IC| > 0.02）
-    ic_ir_threshold: float = 0.3     # IC_IR 阈值
-    ic_hit_rate_threshold: float = 0.55  # IC 胜率阈值（IC>0 的月份占比）
+    ic_threshold: float = 0.015      # IC 阈值（放宽：A股单因子IC普遍偏低）
+    ic_ir_threshold: float = 0.2     # IC_IR 阈值（放宽：允许更多因子进入模型）
+    ic_hit_rate_threshold: float = 0.50  # IC 胜率阈值（放宽：50%即可）
     max_corr_threshold: float = 0.7  # 共线性阈值
 
     # 列名配置
     date_col: str = "trade_date"
     code_col: str = "ts_code"
     price_col: str = "close"
+
+    # 股票池过滤
+    exclude_bj: bool = True   # 排除北交所
+    exclude_st: bool = True   # 排除ST/*ST（需要name列）
 
     # 特征
     feature_cols: Optional[Tuple[str, ...]] = None
@@ -50,14 +54,14 @@ class SelectionConfig:
         "objective": "regression",
         "metric": "rmse",
         "learning_rate": 0.02,        # ↓ 降低学习率
-        "num_leaves": 15,             # ↓ 从31降到15，降低复杂度
-        "max_depth": 4,               # ↓ 限制树深
-        "min_data_in_leaf": 500,      # ↑ 防过拟合核心参数
+        "num_leaves": 31,             # ↑ 从15提升，允许更复杂模式
+        "max_depth": 6,               # ↑ 从4提升，捕获特征交互
+        "min_data_in_leaf": 200,      # ↓ 从500降低，学习细粒度模式
         "feature_fraction": 0.6,      # ↓ 特征采样
         "bagging_fraction": 0.6,      # ↓ 数据采样
         "bagging_freq": 5,
         "lambda_l1": 1.0,             # L1 正则
-        "lambda_l2": 10.0,            # L2 正则（增强）
+        "lambda_l2": 5.0,             # L2 正则（适度放松）
         "min_gain_to_split": 0.01,    # 分裂最小增益
         "verbosity": -1,
         "seed": 42,
@@ -96,13 +100,14 @@ class StockSelector:
     # 公共入口
     # -----------------------------
     def fit(self, df: pd.DataFrame, sample_weight: Optional[np.ndarray] = None) -> "StockSelector":
+        if sample_weight is not None:
+            df = df.copy()
+            df["_sample_weight"] = sample_weight
         df_features = self.prepare_features(df)
         labels = self.build_labels(df_features)
 
         train_df = df_features.copy()
         train_df["label"] = labels
-        if sample_weight is not None:
-            train_df["_sample_weight"] = sample_weight
         valid_mask = train_df["label"].notna()
         train_df = train_df[valid_mask]
 
@@ -198,9 +203,26 @@ class StockSelector:
     # -----------------------------
     # 特征与标签
     # -----------------------------
+    def _filter_universe(self, df: pd.DataFrame) -> pd.DataFrame:
+        """过滤股票池：排除北交所(.BJ)和ST/*ST股票"""
+        code_col = self.config.code_col
+        n_before = len(df)
+        if self.config.exclude_bj:
+            df = df[~df[code_col].str.endswith(".BJ")]
+        if self.config.exclude_st:
+            if "is_st" in df.columns:
+                df = df[~df["is_st"]]
+            elif "name" in df.columns:
+                df = df[~df["name"].str.upper().str.contains("ST", na=False)]
+        n_after = len(df)
+        if n_before != n_after:
+            logger.info(f"股票池过滤: {n_before} -> {n_after} (排除 {n_before - n_after} 条)")
+        return df
+
     def prepare_features(self, df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         self._validate_columns(df, [self.config.date_col, self.config.code_col, self.config.price_col])
+        df = self._filter_universe(df)
         df = df.sort_values([self.config.code_col, self.config.date_col])
 
         if self.config.feature_cols:
@@ -226,6 +248,29 @@ class StockSelector:
         rolling_dd = group[price_col].transform(lambda s: s / s.rolling(60).max() - 1)
         df["max_drawdown_60d"] = rolling_dd.groupby(df[code_col]).rolling(60).min().reset_index(level=0, drop=True)
 
+        # ── 新增因子 ──
+        # RSI(14)
+        delta = group[price_col].diff()
+        gain = delta.where(delta > 0, 0.0)
+        loss = (-delta).where(delta < 0, 0.0)
+        avg_gain = gain.groupby(df[code_col]).transform(lambda s: s.rolling(14).mean())
+        avg_loss = loss.groupby(df[code_col]).transform(lambda s: s.rolling(14).mean())
+        rs = avg_gain / avg_loss.replace(0, np.nan)
+        df["rsi_14"] = 100 - 100 / (1 + rs)
+
+        # MA斜率（趋势强度）
+        ma20 = group[price_col].transform(lambda s: s.rolling(20).mean())
+        df["ma_20_slope"] = ma20.groupby(df[code_col]).pct_change(5)
+
+        # 成交量趋势
+        if "vol" in df.columns:
+            vol_ma5 = group["vol"].transform(lambda s: s.rolling(5).mean())
+            vol_ma20 = group["vol"].transform(lambda s: s.rolling(20).mean())
+            df["volume_trend_20d"] = vol_ma5 / vol_ma20.replace(0, np.nan)
+
+        # 动量加速度（短期vs中期）
+        df["momentum_accel"] = df["ret_5d"] - df["ret_20d"]
+
         if "turnover" in df.columns:
             df["turnover_20d_mean"] = group["turnover"].transform(lambda s: s.rolling(20).mean())
             df["turnover_20d_std"] = group["turnover"].transform(lambda s: s.rolling(20).std())
@@ -239,6 +284,8 @@ class StockSelector:
         if self.config.industry_col and self.config.industry_col in df.columns:
             df["industry_ret_20d"] = df.groupby([date_col, self.config.industry_col])["ret_20d"].transform("mean")
             df["industry_ret_60d"] = df.groupby([date_col, self.config.industry_col])["ret_60d"].transform("mean")
+            # 行业超额收益
+            df["excess_ret_20d"] = df["ret_20d"] - df["industry_ret_20d"]
 
         pe_col = self._first_existing_column(df, ["pe_ttm", "pe", "peTTM"])
         pb_col = self._first_existing_column(df, ["pb", "pbMRQ"])
@@ -280,6 +327,10 @@ class StockSelector:
             df["pe_percentile"] = df.groupby(date_col)["pe_ttm"].rank(pct=True)
         if "pb" in df.columns:
             df["pb_percentile"] = df.groupby(date_col)["pb"].rank(pct=True)
+        if "total_mv" in df.columns:
+            df["mv_percentile"] = df.groupby(date_col)["total_mv"].rank(pct=True)
+        if "turnover_rate" in df.columns:
+            df["turnover_rate_percentile"] = df.groupby(date_col)["turnover_rate"].rank(pct=True)
 
         df["trade_date"] = df[date_col]
         return df
@@ -493,18 +544,25 @@ class StockSelector:
             "ocf_to_profit",
             "pe_percentile",
             "pb_percentile",
+            "mv_percentile",
+            "turnover_rate_percentile",
             "ret_5d",
             "ret_10d",
             "ret_20d",
             "ret_60d",
+            "excess_ret_20d",
+            "momentum_accel",
             "industry_ret_20d",
             "industry_ret_60d",
             "ma_20_ratio",
             "ma_60_ratio",
+            "ma_20_slope",
+            "rsi_14",
             "northbound_hold_ratio",
             "northbound_net_flow_20d",
             "turnover_ratio_20d",
             "amount_ratio_20d",
+            "volume_trend_20d",
             "vol_20d",
             "downside_vol_20d",
             "max_drawdown_60d",

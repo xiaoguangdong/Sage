@@ -67,6 +67,13 @@ def load_all_data():
         df = df.merge(current[["con_code", "industry_name"]].rename(columns={"con_code": "ts_code", "industry_name": "industry_l1"}),
                       on="ts_code", how="left")
 
+    # ST 标记（用于股票池过滤）
+    ths_path = os.path.join(DATA_ROOT, "concepts", "ths_member.parquet")
+    if os.path.exists(ths_path):
+        ths = pd.read_parquet(ths_path)
+        st_codes = set(ths[ths["con_name"].str.contains("ST", na=False)]["con_code"].unique())
+        df["is_st"] = df["ts_code"].isin(st_codes)
+
     return idx, df
 
 
@@ -87,8 +94,7 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     trend = TrendModelRuleV2(cfg_trend)
 
     cfg = SelectionConfig(model_type="lgbm", label_neutralized=True,
-                          ic_filter_enabled=True, ic_threshold=0.02,
-                          ic_ir_threshold=0.3, industry_col="industry_l1")
+                          ic_filter_enabled=True, industry_col="industry_l1")
 
     single = StockSelector(copy.deepcopy(cfg))
     single.fit(df_train)
