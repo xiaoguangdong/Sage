@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
-from typing import Dict, List
+from typing import Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -288,6 +288,54 @@ class EntryModelLR:
         
         return df_result
     
+    def predict_batch(
+        self,
+        stock_histories: Dict[str, pd.DataFrame],
+        existing_holdings: Optional[set] = None,
+    ) -> Dict[str, bool]:
+        """
+        批量预测多只股票的买入信号
+
+        Args:
+            stock_histories: {ts_code: DataFrame}，每只股票的历史日线数据（需含 close, turnover）
+            existing_holdings: 已持有的股票集合，这些股票默认放行
+
+        Returns:
+            {ts_code: bool}，True 表示有买入信号
+        """
+        if existing_holdings is None:
+            existing_holdings = set()
+
+        if not self.is_trained:
+            # 未训练时全部放行
+            return {ts_code: True for ts_code in stock_histories}
+
+        results = {}
+        for ts_code, hist_df in stock_histories.items():
+            # 已持有的股票直接放行
+            if ts_code in existing_holdings:
+                results[ts_code] = True
+                continue
+
+            try:
+                if len(hist_df) < 30:
+                    # 历史数据不足，放行
+                    results[ts_code] = True
+                    continue
+
+                pred = self.predict(hist_df)
+                if pred.empty:
+                    results[ts_code] = True
+                    continue
+
+                # 取最后一天的信号
+                results[ts_code] = bool(pred['entry_signal'].iloc[-1] == 1)
+            except Exception as e:
+                logger.debug(f"EntryModel predict failed for {ts_code}: {e}")
+                results[ts_code] = True  # 异常时放行
+
+        return results
+
     def get_model_params(self) -> Dict:
         """
         获取模型参数
