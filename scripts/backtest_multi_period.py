@@ -18,6 +18,21 @@ HOLD_DAYS, TOP_N = 20, 30
 # 趋势联动仓位
 REGIME_POSITION = {0: 0.3, 1: 0.6, 2: 1.0}  # bear/neutral/bull
 
+
+def build_ma_regime(idx: pd.DataFrame) -> dict:
+    """用 MA20/MA60 均线判断中期 regime（选股用，比趋势模型更稳定）"""
+    df = idx.sort_values("date").copy()
+    df["ma20"] = df["close"].rolling(20).mean()
+    df["ma60"] = df["close"].rolling(60).mean()
+    regime = np.where(
+        (df["close"] > df["ma60"]) & (df["ma20"] > df["ma60"]), 2,  # bull
+        np.where(
+            (df["close"] < df["ma60"]) & (df["ma20"] < df["ma60"]), 0,  # bear
+            1  # neutral
+        )
+    )
+    return dict(zip(pd.to_datetime(df["date"]).values, regime))
+
 # 宏观级别 regime 标签（基于沪深300实际走势人工划分）
 MACRO_REGIMES = [
     ("2020-01-01", "2021-02-28", 2),  # bull +28.5%
@@ -85,7 +100,7 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     # 训练用宏观级别 regime 标签（人工划分，避免趋势模型噪声污染）
     df_train["regime"] = assign_macro_regime(df_train["trade_date"])
 
-    # 推理用趋势模型（实时状态判断）
+    # 推理用趋势模型（仓位控制，灵敏）
     cfg_trend = TrendModelConfig(
         confirmation_periods=3,
         exit_tolerance=5,
@@ -106,8 +121,10 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     df_prepared = single.prepare_features(df_all)
 
     idx_bt = idx[idx["date"] <= bt_end].copy()
+    # 选股regime：MA均线（稳定）；仓位regime：趋势模型（灵敏）
+    d2s_ma = build_ma_regime(idx_bt)
     res_bt = trend.predict(idx_bt, return_history=True)
-    d2s_bt = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
+    d2s_trend = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
 
     bt_dates = sorted(df_all[(df_all["trade_date"] >= bt_start) & (df_all["trade_date"] <= bt_end)]["trade_date"].unique())
     rb_dates = bt_dates[::HOLD_DAYS]
@@ -119,9 +136,11 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
         df_day = df_prepared[df_prepared["trade_date"] == rb]
         if len(df_day) < 50:
             continue
-        regime = d2s_bt.get(pd.Timestamp(rb), 1)
+        # 选股用MA regime（稳定），仓位用趋势模型regime（灵敏）
+        regime = d2s_ma.get(pd.Timestamp(rb), 1)
         rname = REGIME_NAMES.get(regime, "?")
-        pos_ratio = REGIME_POSITION.get(regime, 0.6)
+        trend_regime = d2s_trend.get(pd.Timestamp(rb), 1)
+        pos_ratio = REGIME_POSITION.get(trend_regime, 0.6)
 
         try:
             pred_s = single.predict_prepared(df_day)

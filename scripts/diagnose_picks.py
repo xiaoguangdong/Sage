@@ -9,7 +9,6 @@ from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelec
 from sage_core.stock_selection.regime_stock_selector import (
     RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
 )
-from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
 from scripts.backtest_multi_period import load_all_data, assign_macro_regime, HOLD_DAYS, MACRO_REGIMES
 
 TOP_N = 30
@@ -46,10 +45,9 @@ def run_diagnose(bt_start, bt_end, train_years):
 
     df_prepared = single.prepare_features(df_all)
 
-    trend = TrendModelRuleV2(TrendModelConfig(confirmation_periods=3, exit_tolerance=5, min_hold_periods=7))
     idx_bt = idx[idx["date"] <= bt_end].copy()
-    res_bt = trend.predict(idx_bt, return_history=True)
-    d2s_bt = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
+    from scripts.backtest_multi_period import build_ma_regime
+    d2s_bt = build_ma_regime(idx_bt)
 
     bt_dates = sorted(df_all[(df_all["trade_date"] >= bt_start) & (df_all["trade_date"] <= bt_end)]["trade_date"].unique())
     rb_dates = bt_dates[::HOLD_DAYS]
