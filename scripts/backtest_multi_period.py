@@ -18,6 +18,23 @@ HOLD_DAYS, TOP_N = 20, 30
 # 趋势联动仓位
 REGIME_POSITION = {0: 0.3, 1: 0.6, 2: 1.0}  # bear/neutral/bull
 
+# 宏观级别 regime 标签（基于沪深300实际走势人工划分）
+MACRO_REGIMES = [
+    ("2020-01-01", "2021-02-28", 2),  # bull +28.5%
+    ("2021-03-01", "2023-12-31", 0),  # bear -36.7%
+    ("2024-01-01", "2024-08-31", 1),  # neutral -1.9%
+    ("2024-09-01", "2026-12-31", 2),  # bull +41.8%
+]
+
+
+def assign_macro_regime(dates: pd.Series) -> pd.Series:
+    """根据宏观日期区间分配 regime 标签"""
+    regime = pd.Series(1, index=dates.index)  # 默认 neutral
+    for start, end, r in MACRO_REGIMES:
+        mask = (dates >= start) & (dates <= end)
+        regime[mask] = r
+    return regime
+
 
 def load_all_data():
     idx = pd.read_parquet(os.path.join(DATA_ROOT, "index", "index_000300_SH_ohlc.parquet"))
@@ -58,17 +75,16 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     train_end = pd.Timestamp(bt_start)
     df_train = df_all[df_all["trade_date"] < train_end].copy()
 
-    # 使用与test_trend_model_v2.py一致的配置（更敏感，识别及时）
+    # 训练用宏观级别 regime 标签（人工划分，避免趋势模型噪声污染）
+    df_train["regime"] = assign_macro_regime(df_train["trade_date"])
+
+    # 推理用趋势模型（实时状态判断）
     cfg_trend = TrendModelConfig(
         confirmation_periods=3,
         exit_tolerance=5,
         min_hold_periods=7,
     )
     trend = TrendModelRuleV2(cfg_trend)
-    idx_train = idx[idx["date"] < train_end].copy()
-    res = trend.predict(idx_train, return_history=True)
-    d2s = dict(zip(pd.to_datetime(idx_train["date"]).values, res.diagnostics["states"]))
-    df_train["regime"] = df_train["trade_date"].map(lambda d: d2s.get(pd.Timestamp(d), 1))
 
     cfg = SelectionConfig(model_type="lgbm", label_neutralized=True,
                           ic_filter_enabled=True, ic_threshold=0.02,
