@@ -118,14 +118,16 @@ def main():
             print(f"  单一模型 Top{SHOW_TOP}:")
             for _, r in top_s.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = df_day[df_day["ts_code"]==c]["name"].iloc[0] if has_name and c in df_day["ts_code"].values else ""
+                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
+                if nm == "nan": nm = ""
                 ret = rets_s.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
 
             print(f"  Regime模型 Top{SHOW_TOP}:")
             for _, r in top_r.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = df_day[df_day["ts_code"]==c]["name"].iloc[0] if has_name and c in df_day["ts_code"].values else ""
+                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
+                if nm == "nan": nm = ""
                 ret = rets_r.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
             print()

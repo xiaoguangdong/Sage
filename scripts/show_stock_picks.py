@@ -17,6 +17,7 @@ DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
 BT_START, BT_END = "2024-09-10", "2026-01-01"
 TRAIN_YEARS = [2020, 2021, 2022, 2023, 2024]
 HOLD_DAYS, TOP_N = 20, 30
+SHOW_TOP = 5
 
 
 def load_data():
@@ -158,18 +159,20 @@ def main():
             print(f"调仓日: {str(rb)[:10]}  [{rname}]  重叠: {len(overlap)}/{TOP_N}")
             print(f"  单一模型 avg={avg_s:+.2%}  |  Regime模型 avg={avg_r:+.2%}")
 
-            # Top 10
-            print(f"  --- 单一模型 Top10 ---")
-            for _, r in top_s.head(10).iterrows():
+            # Top N
+            print(f"  --- 单一模型 Top{SHOW_TOP} ---")
+            for _, r in top_s.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = df_day[df_day["ts_code"]==c]["name"].iloc[0] if has_name and c in df_day["ts_code"].values else ""
+                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
+                if nm == "nan": nm = ""
                 ret = rets_s.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
 
-            print(f"  --- Regime模型 Top10 ---")
-            for _, r in top_r.head(10).iterrows():
+            print(f"  --- Regime模型 Top{SHOW_TOP} ---")
+            for _, r in top_r.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = df_day[df_day["ts_code"]==c]["name"].iloc[0] if has_name and c in df_day["ts_code"].values else ""
+                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
+                if nm == "nan": nm = ""
                 ret = rets_r.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
 
