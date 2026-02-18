@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple
 import pandas as pd
 
 from .types import BacktestConfig, BacktestResult
+from .cost_model import TradingCostModel, create_default_cost_model
 
 
 @dataclass
@@ -19,14 +20,21 @@ class SimpleBacktestEngine:
     """
     简化回测引擎
 
-    - 支持成本模型（单边 cost_rate）
+    - 支持完整成本模型（固定成本 + 滑点 + 市场冲击）
     - 支持最大持仓数、行业上限
     - 采用等权持仓（或传入权重）
     - 仅用于研究回测骨架
     """
 
-    def __init__(self, config: Optional[BacktestConfig] = None):
+    def __init__(
+        self,
+        config: Optional[BacktestConfig] = None,
+        cost_model: Optional[TradingCostModel] = None,
+        use_advanced_cost: bool = True,
+    ):
         self.config = config or BacktestConfig()
+        self.cost_model = cost_model or create_default_cost_model()
+        self.use_advanced_cost = use_advanced_cost
 
     def run(self, signals: pd.DataFrame, returns: pd.DataFrame, industry_map: Optional[pd.DataFrame] = None) -> BacktestResult:
         """
@@ -82,7 +90,18 @@ class SimpleBacktestEngine:
                     signals_by_date.get(trade_date),
                 )
 
-            cost = turnover * self.config.cost_rate
+            # 计算交易成本
+            if self.use_advanced_cost:
+                # 使用完整成本模型（固定成本 + 滑点 + 市场冲击）
+                cost = self.cost_model.calculate_turnover_cost(
+                    turnover=turnover,
+                    portfolio_value=portfolio_values[-1],
+                    market_data=day_returns,
+                )
+            else:
+                # 使用简单成本率（向后兼容）
+                cost = turnover * self.config.cost_rate
+
             daily_ret -= cost
 
             portfolio_returns.append(daily_ret)
