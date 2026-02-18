@@ -325,33 +325,89 @@ class StrategyBacktester:
 
 # ==================== 策略函数 ====================
 
-def create_champion_strategy_fn(selector_config: SelectionConfig):
-    """创建 Champion 策略函数"""
+def create_champion_strategy_fn(
+    daily_df: pd.DataFrame,
+    daily_basic_df: pd.DataFrame,
+    train_end: str,
+    daily_dir: Path = None,
+    daily_basic_path: Path = None,
+):
+    """创建 Champion 策略函数（预训练）"""
+    import copy
+
+    basic_cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
+                  if c in daily_basic_df.columns]
+
+    # 加载训练期历史数据（train_end 前1年）
+    train_frames = []
+    if daily_dir is not None:
+        train_start_year = max(2019, int(train_end[:4]) - 1)
+        for year in range(train_start_year, int(train_end[:4]) + 1):
+            p = daily_dir / f"daily_{year}.parquet"
+            if p.exists():
+                df_y = pd.read_parquet(p)
+                train_frames.append(df_y[df_y["trade_date"].astype(str) < train_end])
+
+    if train_frames:
+        df_hist = pd.concat(train_frames, ignore_index=True)
+        if daily_basic_path and daily_basic_path.exists():
+            basic_hist = pd.read_parquet(daily_basic_path)
+            basic_hist = basic_hist[basic_hist["trade_date"].astype(str) < train_end]
+            hist_basic_cols = [c for c in basic_cols if c in basic_hist.columns]
+            df_hist = df_hist.merge(basic_hist[hist_basic_cols], on=["ts_code", "trade_date"], how="left")
+    else:
+        df_hist = pd.DataFrame()
+
+    # 回测期数据
+    df_backtest = daily_df.merge(daily_basic_df[basic_cols], on=["ts_code", "trade_date"], how="left")
+    df_all = pd.concat([df_hist, df_backtest], ignore_index=True) if not df_hist.empty else df_backtest
+
+    # 训练数据
+    df_train = df_all[df_all["trade_date"].astype(str) < train_end].copy()
+    df_train["trade_date"] = pd.to_datetime(df_train["trade_date"], format="%Y%m%d", errors="coerce")
+
+    # 训练模型
+    selector_config = SelectionConfig(
+        model_type="lgbm",
+        label_horizons=(20, 60, 120),
+        label_weights=(0.5, 0.3, 0.2),
+        risk_adjusted=True,
+        label_neutralized=True,
+        ic_filter_enabled=False,
+        industry_rank=False,
+        exclude_bj=True,
+        exclude_st=True,
+    )
+    print(f"[DEBUG] Champion cfg.industry_rank = {selector_config.industry_rank}")
     selector = StockSelector(selector_config)
-    is_fitted = False
+    selector.fit(df_train)
+
+    # 预计算回测期特征
+    df_backtest["trade_date"] = pd.to_datetime(df_backtest["trade_date"], format="%Y%m%d", errors="coerce")
+    df_prepared = selector.prepare_features(df_backtest)
 
     def strategy_fn(day_data: pd.DataFrame, trade_date: str, daily_basic: pd.DataFrame, fina: pd.DataFrame) -> pd.DataFrame:
-        nonlocal is_fitted
-        
         try:
-            if not is_fitted:
-                selector.fit(day_data)
-                is_fitted = True
-            
-            result = selector.predict(day_data)
-            
+            td = pd.to_datetime(trade_date)
+            df_day = df_prepared[df_prepared["trade_date"] == td]
+
+            if df_day.empty or len(df_day) < 50:
+                return pd.DataFrame(columns=SIGNAL_SCHEMA)
+
+            result = selector.predict_prepared(df_day)
+
             if result.empty:
                 return pd.DataFrame(columns=SIGNAL_SCHEMA)
-            
+
             # 格式化输出
-            result = result.copy()
+            result = result.nlargest(30, "score").copy()
             result["trade_date"] = trade_date
             result["model_version"] = "seed_balance_strategy@v1.0.0"
             result["confidence"] = result.get("score", 0).abs()
-            
+
             return result[["ts_code", "trade_date", "score", "rank", "confidence", "model_version"]]
-            
-        except Exception:
+
+        except Exception as e:
             return pd.DataFrame(columns=SIGNAL_SCHEMA)
 
     return strategy_fn, "seed_balance_strategy"
@@ -425,18 +481,39 @@ def create_regime_strategy_fn(
     daily_basic_df: pd.DataFrame,
     idx_df: pd.DataFrame,
     train_end: str,
+    daily_dir: Path = None,
+    daily_basic_path: Path = None,
 ):
     """创建 Regime MA 策略（预训练+预计算特征）"""
     import copy
 
-    # 合并基本面数据
     basic_cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
                   if c in daily_basic_df.columns]
-    df_all = daily_df.merge(daily_basic_df[basic_cols], on=["ts_code", "trade_date"], how="left")
 
-    # 加载行业数据
-    data_root = Path(daily_df.attrs.get("data_root", "")) if hasattr(daily_df, "attrs") else None
-    # 简化：不加载行业数据，用已有列
+    # 加载训练期历史数据（train_end 前1年，加速训练）
+    train_frames = []
+    if daily_dir is not None:
+        train_start_year = max(2019, int(train_end[:4]) - 1)
+        for year in range(train_start_year, int(train_end[:4]) + 1):
+            p = daily_dir / f"daily_{year}.parquet"
+            if p.exists():
+                df_y = pd.read_parquet(p)
+                train_frames.append(df_y[df_y["trade_date"].astype(str) < train_end])
+
+    if train_frames:
+        df_hist = pd.concat(train_frames, ignore_index=True)
+        if daily_basic_path and daily_basic_path.exists():
+            basic_hist = pd.read_parquet(daily_basic_path)
+            basic_hist = basic_hist[basic_hist["trade_date"].astype(str) < train_end]
+            hist_basic_cols = [c for c in basic_cols if c in basic_hist.columns]
+            df_hist = df_hist.merge(basic_hist[hist_basic_cols], on=["ts_code", "trade_date"], how="left")
+    else:
+        df_hist = pd.DataFrame()
+
+    # 回测期数据（用于推理）
+    df_backtest = daily_df.merge(daily_basic_df[basic_cols], on=["ts_code", "trade_date"], how="left")
+
+    df_all = pd.concat([df_hist, df_backtest], ignore_index=True) if not df_hist.empty else df_backtest
 
     # 训练数据
     df_train = df_all[df_all["trade_date"].astype(str) < train_end].copy()
@@ -445,14 +522,19 @@ def create_regime_strategy_fn(
 
     cfg = SelectionConfig(
         model_type="lgbm", label_neutralized=True,
-        ic_filter_enabled=True, exclude_bj=True, exclude_st=True,
+        ic_filter_enabled=False,  # 禁用IC过滤，加速训练
+        industry_rank=False,  # 禁用行业排名，加速训练
+        exclude_bj=True, exclude_st=True,
     )
-    regime_model = RegimeStockSelector(RegimeSelectionConfig(base_config=copy.deepcopy(cfg)))
+    print(f"[DEBUG] cfg.industry_rank = {cfg.industry_rank}")
+    regime_cfg = RegimeSelectionConfig(base_config=copy.deepcopy(cfg))
+    print(f"[DEBUG] regime_cfg.base_config.industry_rank = {regime_cfg.base_config.industry_rank}")
+    regime_model = RegimeStockSelector(regime_cfg)
     regime_model.fit(df_train, df_train["regime"])
 
-    # 预计算全量特征
-    df_all["trade_date"] = pd.to_datetime(df_all["trade_date"], format="%Y%m%d", errors="coerce")
-    df_prepared = regime_model.base_selector.prepare_features(df_all)
+    # 预计算全量特征（仅回测期）
+    df_backtest["trade_date"] = pd.to_datetime(df_backtest["trade_date"], format="%Y%m%d", errors="coerce")
+    df_prepared = regime_model.fallback_model.prepare_features(df_backtest)
 
     # MA regime
     idx_df = idx_df.copy()
@@ -553,13 +635,13 @@ def main():
     # Champion 策略
     if "champion" in strategy_names:
         print("\n准备 Champion 策略...")
-        selector_config = SelectionConfig(
-            model_type="lgbm",
-            label_horizons=(20, 60, 120),
-            label_weights=(0.5, 0.3, 0.2),
-            risk_adjusted=True,
+        strategy_fn, strategy_id = create_champion_strategy_fn(
+            daily_df=daily_df,
+            daily_basic_df=daily_basic_df,
+            train_end=args.start_date,
+            daily_dir=daily_dir,
+            daily_basic_path=daily_basic_path,
         )
-        strategy_fn, strategy_id = create_champion_strategy_fn(selector_config)
         result = backtester.run_backtest(
             trade_dates=trade_dates,
             daily_df=daily_df,
@@ -579,6 +661,7 @@ def main():
             strategy_fn, strategy_id = create_regime_strategy_fn(
                 daily_df=daily_df, daily_basic_df=daily_basic_df,
                 idx_df=idx_df, train_end=args.start_date,
+                daily_dir=daily_dir, daily_basic_path=daily_basic_path,
             )
             result = backtester.run_backtest(
                 trade_dates=trade_dates,

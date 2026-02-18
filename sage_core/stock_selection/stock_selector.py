@@ -9,6 +9,9 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+# 模块级变量：控制 industry_col 警告只打印一次
+_WARNED_INDUSTRY_COL = False
+
 
 @dataclass
 class SelectionConfig:
@@ -336,6 +339,7 @@ class StockSelector:
         return df
 
     def build_labels(self, df: pd.DataFrame) -> pd.Series:
+        global _WARNED_INDUSTRY_COL
         cfg = self.config
         self._validate_columns(df, [cfg.date_col, cfg.code_col, cfg.price_col])
 
@@ -380,7 +384,9 @@ class StockSelector:
                     if cfg.industry_col and cfg.industry_col in df.columns:
                         label = label.groupby([df[date_col], df[cfg.industry_col]]).rank(pct=True)
                     else:
-                        logger.warning("industry_col 未配置或缺失，已回退到全市场排名")
+                        if not _WARNED_INDUSTRY_COL:
+                            logger.warning("industry_col 未配置或缺失，已回退到全市场排名")
+                            _WARNED_INDUSTRY_COL = True
                         label = label.groupby(df[date_col]).rank(pct=True)
                 elif mode == "market":
                     label = label.groupby(df[date_col]).rank(pct=True)
@@ -652,23 +658,23 @@ class StockSelector:
         if label_col not in df.columns:
             return feature_cols
         
-        # 1. 计算 IC（按日期截面）
-        ic_series = {}
-        for col in feature_cols:
-            if col not in df.columns:
+        # 1. 计算 IC（按日期截面，一次性计算所有特征）
+        valid_cols = [c for c in feature_cols if c in df.columns]
+        ic_records = []
+        for _, group in df.groupby(date_col):
+            if len(group) < 30:
                 continue
-            ic_list = []
-            for date, group in df.groupby(date_col):
-                if len(group) < 30:  # 样本太少跳过
-                    continue
-                valid = group[[col, label_col]].dropna()
-                if len(valid) < 20:
-                    continue
-                ic = valid[col].corr(valid[label_col], method="spearman")
-                if not np.isnan(ic):
-                    ic_list.append(ic)
-            if ic_list:
-                ic_series[col] = pd.Series(ic_list)
+            sub = group[valid_cols + [label_col]].dropna()
+            if len(sub) < 20:
+                continue
+            ic_row = sub[valid_cols].corrwith(sub[label_col], method="spearman")
+            ic_records.append(ic_row)
+
+        if not ic_records:
+            return feature_cols
+
+        ic_df = pd.DataFrame(ic_records)
+        ic_series = {col: ic_df[col].dropna() for col in valid_cols if col in ic_df.columns and ic_df[col].notna().any()}
         
         if not ic_series:
             return feature_cols
