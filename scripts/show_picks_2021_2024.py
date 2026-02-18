@@ -77,6 +77,10 @@ def main():
     regime_model = RegimeStockSelector(RegimeSelectionConfig(base_config=copy.deepcopy(cfg)))
     regime_model.fit(df_train, df_train["regime"])
 
+    # 预计算全量特征（修复：避免单日数据导致时序特征全NaN）
+    print("预计算全量特征...")
+    df_prepared = single.prepare_features(df_all)
+
     idx_bt = idx[idx["date"] <= BT_END].copy()
     res_bt = trend.predict(idx_bt, return_history=True)
     d2s_bt = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
@@ -90,16 +94,16 @@ def main():
 
     for i, rb in enumerate(rb_dates):
         hold_end = rb_dates[i + 1] if i + 1 < len(rb_dates) else bt_dates[-1]
-        df_day = df_all[df_all["trade_date"] == rb]
+        df_day = df_prepared[df_prepared["trade_date"] == rb]
         if len(df_day) < 50:
             continue
         regime = d2s_bt.get(pd.Timestamp(rb), 1)
         rname = REGIME_NAMES.get(regime, "?")
 
         try:
-            pred_s = single.predict(df_day)
+            pred_s = single.predict_prepared(df_day)
             top_s = pred_s.nlargest(TOP_N, "score")
-            pred_r = regime_model.predict(df_day, regime)
+            pred_r = regime_model.predict_prepared(df_day, regime)
             top_r = pred_r.nlargest(TOP_N, "score")
 
             hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]

@@ -157,6 +157,10 @@ def run_backtest():
     regime_model = RegimeStockSelector(regime_cfg)
     regime_model.fit(df_train, df_train["regime"])
 
+    # 预计算全量特征（修复：避免单日数据导致时序特征全NaN）
+    print("预计算全量特征...")
+    df_prepared = single_model.prepare_features(df_all)
+
     # ── 回测 ──
     print(f"\n开始回测 {BT_START} ~ {BT_END}...")
     bt_dates = sorted(df_all[
@@ -178,7 +182,7 @@ def run_backtest():
 
     for i, rb_date in enumerate(rebalance_dates):
         hold_end = rebalance_dates[i + 1] if i + 1 < len(rebalance_dates) else bt_dates[-1]
-        df_day = df_all[df_all["trade_date"] == rb_date]
+        df_day = df_prepared[df_prepared["trade_date"] == rb_date]
         if len(df_day) < 50:
             continue
 
@@ -186,12 +190,10 @@ def run_backtest():
         regime_name = REGIME_NAMES.get(regime, "?")
 
         try:
-            # 单一模型选股
-            pred_s = single_model.predict(df_day)
+            pred_s = single_model.predict_prepared(df_day)
             top_s = pred_s.nlargest(TOP_N, "score")["ts_code"].tolist()
 
-            # Regime模型选股
-            pred_r = regime_model.predict(df_day, regime)
+            pred_r = regime_model.predict_prepared(df_day, regime)
             top_r = pred_r.nlargest(TOP_N, "score")["ts_code"].tolist()
 
             # 计算持仓期收益

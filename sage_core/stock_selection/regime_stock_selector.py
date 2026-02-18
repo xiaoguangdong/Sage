@@ -217,18 +217,17 @@ class RegimeStockSelector:
         return weights
 
     def predict(self, df: pd.DataFrame, regime: int) -> pd.DataFrame:
-        """
-        用指定 regime 的模型预测
-
-        Args:
-            df: 待预测股票数据
-            regime: 当前市场状态 (0/1/2)
-        """
         if not self.is_trained:
             raise ValueError("模型尚未训练")
-
         model = self.models.get(regime, self.fallback_model)
         return model.predict(df)
+
+    def predict_prepared(self, df_features: pd.DataFrame, regime: int) -> pd.DataFrame:
+        """对已计算好特征的数据直接预测"""
+        if not self.is_trained:
+            raise ValueError("模型尚未训练")
+        model = self.models.get(regime, self.fallback_model)
+        return model.predict_prepared(df_features)
 
     def predict_with_index(
         self, df: pd.DataFrame, df_index: pd.DataFrame, trade_date: str

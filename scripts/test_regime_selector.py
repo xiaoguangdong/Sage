@@ -153,17 +153,19 @@ def run_test():
     single_selector = StockSelector(base_cfg)
     single_selector.fit(df_train)
 
+    # 预计算测试集特征
+    df_test_prepared = single_selector.prepare_features(df_test)
+
     # 7. 测试集评估
     print("\n" + "=" * 60)
     print("测试集评估")
     print("=" * 60)
 
     test_dates = sorted(df_test["trade_date"].unique())
-    # 采样部分日期评估
     sample_dates = test_dates[::20][:10]
 
     for date in sample_dates:
-        df_day = df_test[df_test["trade_date"] == date]
+        df_day = df_test_prepared[df_test_prepared["trade_date"] == date]
         if len(df_day) < 50:
             continue
 
@@ -171,8 +173,8 @@ def run_test():
         regime_name = REGIME_NAMES.get(regime, "?")
 
         try:
-            pred_regime = regime_selector.predict(df_day, regime)
-            pred_single = single_selector.predict(df_day)
+            pred_regime = regime_selector.predict_prepared(df_day, regime)
+            pred_single = single_selector.predict_prepared(df_day)
             print(f"  {str(date)[:10]} [{regime_name}] "
                   f"regime_top10_score={pred_regime['score'].nlargest(10).mean():.4f}, "
                   f"single_top10_score={pred_single['score'].nlargest(10).mean():.4f}")

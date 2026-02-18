@@ -164,6 +164,25 @@ class StockSelector:
         df_result["confidence"] = self._confidence_by_date(df_result)
         return df_result
 
+    def predict_prepared(self, df_features: pd.DataFrame) -> pd.DataFrame:
+        """对已计算好特征的数据直接预测（跳过 prepare_features）"""
+        if not self.is_trained:
+            raise ValueError("模型尚未训练")
+        feature_cols = self.feature_cols or []
+        missing_cols = [c for c in feature_cols if c not in df_features.columns]
+        for col in missing_cols:
+            df_features[col] = np.nan
+        df_features = self._coerce_numeric_features(df_features.copy(), feature_cols)
+        df_features = self._fill_missing_features(df_features, feature_cols, fit=False)
+        if df_features.empty:
+            raise ValueError("预测数据为空")
+        scores = self.model.predict(df_features[feature_cols].values)
+        df_result = df_features.copy()
+        df_result["score"] = scores
+        df_result["rank"] = self._rank_by_date(df_result)
+        df_result["confidence"] = self._confidence_by_date(df_result)
+        return df_result
+
     def select_top(self, df: pd.DataFrame, top_n: int = 10, trade_date: Optional[str] = None) -> pd.DataFrame:
         df_pred = self.predict(df)
         date_col = self.config.date_col
