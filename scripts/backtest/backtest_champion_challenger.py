@@ -490,10 +490,10 @@ def create_regime_strategy_fn(
     basic_cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
                   if c in daily_basic_df.columns]
 
-    # 加载训练期历史数据（train_end 前1年，加速训练）
+    # 加载训练期历史数据（train_end 前3年，与之前报告一致）
     train_frames = []
     if daily_dir is not None:
-        train_start_year = max(2019, int(train_end[:4]) - 1)
+        train_start_year = max(2019, int(train_end[:4]) - 3)
         for year in range(train_start_year, int(train_end[:4]) + 1):
             p = daily_dir / f"daily_{year}.parquet"
             if p.exists():
