@@ -1,4 +1,4 @@
-"""选股模型多区间回测 — 支持趋势模型仓位联动"""
+"""选股模型多区间回测 — 支持趋势模型仓位联动 + 增强风控"""
 import os, sys, copy, logging, warnings
 import numpy as np, pandas as pd
 
@@ -10,6 +10,8 @@ from sage_core.stock_selection.regime_stock_selector import (
     RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
 )
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
+from sage_core.portfolio.enhanced_risk_control import EnhancedRiskControl, RiskControlConfig
+from sage_core.backtest.cost_model import TradingCostModel, create_default_cost_model
 
 logging.basicConfig(level=logging.WARNING)
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
@@ -92,6 +94,73 @@ def load_all_data():
     return idx, df
 
 
+def _compute_period_return_with_stop_loss(df_all, codes, rb, hold_end, entry_prices_cache, risk_ctrl):
+    """计算持仓期收益，支持个股ATR止损（日频模拟）
+
+    Args:
+        df_all: 全量日线数据
+        codes: 持仓股票列表
+        rb: 调仓日
+        hold_end: 持仓结束日
+        entry_prices_cache: 入场价缓存（会被更新）
+        risk_ctrl: EnhancedRiskControl 实例
+
+    Returns:
+        (period_return, n_stocks, n_stopped): 期间收益、持仓数、止损数
+    """
+    hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]
+    if hold.empty:
+        return 0.0, 0, 0
+
+    hold_dates = sorted(hold["trade_date"].unique())
+    active_codes = set(codes)
+    stopped_codes = set()
+
+    # 记录入场价（调仓日收盘价）
+    rb_data = df_all[df_all["trade_date"] == rb]
+    for c in codes:
+        stk = rb_data[rb_data["ts_code"] == c]
+        if not stk.empty:
+            entry_prices_cache[c] = float(stk["close"].iloc[0])
+
+    # 日频模拟：逐日检查止损
+    # 累积每只股票的净值
+    stock_nav = {c: 1.0 for c in codes}
+    prev_close = {}
+    for c in codes:
+        stk = rb_data[rb_data["ts_code"] == c]
+        if not stk.empty:
+            prev_close[c] = float(stk["close"].iloc[0])
+
+    for day in hold_dates:
+        day_data = hold[hold["trade_date"] == day]
+        for c in list(active_codes):
+            stk = day_data[day_data["ts_code"] == c]
+            if stk.empty:
+                continue
+            cur_close = float(stk["close"].iloc[0])
+            entry_price = entry_prices_cache.get(c)
+            if entry_price is None or entry_price <= 0:
+                prev_close[c] = cur_close
+                continue
+
+            # 更新净值
+            if c in prev_close and prev_close[c] > 0:
+                stock_nav[c] *= cur_close / prev_close[c]
+            prev_close[c] = cur_close
+
+            # ATR止损：简化为固定比例止损（-8%），因为单期内无法计算完整ATR
+            loss_pct = cur_close / entry_price - 1
+            if loss_pct <= -0.08:
+                active_codes.discard(c)
+                stopped_codes.add(c)
+
+    # 计算等权组合收益
+    valid_navs = [stock_nav[c] - 1 for c in codes if stock_nav.get(c) is not None]
+    period_ret = np.mean(valid_navs) if valid_navs else 0.0
+    return period_ret, len(valid_navs), len(stopped_codes)
+
+
 def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_position=False):
     """运行单次回测，返回结果字典"""
     train_end = pd.Timestamp(bt_start)
@@ -129,7 +198,32 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     bt_dates = sorted(df_all[(df_all["trade_date"] >= bt_start) & (df_all["trade_date"] <= bt_end)]["trade_date"].unique())
     rb_dates = bt_dates[::HOLD_DAYS]
 
-    results = {"single": [], "regime": [], "trend_single": [], "trend_regime": []}
+    # 增强风控实例
+    risk_ctrl = EnhancedRiskControl(RiskControlConfig())
+
+    # 成本模型
+    cost_model = create_default_cost_model()
+    PORTFOLIO_VALUE = 10_000_000  # 假设1000万组合
+
+    results = {
+        "single": [], "regime": [], "trend_single": [], "trend_regime": [],
+        "risk_regime": [], "risk_trend_regime": [],
+    }
+
+    # 风控策略的累计净值（用于计算回撤）
+    risk_nav = 1.0
+    risk_trend_nav = 1.0
+    risk_nav_peak = 1.0
+    risk_trend_nav_peak = 1.0
+    entry_prices_cache = {}  # 入场价缓存
+    risk_stats = {"stop_count": 0, "total_cost": 0.0}
+
+    # 跟踪每个策略的上期持仓（用于计算换手率）
+    prev_holdings = {
+        "single": set(), "regime": set(),
+        "trend_single": set(), "trend_regime": set(),
+        "risk_regime": set(), "risk_trend_regime": set(),
+    }
 
     for i, rb in enumerate(rb_dates):
         hold_end = rb_dates[i + 1] if i + 1 < len(rb_dates) else bt_dates[-1]
@@ -148,8 +242,12 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
             pred_r = regime_model.predict_prepared(df_day, regime)
             top_r = pred_r.nlargest(TOP_N, "score")["ts_code"].tolist()
 
+            # 获取 Regime 模型的 confidence（Top30 平均 confidence）
+            confidence = float(pred_r.nlargest(TOP_N, "score")["confidence"].mean()) if "confidence" in pred_r.columns else 0.7
+
             hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]
 
+            # ── 原有4种策略（加入成本扣减） ──
             for codes, key in [(top_s, "single"), (top_r, "regime")]:
                 rets = []
                 for c in codes:
@@ -157,10 +255,71 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
                     if len(s) >= 2:
                         rets.append(s["close"].iloc[-1] / s["close"].iloc[0] - 1)
                 period_ret = np.mean(rets) if rets else 0
-                results[key].append({"date": rb, "regime": rname, "ret": period_ret, "n": len(rets)})
+
+                # 计算换手成本
+                new_set = set(codes)
+                old_set = prev_holdings[key]
+                turnover = 1.0 - len(new_set & old_set) / max(len(new_set), 1)  # 换手率
+                cost = cost_model.calculate_turnover_cost(turnover, PORTFOLIO_VALUE)
+                period_ret -= cost
+                prev_holdings[key] = new_set
+
+                results[key].append({"date": rb, "regime": rname, "ret": period_ret, "n": len(rets), "cost": cost})
                 # 趋势联动版本
-                trend_ret = period_ret * pos_ratio + 0 * (1 - pos_ratio)  # 空仓部分收益为0
-                results[f"trend_{key}"].append({"date": rb, "regime": rname, "ret": trend_ret, "n": len(rets), "pos": pos_ratio})
+                trend_ret = period_ret * pos_ratio + 0 * (1 - pos_ratio)
+                results[f"trend_{key}"].append({"date": rb, "regime": rname, "ret": trend_ret, "n": len(rets), "pos": pos_ratio, "cost": cost * pos_ratio})
+                prev_holdings[f"trend_{key}"] = new_set
+
+            # ── 新增：Regime + 增强风控 ──
+            # 计算带止损的期间收益
+            raw_ret, n_stocks, n_stopped = _compute_period_return_with_stop_loss(
+                df_all, top_r, rb, hold_end, entry_prices_cache, risk_ctrl
+            )
+            risk_stats["stop_count"] += n_stopped
+
+            # 换手成本（风控策略用 regime 选股，换手率同 regime）
+            risk_new_set = set(top_r)
+            risk_turnover = 1.0 - len(risk_new_set & prev_holdings["risk_regime"]) / max(len(risk_new_set), 1)
+            risk_cost = cost_model.calculate_turnover_cost(risk_turnover, PORTFOLIO_VALUE)
+            risk_stats["total_cost"] += risk_cost
+            raw_ret -= risk_cost
+            prev_holdings["risk_regime"] = risk_new_set
+
+            # 计算当前回撤
+            risk_drawdown = risk_nav / risk_nav_peak - 1 if risk_nav_peak > 0 else 0
+
+            # 动态仓位 = confidence仓位 × 回撤降仓
+            risk_position = risk_ctrl.compute_dynamic_position(
+                confidence=confidence,
+                current_drawdown=risk_drawdown,
+                daily_return=raw_ret,  # 用期间收益近似
+            )
+            risk_ret = raw_ret * risk_position
+            risk_nav *= (1 + risk_ret)
+            risk_nav_peak = max(risk_nav_peak, risk_nav)
+            results["risk_regime"].append({
+                "date": rb, "regime": rname, "ret": risk_ret,
+                "n": n_stocks, "pos": risk_position, "stopped": n_stopped, "cost": risk_cost,
+            })
+
+            # ── 新增：趋势 + Regime + 增强风控 ──
+            # 趋势仓位 × 风控仓位（双重保护）
+            risk_trend_drawdown = risk_trend_nav / risk_trend_nav_peak - 1 if risk_trend_nav_peak > 0 else 0
+            risk_trend_position = risk_ctrl.compute_dynamic_position(
+                confidence=confidence,
+                current_drawdown=risk_trend_drawdown,
+                daily_return=raw_ret,
+            )
+            # 取趋势仓位和风控仓位的较小值（更保守）
+            combined_position = min(pos_ratio, risk_trend_position)
+            risk_trend_ret = raw_ret * combined_position
+            risk_trend_nav *= (1 + risk_trend_ret)
+            risk_trend_nav_peak = max(risk_trend_nav_peak, risk_trend_nav)
+            prev_holdings["risk_trend_regime"] = risk_new_set
+            results["risk_trend_regime"].append({
+                "date": rb, "regime": rname, "ret": risk_trend_ret,
+                "n": n_stocks, "pos": combined_position, "stopped": n_stopped, "cost": risk_cost,
+            })
 
         except Exception:
             pass
@@ -169,7 +328,7 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     idx_period = idx[(idx["date"] >= bt_start) & (idx["date"] <= bt_end)].sort_values("date")
     idx_ret = idx_period["close"].iloc[-1] / idx_period["close"].iloc[0] - 1 if len(idx_period) >= 2 else 0
 
-    return results, idx_ret
+    return results, idx_ret, risk_stats
 
 
 def calc_stats(records):
@@ -197,6 +356,15 @@ def main():
         ("2024-09-10", "2026-01-01", list(range(2020, 2025))),
     ]
 
+    ALL_STRATEGIES = [
+        ("single", "单一模型"),
+        ("regime", "Regime模型"),
+        ("trend_single", "趋势+单一"),
+        ("trend_regime", "趋势+Regime"),
+        ("risk_regime", "风控+Regime"),
+        ("risk_trend_regime", "风控+趋势+Regime"),
+    ]
+
     all_results = {}
     for bt_start, bt_end, train_years in periods:
         label = f"{bt_start[:7]}~{bt_end[:7]}"
@@ -205,14 +373,14 @@ def main():
         print(f"训练数据: {train_years}")
         print(f"{'='*60}")
 
-        results, idx_ret = run_one_backtest(idx, df_all, bt_start, bt_end, train_years)
+        results, idx_ret, risk_stats = run_one_backtest(idx, df_all, bt_start, bt_end, train_years)
 
         stats = {}
-        for key in ["single", "regime", "trend_single", "trend_regime"]:
+        for key, name in ALL_STRATEGIES:
             s = calc_stats(results[key])
             stats[key] = s
-            name = {"single": "单一模型", "regime": "Regime模型",
-                    "trend_single": "趋势+单一", "trend_regime": "趋势+Regime"}[key]
+            if not s:
+                continue
             print(f"\n  {name}:")
             print(f"    累计收益: {s['total']:+.2%}")
             print(f"    Sharpe: {s['sharpe']:.2f}")
@@ -220,33 +388,36 @@ def main():
             print(f"    胜率: {s['win_rate']:.1%} ({s['n_periods']}期)")
 
         print(f"\n  沪深300: {idx_ret:+.2%}")
+        print(f"\n  风控统计: 止损触发 {risk_stats['stop_count']} 次")
 
         # 分regime
         print(f"\n  分Regime:")
         for rname in ["bull", "neutral", "bear"]:
-            s_rets = [r["ret"] for r in results["single"] if r["regime"] == rname]
-            r_rets = [r["ret"] for r in results["regime"] if r["regime"] == rname]
-            ts_rets = [r["ret"] for r in results["trend_single"] if r["regime"] == rname]
-            tr_rets = [r["ret"] for r in results["trend_regime"] if r["regime"] == rname]
-            if s_rets:
-                print(f"    [{rname:7s}] 单一={np.mean(s_rets):+.2%}, Regime={np.mean(r_rets):+.2%}, "
-                      f"趋势+单一={np.mean(ts_rets):+.2%}, 趋势+Regime={np.mean(tr_rets):+.2%}, 期数={len(s_rets)}")
+            parts = []
+            for key, name in ALL_STRATEGIES:
+                r_rets = [r["ret"] for r in results[key] if r["regime"] == rname]
+                if r_rets:
+                    parts.append(f"{name}={np.mean(r_rets):+.2%}")
+            if parts:
+                n = len([r for r in results["single"] if r["regime"] == rname])
+                print(f"    [{rname:7s}] {', '.join(parts)}, 期数={n}")
 
         all_results[label] = {"stats": stats, "idx_ret": idx_ret, "records": results}
 
     # 输出汇总
-    print(f"\n\n{'='*70}")
+    print(f"\n\n{'='*90}")
     print("全区间汇总对比")
-    print(f"{'='*70}")
-    print(f"{'区间':<20} {'策略':<14} {'累计收益':>10} {'Sharpe':>8} {'最大回撤':>10} {'胜率':>8}")
-    print("-" * 70)
+    print(f"{'='*90}")
+    print(f"{'区间':<20} {'策略':<18} {'累计收益':>10} {'Sharpe':>8} {'最大回撤':>10} {'胜率':>8}")
+    print("-" * 90)
     for label, data in all_results.items():
-        for key, name in [("single", "单一模型"), ("regime", "Regime模型"),
-                          ("trend_single", "趋势+单一"), ("trend_regime", "趋势+Regime")]:
-            s = data["stats"][key]
-            print(f"{label:<20} {name:<14} {s['total']:>+10.2%} {s['sharpe']:>8.2f} {s['max_dd']:>10.2%} {s['win_rate']:>8.1%}")
-        print(f"{label:<20} {'沪深300':<14} {data['idx_ret']:>+10.2%}")
-        print("-" * 70)
+        for key, name in ALL_STRATEGIES:
+            s = data["stats"].get(key)
+            if not s:
+                continue
+            print(f"{label:<20} {name:<18} {s['total']:>+10.2%} {s['sharpe']:>8.2f} {s['max_dd']:>10.2%} {s['win_rate']:>8.1%}")
+        print(f"{label:<20} {'沪深300':<18} {data['idx_ret']:>+10.2%}")
+        print("-" * 90)
 
 
 if __name__ == "__main__":

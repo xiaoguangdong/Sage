@@ -99,6 +99,16 @@ tasks:
     state: "data/states/hs300_moneyflow.json"
     output: "moneyflow/moneyflow_all.parquet"
 
+  hs300_moneyflow_bydate:
+    api: moneyflow
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    dedup_keys: ["ts_code", "trade_date"]
+    state: "data/states/hs300_moneyflow_bydate.json"
+    output: "moneyflow/moneyflow_all.parquet"
+
   sw_industry_classify:
     api: index_classify
     mode: single
