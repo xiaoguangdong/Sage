@@ -25,6 +25,7 @@ SIGNAL_SCHEMA = [
 
 SUPPORTED_STRATEGIES = (
     "seed_balance_strategy",
+    "regime_ma_strategy",
     "balance_strategy_v1",
     "positive_strategy_v1",
     "value_strategy_v1",

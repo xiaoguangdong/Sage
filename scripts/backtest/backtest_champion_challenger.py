@@ -26,6 +26,9 @@ sys.path.insert(0, str(ROOT))
 from scripts.data._shared.runtime import get_data_root, get_tushare_root
 from sage_core.stock_selection.stock_selector import StockSelector, SelectionConfig
 from sage_core.stock_selection.multi_alpha_selector import MultiAlphaStockSelector, MultiAlphaConfig
+from sage_core.stock_selection.regime_stock_selector import (
+    RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
+)
 from sage_core.governance.strategy_governance import (
     ChallengerConfig,
     MultiAlphaChallengerStrategies,
@@ -383,6 +386,108 @@ def create_challenger_strategy_fn(
     return strategy_fn, strategy_id
 
 
+def _build_ma_regime(idx_df: pd.DataFrame) -> dict:
+    """用 MA20/MA60 均线判断中期 regime"""
+    df = idx_df.sort_values("date").copy()
+    df["ma20"] = df["close"].rolling(20).mean()
+    df["ma60"] = df["close"].rolling(60).mean()
+    regime = np.where(
+        (df["close"] > df["ma60"]) & (df["ma20"] > df["ma60"]), 2,
+        np.where((df["close"] < df["ma60"]) & (df["ma20"] < df["ma60"]), 0, 1)
+    )
+    return dict(zip(df["date"].astype(str).str[:8].values, regime))
+
+
+# 宏观 regime 标签（训练用）
+_MACRO_REGIMES = [
+    ("2019-01-01", "2021-02-10", "bull"),
+    ("2021-02-11", "2022-04-26", "bear"),
+    ("2022-04-27", "2022-07-05", "bull"),
+    ("2022-07-06", "2024-09-23", "bear"),
+    ("2024-09-24", "2024-10-08", "bull"),
+    ("2024-10-09", "2024-11-04", "bear"),
+    ("2024-11-05", "2025-03-14", "neutral"),
+    ("2025-03-15", "2025-04-07", "bear"),
+    ("2025-04-08", "2026-12-31", "bull"),
+]
+
+
+def _assign_macro_regime(dates: pd.Series) -> pd.Series:
+    labels = pd.Series("neutral", index=dates.index)
+    for start, end, regime in _MACRO_REGIMES:
+        mask = (dates >= start) & (dates <= end)
+        labels[mask] = regime
+    return labels
+
+
+def create_regime_strategy_fn(
+    daily_df: pd.DataFrame,
+    daily_basic_df: pd.DataFrame,
+    idx_df: pd.DataFrame,
+    train_end: str,
+):
+    """创建 Regime MA 策略（预训练+预计算特征）"""
+    import copy
+
+    # 合并基本面数据
+    basic_cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
+                  if c in daily_basic_df.columns]
+    df_all = daily_df.merge(daily_basic_df[basic_cols], on=["ts_code", "trade_date"], how="left")
+
+    # 加载行业数据
+    data_root = Path(daily_df.attrs.get("data_root", "")) if hasattr(daily_df, "attrs") else None
+    # 简化：不加载行业数据，用已有列
+
+    # 训练数据
+    df_train = df_all[df_all["trade_date"].astype(str) < train_end].copy()
+    df_train["trade_date"] = pd.to_datetime(df_train["trade_date"], format="%Y%m%d", errors="coerce")
+    df_train["regime"] = _assign_macro_regime(df_train["trade_date"])
+
+    cfg = SelectionConfig(
+        model_type="lgbm", label_neutralized=True,
+        ic_filter_enabled=True, exclude_bj=True, exclude_st=True,
+    )
+    regime_model = RegimeStockSelector(RegimeSelectionConfig(base_config=copy.deepcopy(cfg)))
+    regime_model.fit(df_train, df_train["regime"])
+
+    # 预计算全量特征
+    df_all["trade_date"] = pd.to_datetime(df_all["trade_date"], format="%Y%m%d", errors="coerce")
+    df_prepared = regime_model.base_selector.prepare_features(df_all)
+
+    # MA regime
+    idx_df = idx_df.copy()
+    idx_df["date"] = pd.to_datetime(idx_df["date"])
+    d2s_ma = {}
+    ma20 = idx_df["close"].rolling(20).mean()
+    ma60 = idx_df["close"].rolling(60).mean()
+    for i, row in idx_df.iterrows():
+        r = 2 if (row["close"] > ma60.iloc[i] and ma20.iloc[i] > ma60.iloc[i]) else (
+            0 if (row["close"] < ma60.iloc[i] and ma20.iloc[i] < ma60.iloc[i]) else 1)
+        d2s_ma[row["date"].strftime("%Y%m%d")] = r
+
+    # 缓存预测结果
+    pred_cache = {}
+
+    def strategy_fn(day_data, trade_date, daily_basic, fina):
+        try:
+            td = pd.to_datetime(trade_date)
+            df_day = df_prepared[df_prepared["trade_date"] == td]
+            if len(df_day) < 50:
+                return pd.DataFrame(columns=SIGNAL_SCHEMA)
+            regime = d2s_ma.get(str(trade_date)[:8], 1)
+            pred = regime_model.predict_prepared(df_day, regime)
+            result = pred.nlargest(30, "score").copy()
+            result["trade_date"] = trade_date
+            result["model_version"] = "regime_ma_strategy@v1.0.0"
+            result["confidence"] = result["score"].abs()
+            result["rank"] = range(1, len(result) + 1)
+            return result[["ts_code", "trade_date", "score", "rank", "confidence", "model_version"]]
+        except Exception:
+            return pd.DataFrame(columns=SIGNAL_SCHEMA)
+
+    return strategy_fn, "regime_ma_strategy"
+
+
 # ==================== 主函数 ====================
 
 def main():
@@ -399,7 +504,7 @@ def main():
         default=None,
         help="输出目录，默认 data/backtest/champion_challenger",
     )
-    parser.add_argument("--strategies", type=str, default="champion,balance,positive,value,satellite", help="策略列表")
+    parser.add_argument("--strategies", type=str, default="regime,champion,balance,positive,value,satellite", help="策略列表")
     args = parser.parse_args()
 
     # 解析策略列表
@@ -464,6 +569,28 @@ def main():
             strategy_name=strategy_id,
         )
         results.append(result)
+
+    # Regime MA 策略（新Champion）
+    if "regime" in strategy_names:
+        print("\n准备 Regime MA 策略...")
+        idx_path = data_root / "index" / "index_000300_SH_ohlc.parquet"
+        if idx_path.exists():
+            idx_df = pd.read_parquet(idx_path)
+            strategy_fn, strategy_id = create_regime_strategy_fn(
+                daily_df=daily_df, daily_basic_df=daily_basic_df,
+                idx_df=idx_df, train_end=args.start_date,
+            )
+            result = backtester.run_backtest(
+                trade_dates=trade_dates,
+                daily_df=daily_df,
+                daily_basic_df=daily_basic_df,
+                fina_df=fina_df,
+                strategy_fn=strategy_fn,
+                strategy_name=strategy_id,
+            )
+            results.append(result)
+        else:
+            print("  [跳过] 缺少沪深300指数数据")
 
     # Challenger 策略
     challenger_map = {
