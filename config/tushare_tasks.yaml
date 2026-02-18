@@ -160,8 +160,8 @@ tasks:
     api: fina_indicator_vip
     mode: year_quarters
     list_param: period
-    start_year: 2020
-    end_year: 2025
+    start_year: 2016
+    end_year: 2026
     quarters: ["0331", "0630", "0930", "1231"]
     state: "data/states/fina_indicator_vip.json"
     output: "fina_indicator_vip/fina_indicator_vip_all.parquet"
@@ -278,7 +278,7 @@ tasks:
     api: fina_mainbz_vip
     mode: year_quarters
     list_param: period
-    start_year: 2020
+    start_year: 2016
     end_year: 2026
     quarters: ["0331", "0630", "0930", "1231"]
     pagination: offset
@@ -309,3 +309,46 @@ tasks:
     dedup_keys: ["trade_date", "title", "ts_code", "inst_csname"]
     state: "data/states/tushare_reports.json"
     output: "policy/tushare_reports.parquet"
+
+  income:
+    api: income_vip
+    mode: year_quarters
+    list_param: period
+    start_year: 2016
+    end_year: 2026
+    quarters: ["0331", "0630", "0930", "1231"]
+    dedup_keys: ["ts_code", "end_date", "report_type"]
+    state: "data/states/income.json"
+    output: "fundamental/income/income_all.parquet"
+
+  balancesheet:
+    api: balancesheet_vip
+    mode: year_quarters
+    list_param: period
+    start_year: 2016
+    end_year: 2026
+    quarters: ["0331", "0630", "0930", "1231"]
+    dedup_keys: ["ts_code", "end_date", "report_type"]
+    state: "data/states/balancesheet.json"
+    output: "fundamental/balancesheet/balancesheet_all.parquet"
+
+  cashflow:
+    api: cashflow_vip
+    mode: year_quarters
+    list_param: period
+    start_year: 2016
+    end_year: 2026
+    quarters: ["0331", "0630", "0930", "1231"]
+    dedup_keys: ["ts_code", "end_date", "report_type"]
+    state: "data/states/cashflow.json"
+    output: "fundamental/cashflow/cashflow_all.parquet"
+
+  dividend:
+    api: dividend
+    mode: date_range
+    start_field: ann_date
+    end_field: ann_date
+    split: year
+    dedup_keys: ["ts_code", "end_date", "div_proc"]
+    state: "data/states/dividend.json"
+    output: "fundamental/dividend/dividend_all.parquet"
