@@ -137,11 +137,17 @@ class StrategyBacktester:
         top_n: int = 10,
         cost_rate: float = 0.003,
         data_delay_days: int = 2,
+        enable_drawdown_control: bool = True,
+        drawdown_reduce_threshold: float = 0.15,
+        drawdown_clear_threshold: float = 0.25,
     ):
         self.initial_capital = initial_capital
         self.top_n = top_n
         self.cost_rate = cost_rate
         self.data_delay_days = data_delay_days
+        self.enable_drawdown_control = enable_drawdown_control
+        self.drawdown_reduce_threshold = drawdown_reduce_threshold
+        self.drawdown_clear_threshold = drawdown_clear_threshold
 
     def run_backtest(
         self,
@@ -176,6 +182,10 @@ class StrategyBacktester:
         holdings = {}  # 当前持仓
         signal_cache = {}  # 信号缓存（用于 T+2 延迟）
 
+        # 回撤控制变量
+        max_portfolio_value = self.initial_capital
+        position_ratio = 1.0  # 仓位比例（1.0=满仓）
+
         for i, trade_date in enumerate(trade_dates):
             if i % 20 == 0:
                 print(f"  处理日期: {trade_date} ({i+1}/{len(trade_dates)})")
@@ -204,24 +214,42 @@ class StrategyBacktester:
             # 执行信号（T+2 后执行）
             if trade_date in signal_cache:
                 signals = signal_cache[trade_date]
-                
+
+                # 回撤控制：动态调整仓位比例
+                if self.enable_drawdown_control and portfolio_values:
+                    current_value = portfolio_values[-1]
+                    max_portfolio_value = max(max_portfolio_value, current_value)
+                    current_drawdown = (current_value - max_portfolio_value) / max_portfolio_value
+
+                    if current_drawdown < -self.drawdown_clear_threshold:
+                        position_ratio = 0.0  # 清仓
+                    elif current_drawdown < -self.drawdown_reduce_threshold:
+                        position_ratio = 0.5  # 减仓50%
+                    else:
+                        position_ratio = 1.0  # 满仓
+
                 # 计算换仓成本
                 new_holdings = set(signals.nsmallest(self.top_n, "rank")["ts_code"].tolist())
                 old_holdings = set(holdings.keys())
-                
+
                 # 换手率
                 turnover = len(new_holdings.symmetric_difference(old_holdings)) / max(len(old_holdings), 1)
                 cost = turnover * self.cost_rate
-                
-                # 更新持仓
-                holdings = {code: 1.0 / self.top_n for code in new_holdings}
-                
+
+                # 更新持仓（应用仓位比例）
+                if position_ratio > 0:
+                    holdings = {code: position_ratio / self.top_n for code in new_holdings}
+                else:
+                    holdings = {}  # 清仓
+
                 trade_records.append({
                     "trade_date": trade_date,
                     "signal_date": signal_cache[trade_date].iloc[0].get("trade_date", trade_date) if len(signal_cache[trade_date]) > 0 else trade_date,
                     "num_positions": len(holdings),
                     "turnover": turnover,
                     "cost": cost,
+                    "position_ratio": position_ratio,
+                    "current_drawdown": current_drawdown if self.enable_drawdown_control else 0.0,
                 })
 
             # 计算当日收益
