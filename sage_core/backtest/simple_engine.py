@@ -132,7 +132,7 @@ class SimpleBacktestEngine:
 
                 # 检查行业止损
                 if "industry" in signals.columns:
-                    stop_industries = self.risk_control.check_industry_stop_loss(industry_returns)
+                    stop_industries = self.risk_control.check_industry_stop_loss(industry_returns, trade_date)
 
             # 调仓
             if not self.config.t_plus_one:
@@ -147,6 +147,7 @@ class SimpleBacktestEngine:
                     stop_stocks,
                     stop_industries,
                     _history_cache if self.entry_model else None,
+                    trade_date,
                 )
                 daily_ret = self._compute_portfolio_return(holdings, day_returns)
             else:
@@ -161,6 +162,7 @@ class SimpleBacktestEngine:
                     stop_stocks,
                     stop_industries,
                     _history_cache if self.entry_model else None,
+                    trade_date,
                 )
 
             # 计算交易成本
@@ -196,15 +198,19 @@ class SimpleBacktestEngine:
         metrics = self._metrics(portfolio_returns, portfolio_values)
 
         # 添加风控报告
+        stop_loss_report = pd.DataFrame()
         if self.use_enhanced_risk_control and self.risk_control:
             stop_loss_report = self.risk_control.get_stop_loss_report()
             metrics["stop_loss_events"] = len(stop_loss_report) if not stop_loss_report.empty else 0
+            summary = self.risk_control.get_stop_loss_summary()
+            metrics["stop_loss_summary"] = summary
 
         return BacktestResult(
             returns=portfolio_returns,
             values=portfolio_values,
             trades=trades,
             metrics=metrics,
+            stop_loss_report=stop_loss_report,
         )
 
     def _shift_signals(self, signals: pd.DataFrame, trading_dates: List[str], delay_days: int) -> pd.DataFrame:
@@ -242,6 +248,7 @@ class SimpleBacktestEngine:
         stop_stocks: Optional[List[str]] = None,
         stop_industries: Optional[List[str]] = None,
         history_cache: Optional[Dict[str, List[Dict]]] = None,
+        trade_date: Optional[str] = None,
     ) -> Tuple[Dict[str, float], float, Dict[str, float]]:
         if holdings_entry_prices is None:
             holdings_entry_prices = {}
@@ -322,6 +329,7 @@ class SimpleBacktestEngine:
                     confidence=confidence,
                     current_drawdown=current_drawdown,
                     daily_return=daily_return,
+                    trade_date=trade_date,
                 )
                 # 整体缩放权重
                 weights = weights * target_position

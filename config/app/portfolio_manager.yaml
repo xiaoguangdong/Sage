@@ -1,0 +1,19 @@
+# 组合管理器配置
+portfolio_manager:
+  # 长短线资金分配
+  long_term_ratio: 0.70       # 长线资金占比
+  short_term_ratio: 0.30      # 短线资金占比（SeedBalance/Champion策略）
+  value_growth_ratio: 0.50    # 长线中价值股占比
+
+  # 约束
+  max_industry_ratio: 0.30    # 单行业最大占比
+  min_avg_amount: 1.0e+8      # 最小日均成交额（1亿）
+  total_positions: 10         # 总持仓数量
+
+  # 长周期选股器
+  long_term_selector:
+    enabled: false             # 默认关闭，需要预训练模型后开启
+    value_model_path: "data/models/hybrid_value.pkl"
+    growth_model_path: "data/models/hybrid_growth.pkl"
+    value_top_n: 20           # 价值股候选池大小
+    growth_top_n: 20          # 成长股候选池大小

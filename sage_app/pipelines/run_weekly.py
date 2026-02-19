@@ -49,8 +49,17 @@ from sage_core.governance.strategy_governance import (
     save_strategy_outputs,
 )
 from sage_core.portfolio.construction import PortfolioConstruction
+from sage_core.portfolio.portfolio_manager import PortfolioManager
 from sage_core.portfolio.risk_control import RiskControl
+from sage_core.stock_selection.hybrid_stock_selector import HybridStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig
+
+try:
+    from sage_core.industry.macro_predictor import MacroPredictor
+    from scripts.models.macro.export_macro_signals import export_macro_signals
+except ImportError:
+    MacroPredictor = None
+    export_macro_signals = None
 
 # 配置日志
 log_path = setup_logging("weekly")
@@ -109,6 +118,13 @@ def load_config(config_dir: str | None = None) -> dict:
             config["strategy_governance"] = yaml.safe_load(f)
     except Exception as e:
         logger.warning(f"无法加载策略治理配置: {e}")
+
+    # 加载组合管理器配置
+    try:
+        with open(f"{config_dir}/portfolio_manager.yaml", "r", encoding="utf-8") as f:
+            config["portfolio_manager"] = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning(f"无法加载组合管理器配置: {e}")
 
     return config
 
@@ -310,6 +326,168 @@ def calculate_features(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("特征计算完成")
 
     return df
+
+
+def _run_macro_prediction(trade_date: str) -> dict:
+    """
+    运行宏观经济预测，返回预测结果。
+
+    Args:
+        trade_date: 交易日期（格式 YYYYMMDD）
+
+    Returns:
+        dict: 预测结果，包含 systemic_scenario, opportunity_industries, risk_level 等。
+              如果宏观模型不可用，返回默认中性结果。
+    """
+    default_result = {
+        "date": trade_date,
+        "systemic_scenario": "NORMAL",
+        "opportunity_industries": [],
+        "risk_level": "MEDIUM",
+        "summary": "宏观模型未启用",
+        "available": False,
+    }
+
+    if MacroPredictor is None:
+        logger.warning("宏观模型未安装，跳过宏观预测")
+        return default_result
+
+    try:
+        from scripts.data._shared.runtime import get_data_path
+
+        processed_dir = get_data_path("processed")
+        macro_path = processed_dir / "macro_features.parquet"
+        industry_path = processed_dir / "industry_features.parquet"
+        northbound_path = processed_dir / "northbound_features.parquet"
+
+        if not macro_path.exists() or not industry_path.exists():
+            logger.warning("宏观数据文件不存在（%s / %s），跳过宏观预测", macro_path, industry_path)
+            return default_result
+
+        macro_data = pd.read_parquet(macro_path)
+        industry_data = pd.read_parquet(industry_path)
+        northbound_data = pd.read_parquet(northbound_path) if northbound_path.exists() else None
+
+        predictor = MacroPredictor(config_path="config/sw_nbs_mapping.yaml")
+        date_str = pd.to_datetime(trade_date, format="%Y%m%d").strftime("%Y-%m-%d")
+        result = predictor.predict(
+            date=date_str,
+            macro_data=macro_data,
+            industry_data=industry_data,
+            northbound_data=northbound_data,
+        )
+        result["available"] = True
+        logger.info(
+            "宏观预测完成: scenario=%s, risk=%s, 机会行业=%d个",
+            result["systemic_scenario"],
+            result["risk_level"],
+            len(result.get("opportunity_industries", [])),
+        )
+        return result
+
+    except Exception:
+        logger.exception("宏观预测异常，使用默认中性结果")
+        return default_result
+
+
+def _macro_to_industry_tilts(macro_result: dict) -> dict:
+    """
+    将宏观预测的机会行业转换为行业倾斜权重。
+
+    景气度评分 → 倾斜权重映射：
+    - boom_score >= 70: +0.15
+    - boom_score >= 50: +0.10
+    - boom_score >= 30: +0.05
+
+    Args:
+        macro_result: 宏观预测结果
+
+    Returns:
+        dict: {行业名: 倾斜权重}
+    """
+    tilts = {}
+    for ind in macro_result.get("opportunity_industries", []):
+        score = ind.get("boom_score", 0)
+        if score >= 70:
+            tilts[ind["industry"]] = 0.15
+        elif score >= 50:
+            tilts[ind["industry"]] = 0.10
+        elif score >= 30:
+            tilts[ind["industry"]] = 0.05
+    return tilts
+
+
+def _macro_risk_to_exposure_factor(macro_result: dict) -> float:
+    """
+    根据宏观风险等级返回仓位调整因子。
+
+    Returns:
+        float: 仓位乘数（0.0 ~ 1.0）
+    """
+    risk_level = macro_result.get("risk_level", "MEDIUM")
+    scenario = macro_result.get("systemic_scenario", "NORMAL")
+
+    if scenario == "SYSTEMIC RECESSION":
+        return 0.3  # 系统衰退：仅保留 30% 仓位
+
+    factor_map = {"LOW": 1.0, "MEDIUM": 0.85, "HIGH": 0.6}
+    return factor_map.get(risk_level, 0.85)
+
+
+def _run_long_term_selectors(
+    config: dict,
+    df_features: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """运行长周期选股器（价值+成长）
+
+    Args:
+        config: portfolio_manager 配置
+        df_features: 特征数据
+
+    Returns:
+        (value_candidates, growth_candidates) 两个候选池
+    """
+    pm_cfg = (config.get("portfolio_manager") or {}).get("portfolio_manager", {})
+    lt_cfg = pm_cfg.get("long_term_selector", {})
+
+    if not lt_cfg.get("enabled", False):
+        logger.info("长周期选股器未启用，跳过")
+        return pd.DataFrame(), pd.DataFrame()
+
+    data_root = get_tushare_root()
+    value_model_path = Path(lt_cfg.get("value_model_path", "data/models/hybrid_value.pkl"))
+    growth_model_path = Path(lt_cfg.get("growth_model_path", "data/models/hybrid_growth.pkl"))
+    value_top_n = int(lt_cfg.get("value_top_n", 20))
+    growth_top_n = int(lt_cfg.get("growth_top_n", 20))
+
+    value_candidates = pd.DataFrame()
+    growth_candidates = pd.DataFrame()
+
+    # 价值股选股器
+    if value_model_path.exists():
+        try:
+            value_selector = HybridStockSelector("value", data_root=data_root, model_path=value_model_path)
+            value_selector.load_model()
+            value_candidates = value_selector.select(df_features, top_n=value_top_n)
+            logger.info("价值股选股完成: %d 只候选", len(value_candidates))
+        except Exception as exc:
+            logger.warning("价值股选股失败: %s", exc)
+    else:
+        logger.info("价值股模型不存在: %s，跳过", value_model_path)
+
+    # 成长股选股器
+    if growth_model_path.exists():
+        try:
+            growth_selector = HybridStockSelector("growth", data_root=data_root, model_path=growth_model_path)
+            growth_selector.load_model()
+            growth_candidates = growth_selector.select(df_features, top_n=growth_top_n)
+            logger.info("成长股选股完成: %d 只候选", len(growth_candidates))
+        except Exception as exc:
+            logger.warning("成长股选股失败: %s", exc)
+    else:
+        logger.info("成长股模型不存在: %s，跳过", growth_model_path)
+
+    return value_candidates, growth_candidates
 
 
 def _build_governance_engine(config: dict) -> ChampionChallengerEngine:
@@ -555,6 +733,37 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         trend_state = 1  # 默认震荡
         logger.warning("无法获取沪深300指数数据，使用默认趋势状态: 震荡")
 
+    # 4.5 宏观经济预测
+    logger.info("运行宏观经济预测...")
+    macro_trade_date = latest_trade_date_hint or datetime.now().strftime("%Y%m%d")
+    macro_result = _run_macro_prediction(macro_trade_date)
+    macro_industry_tilts = _macro_to_industry_tilts(macro_result)
+    macro_exposure_factor = _macro_risk_to_exposure_factor(macro_result)
+    if macro_result.get("available", False):
+        logger.info(
+            "宏观仓位因子: %.2f, 宏观行业倾斜: %d个行业",
+            macro_exposure_factor,
+            len(macro_industry_tilts),
+        )
+
+    # 4.6 导出宏观信号
+    if export_macro_signals is not None:
+        try:
+            tushare_root = get_tushare_root()
+            signal_dir = get_data_path("signals", ensure=True)
+            macro_signal_paths = export_macro_signals(
+                output_dir=signal_dir,
+                delay_days=2,
+                spread_threshold=0.5,
+                spread_mode="threshold",
+                tushare_root=tushare_root,
+            )
+            exported = {k: str(v) for k, v in macro_signal_paths.items() if v is not None}
+            if exported:
+                logger.info("宏观信号已导出: %s", exported)
+        except Exception:
+            logger.warning("宏观信号导出失败，不影响主流程", exc_info=True)
+
     # 5. 运行Champion/Challenger四策略，执行层只读取Champion
     logger.info("运行选股策略治理（Champion/Challenger）...")
     governance_engine = _build_governance_engine(config)
@@ -696,6 +905,12 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     signal_weights = overlay_resolved["signal_weights"]
     tilt_strength = float(overlay_resolved.get("tilt_strength", 0.0))
     industry_tilts = overlay_resolved.get("industry_tilts", {})
+    # 合并宏观模型的行业倾斜（宏观倾斜不覆盖已有配置，取较大值）
+    if macro_industry_tilts and isinstance(industry_tilts, dict):
+        for ind_name, macro_tilt in macro_industry_tilts.items():
+            existing = industry_tilts.get(ind_name, 0.0)
+            industry_tilts[ind_name] = max(existing, macro_tilt)
+        logger.info("宏观行业倾斜已合并: 新增/更新 %d 个行业", len(macro_industry_tilts))
     regime_name = overlay_resolved["regime_name"]
     logger.info(
         "行业叠加参数: regime=%s, overlay_strength=%.3f, mainline_strength=%.3f, tilt_strength=%.3f, signal_weights=%s, industry_tilt_count=%d",
@@ -773,7 +988,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         len(unified_contract),
     )
 
-    # 7. Champion执行信号转组合候选
+    # 7. Champion执行信号转组合候选（短线动量）
     df_ranked = _signals_to_ranked(execution_signals)
     if df_ranked.empty:
         logger.warning("Champion信号为空，回退到简单排序")
@@ -783,10 +998,40 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         if "code" not in df_ranked.columns and "ts_code" in df_ranked.columns:
             df_ranked["code"] = df_ranked["ts_code"]
 
-    # 8. 构建组合
-    logger.info("构建组合...")
-    portfolio_constructor = PortfolioConstruction()
-    portfolio = portfolio_constructor.construct_portfolio(df_ranked, trend_state)
+    # 8. 长周期选股器 + 组合管理器
+    value_candidates, growth_candidates = _run_long_term_selectors(config, df_features)
+    pm_cfg = (config.get("portfolio_manager") or {}).get("portfolio_manager", {})
+    use_portfolio_manager = not value_candidates.empty or not growth_candidates.empty
+
+    if use_portfolio_manager:
+        logger.info("使用PortfolioManager整合长短线组合...")
+        portfolio_mgr = PortfolioManager(
+            long_term_ratio=float(pm_cfg.get("long_term_ratio", 0.70)),
+            short_term_ratio=float(pm_cfg.get("short_term_ratio", 0.30)),
+            value_growth_ratio=float(pm_cfg.get("value_growth_ratio", 0.50)),
+            max_industry_ratio=float(pm_cfg.get("max_industry_ratio", 0.30)),
+            min_avg_amount=float(pm_cfg.get("min_avg_amount", 1e8)),
+        )
+        total_positions = int(pm_cfg.get("total_positions", 10))
+        # df_ranked 作为短线动量候选
+        portfolio = portfolio_mgr.construct_portfolio(
+            value_candidates=value_candidates,
+            growth_candidates=growth_candidates,
+            momentum_candidates=df_ranked,
+            total_positions=total_positions,
+        )
+        logger.info(
+            "PortfolioManager组合: 总%d只 (价值%d, 成长%d, 动量%d)",
+            len(portfolio),
+            len(portfolio[portfolio["strategy_type"] == "value"]) if "strategy_type" in portfolio.columns else 0,
+            len(portfolio[portfolio["strategy_type"] == "growth"]) if "strategy_type" in portfolio.columns else 0,
+            len(portfolio[portfolio["strategy_type"] == "momentum"]) if "strategy_type" in portfolio.columns else 0,
+        )
+    else:
+        # 降级模式：纯短线，使用原有PortfolioConstruction
+        logger.info("长周期选股器未启用或无候选，使用纯短线组合构建...")
+        portfolio_constructor = PortfolioConstruction()
+        portfolio = portfolio_constructor.construct_portfolio(df_ranked, trend_state)
 
     # 9. 风险控制
     logger.info("风险控制...")
@@ -821,6 +1066,17 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     )
     trend_position = float(trend_result.get("position_suggestion", 1.0))
     target_exposure = min(position_info["final_position"], trend_position)
+    # 宏观风险因子调整目标仓位
+    if macro_result.get("available", False) and macro_exposure_factor < 1.0:
+        pre_macro_exposure = target_exposure
+        target_exposure = target_exposure * macro_exposure_factor
+        logger.info(
+            "宏观风险调整仓位: %.2f → %.2f (factor=%.2f, scenario=%s)",
+            pre_macro_exposure,
+            target_exposure,
+            macro_exposure_factor,
+            macro_result.get("systemic_scenario", "NORMAL"),
+        )
     portfolio = risk_control.scale_to_target_exposure(portfolio, target_exposure)
     portfolio_for_risk = portfolio.copy()
     if "sector" not in portfolio_for_risk.columns and "industry_l1" in portfolio_for_risk.columns:
@@ -848,9 +1104,17 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     logger.info(f"趋势状态: {trend_state}")
     logger.info(f"持仓数量: {len(portfolio)}")
     logger.info(f"总仓位: {portfolio['weight'].sum():.2%}")
+    if use_portfolio_manager and "strategy_type" in portfolio.columns:
+        for stype in ["value", "growth", "momentum"]:
+            sub = portfolio[portfolio["strategy_type"] == stype]
+            if not sub.empty:
+                logger.info(f"  {stype}: {len(sub)}只, 权重合计{sub['weight'].sum():.2%}")
+    code_col = "code" if "code" in portfolio.columns else "ts_code"
     logger.info("\n前5只股票:")
-    for i, row in portfolio.head(5).iterrows():
-        logger.info(f"  {row['code']}: 权重 {row['weight']:.2%}, 排名 {row['rank']}")
+    for _, row in portfolio.head(5).iterrows():
+        rank_str = f", 排名 {row['rank']}" if "rank" in row.index and pd.notna(row.get("rank")) else ""
+        stype_str = f", 策略 {row['strategy_type']}" if "strategy_type" in row.index else ""
+        logger.info(f"  {row[code_col]}: 权重 {row['weight']:.2%}{rank_str}{stype_str}")
 
     # 11. 保存结果
     output_dir = "data/portfolio"
@@ -864,6 +1128,12 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     context_payload = {
         "trade_date": latest_trade_date,
         "active_champion_id": active_champion_id,
+        "portfolio_mode": "long_short" if use_portfolio_manager else "short_only",
+        "long_term_selector": {
+            "enabled": use_portfolio_manager,
+            "value_candidates": len(value_candidates),
+            "growth_candidates": len(growth_candidates),
+        },
         "signal_contract_path": str(contract_path),
         "execution_signal_path": str(exec_signal_path),
         "unified_signal_contract_path": str(unified_contract_path),
@@ -880,6 +1150,14 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         "position_info": position_info,
         "target_exposure": float(target_exposure),
         "risk_checks": risk_checks,
+        "macro_prediction": {
+            "available": macro_result.get("available", False),
+            "systemic_scenario": macro_result.get("systemic_scenario", "NORMAL"),
+            "risk_level": macro_result.get("risk_level", "MEDIUM"),
+            "exposure_factor": macro_exposure_factor,
+            "opportunity_industries_count": len(macro_result.get("opportunity_industries", [])),
+            "industry_tilts_injected": len(macro_industry_tilts),
+        },
     }
     context_payload = _json_safe(context_payload)
     with open(context_file, "w", encoding="utf-8") as f:

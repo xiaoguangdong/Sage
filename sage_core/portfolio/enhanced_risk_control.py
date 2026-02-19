@@ -89,6 +89,7 @@ class EnhancedRiskControl:
         confidence: float,
         current_drawdown: Optional[float] = None,
         daily_return: Optional[float] = None,
+        trade_date: Optional[str] = None,
     ) -> float:
         """计算动态仓位
 
@@ -98,6 +99,7 @@ class EnhancedRiskControl:
             confidence: 趋势模型输出的置信度（0-1）
             current_drawdown: 当前回撤（可选）
             daily_return: 当日收益率（可选，用于单日冲击检测）
+            trade_date: 交易日期（可选，用于事件记录）
 
         Returns:
             目标仓位（0-1）
@@ -114,6 +116,15 @@ class EnhancedRiskControl:
             for threshold, position_ratio in sorted(self.config.drawdown_tiers):
                 if current_drawdown <= threshold:
                     base_position *= position_ratio
+                    self.stop_loss_events.append(
+                        {
+                            "date": trade_date or str(pd.Timestamp.now().date()),
+                            "type": "TIERED_DRAWDOWN",
+                            "drawdown": current_drawdown,
+                            "threshold": threshold,
+                            "position_ratio": position_ratio,
+                        }
+                    )
                     logger.info(f"组合回撤{current_drawdown:.2%}触发分档降仓，" f"仓位调整至{position_ratio:.0%}")
                     break
 
@@ -121,6 +132,15 @@ class EnhancedRiskControl:
         if self.config.enable_daily_shock_stop and daily_return is not None:
             if daily_return <= self.config.daily_shock_threshold:
                 base_position *= self.config.daily_shock_position_cut
+                self.stop_loss_events.append(
+                    {
+                        "date": trade_date or str(pd.Timestamp.now().date()),
+                        "type": "DAILY_SHOCK",
+                        "daily_return": daily_return,
+                        "threshold": self.config.daily_shock_threshold,
+                        "position_cut": self.config.daily_shock_position_cut,
+                    }
+                )
                 logger.warning(
                     f"单日跌幅{daily_return:.2%}触发冲击止损，" f"仓位降至{self.config.daily_shock_position_cut:.0%}"
                 )
@@ -237,11 +257,13 @@ class EnhancedRiskControl:
     def check_industry_stop_loss(
         self,
         industry_returns: Dict[str, float],
+        trade_date: Optional[str] = None,
     ) -> List[str]:
         """检查行业止损
 
         Args:
             industry_returns: 行业累计收益率 {industry: return}
+            trade_date: 交易日期（可选，用于事件记录）
 
         Returns:
             需要清仓的行业列表
@@ -268,7 +290,7 @@ class EnhancedRiskControl:
 
                 self.stop_loss_events.append(
                     {
-                        "date": pd.Timestamp.now(),
+                        "date": trade_date or str(pd.Timestamp.now().date()),
                         "industry": industry,
                         "type": "INDUSTRY_STOP",
                         "peak_value": self.industry_peak_values[industry],
@@ -344,3 +366,51 @@ class EnhancedRiskControl:
             return pd.DataFrame()
 
         return pd.DataFrame(self.stop_loss_events)
+
+    def get_stop_loss_summary(self) -> Dict:
+        """获取止损事件统计摘要"""
+        if not self.stop_loss_events:
+            return {"total_events": 0}
+
+        df = pd.DataFrame(self.stop_loss_events)
+        summary: Dict = {
+            "total_events": len(df),
+            "by_type": df["type"].value_counts().to_dict(),
+        }
+
+        # ATR止损统计
+        atr_events = df[df["type"] == "ATR_STOP"]
+        if not atr_events.empty:
+            summary["atr_stop"] = {
+                "count": len(atr_events),
+                "avg_loss": float(atr_events["loss_pct"].mean()),
+                "max_loss": float(atr_events["loss_pct"].min()),
+                "stocks_affected": atr_events["ts_code"].nunique(),
+            }
+
+        # 行业止损统计
+        ind_events = df[df["type"] == "INDUSTRY_STOP"]
+        if not ind_events.empty:
+            summary["industry_stop"] = {
+                "count": len(ind_events),
+                "avg_drawdown": float(ind_events["drawdown"].mean()),
+                "industries_affected": ind_events["industry"].nunique(),
+            }
+
+        # 分档降仓统计
+        tier_events = df[df["type"] == "TIERED_DRAWDOWN"]
+        if not tier_events.empty:
+            summary["tiered_drawdown"] = {
+                "count": len(tier_events),
+                "avg_drawdown": float(tier_events["drawdown"].mean()),
+            }
+
+        # 单日冲击止损统计
+        shock_events = df[df["type"] == "DAILY_SHOCK"]
+        if not shock_events.empty:
+            summary["daily_shock"] = {
+                "count": len(shock_events),
+                "avg_daily_return": float(shock_events["daily_return"].mean()),
+            }
+
+        return summary

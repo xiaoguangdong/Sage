@@ -74,11 +74,16 @@ class SelectionConfig:
     xgb_params: Dict[str, object] = field(
         default_factory=lambda: {
             "objective": "reg:squarederror",
-            "learning_rate": 0.05,
-            "max_depth": 4,
-            "subsample": 0.8,
-            "colsample_bytree": 0.8,
-            "n_estimators": 200,
+            "learning_rate": 0.02,
+            "max_depth": 6,
+            "subsample": 0.6,
+            "colsample_bytree": 0.6,
+            "reg_alpha": 1.0,
+            "reg_lambda": 5.0,
+            "min_child_weight": 200,
+            "n_estimators": 500,
+            "early_stopping_rounds": 50,
+            "seed": 42,
         }
     )
 
@@ -141,9 +146,8 @@ class StockSelector:
             weights = train_df["_sample_weight"].values if "_sample_weight" in train_df.columns else None
             self._fit_lgbm(train_df, feature_cols, sample_weight=weights)
         elif self.config.model_type == "xgb":
-            X = train_df[feature_cols].values
-            y = train_df["label"].values
-            self._fit_xgb(X, y)
+            weights = train_df["_sample_weight"].values if "_sample_weight" in train_df.columns else None
+            self._fit_xgb(train_df, feature_cols, sample_weight=weights)
         else:
             raise ValueError(f"未知模型类型: {self.config.model_type}")
 
@@ -527,15 +531,56 @@ class StockSelector:
         labels = np.floor(ranked.to_numpy() * 30.0).astype(np.int32)
         return np.clip(labels, 0, 30).astype(np.int32)
 
-    def _fit_xgb(self, X: np.ndarray, y: np.ndarray) -> None:
+    def _fit_xgb(
+        self, train_df: pd.DataFrame, feature_cols: Sequence[str], sample_weight: Optional[np.ndarray] = None
+    ) -> None:
         try:
             import xgboost as xgb
         except ModuleNotFoundError as exc:
             raise ModuleNotFoundError("未安装 xgboost，请先安装依赖") from exc
 
         params = dict(self.config.xgb_params)
-        model = xgb.XGBRegressor(**params)
-        model.fit(X, y)
+        date_col = self.config.date_col
+        n_estimators = int(params.pop("n_estimators", 500))
+        early_stopping_rounds = int(params.pop("early_stopping_rounds", 50))
+
+        X = train_df[list(feature_cols)].values
+        y = train_df["label"].values
+
+        # 按时间切分训练/验证集（最后20%日期做验证），与 LGBM 一致
+        val_ratio = 0.2
+        if date_col in train_df.columns:
+            dates_sorted = sorted(train_df[date_col].unique())
+            val_start = dates_sorted[int(len(dates_sorted) * (1 - val_ratio))]
+            val_mask = (train_df[date_col] >= val_start).values
+        else:
+            n = len(train_df)
+            val_mask = np.array([False] * int(n * (1 - val_ratio)) + [True] * (n - int(n * (1 - val_ratio))))
+
+        X_train, X_val = X[~val_mask], X[val_mask]
+        y_train, y_val = y[~val_mask], y[val_mask]
+        w_train = sample_weight[~val_mask] if sample_weight is not None else None
+        w_val = sample_weight[val_mask] if sample_weight is not None else None
+
+        model = xgb.XGBRegressor(
+            n_estimators=n_estimators,
+            early_stopping_rounds=early_stopping_rounds,
+            verbosity=0,
+            **params,
+        )
+        model.fit(
+            X_train,
+            y_train,
+            sample_weight=w_train,
+            eval_set=[(X_val, y_val)],
+            sample_weight_eval_set=[w_val] if w_val is not None else None,
+            verbose=50,
+        )
+        logger.info(
+            "XGBoost训练完成: best_iteration=%d, best_score=%.6f",
+            model.best_iteration,
+            model.best_score,
+        )
         self.model = model
 
     # -----------------------------

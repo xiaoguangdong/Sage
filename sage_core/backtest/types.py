@@ -31,3 +31,4 @@ class BacktestResult:
     trades: List[Dict]
     metrics: Dict[str, float]
     splits: List[Tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp, pd.Timestamp]] = field(default_factory=list)
+    stop_loss_report: pd.DataFrame = field(default_factory=pd.DataFrame)
