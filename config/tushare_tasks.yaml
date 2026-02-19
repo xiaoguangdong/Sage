@@ -57,7 +57,7 @@ tasks:
     mode: date_range
     start_field: start_date
     end_field: end_date
-    split: day
+    split: month
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/daily_kline.json"
     output: "daily.parquet"

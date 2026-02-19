@@ -1,0 +1,2 @@
+-- DML: 数据迁移脚本
+-- 后续在此目录添加 parquet → PostgreSQL 的迁移脚本

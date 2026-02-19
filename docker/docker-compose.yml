@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sage-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: sage_db
+      POSTGRES_USER: sage
+      POSTGRES_PASSWORD: ${SAGE_DB_PASSWORD:-sage_dev_2026}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ../db/ddl:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sage -d sage_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sage-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: sage-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SAGE_DB_HOST: postgres
+      SAGE_DB_PORT: 5432
+      SAGE_DB_NAME: sage_db
+      SAGE_DB_USER: sage
+      SAGE_DB_PASSWORD: ${SAGE_DB_PASSWORD:-sage_dev_2026}
+      TUSHARE_TOKEN: ${TUSHARE_TOKEN}
+    volumes:
+      - ../data:/app/data
+      - ../logs:/app/logs
+      - ../config:/app/config
+
+volumes:
+  pgdata:
