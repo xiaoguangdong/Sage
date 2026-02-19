@@ -154,27 +154,53 @@ class DataIntegrityChecker:
         result['actual_path'] = str(actual_path)
         result['file_exists'] = True
 
-        # 2. 读取数据
+        # 2. 读取数据（合并所有能找到的数据源）
         try:
+            dfs = []
+            sources = []
+
             if actual_path.is_dir():
-                # 读取目录下所有parquet文件并合并
+                # 读取目录下所有parquet文件
                 parquet_files = list(actual_path.glob("*.parquet"))
                 if not parquet_files:
                     result['status'] = 'empty_directory'
                     print(f"  ❌ 目录为空: {actual_path}")
                     return result
-
-                dfs = []
                 for pf in parquet_files:
                     dfs.append(pd.read_parquet(pf))
-                df = pd.concat(dfs, ignore_index=True)
-                result['record_count'] = len(df)
-                result['file_count'] = len(parquet_files)
-                print(f"  ✅ 文件存在（{len(parquet_files)}个文件），记录数: {len(df):,}")
+                sources.append(f"目录({len(parquet_files)}个文件)")
             else:
-                df = pd.read_parquet(actual_path)
-                result['record_count'] = len(df)
-                print(f"  ✅ 文件存在，记录数: {len(df):,}")
+                dfs.append(pd.read_parquet(actual_path))
+                sources.append(actual_path.name)
+
+            # 同时查找 _all 版本和分片目录，合并更完整的数据
+            stem = Path(task_config['output']).stem
+            parent = self.data_root / Path(task_config['output']).parent
+
+            # 查找 _all 文件
+            all_file = parent / f"{stem}_all.parquet"
+            if all_file.exists() and str(all_file) != str(actual_path):
+                dfs.append(pd.read_parquet(all_file))
+                sources.append(f"{all_file.name}")
+
+            # 查找同名分片目录
+            split_dir = parent / stem
+            if split_dir.exists() and split_dir.is_dir() and str(split_dir) != str(actual_path):
+                split_files = list(split_dir.glob("*.parquet"))
+                if split_files:
+                    for sf in split_files:
+                        dfs.append(pd.read_parquet(sf))
+                    sources.append(f"{stem}/({len(split_files)}个分片)")
+
+            # 合并去重
+            df = pd.concat(dfs, ignore_index=True)
+            dedup_keys = task_config.get('dedup_keys')
+            if dedup_keys and all(k in df.columns for k in dedup_keys):
+                df = df.drop_duplicates(subset=dedup_keys, keep='last')
+
+            result['record_count'] = len(df)
+            result['sources'] = sources
+            print(f"  ✅ 数据来源: {', '.join(sources)}，记录数: {len(df):,}")
         except Exception as e:
             result['status'] = 'read_error'
             result['error'] = str(e)
@@ -203,13 +229,10 @@ class DataIntegrityChecker:
     def _check_date_range(self, df: pd.DataFrame, task_config: Dict, result: Dict) -> Dict:
         """检查日期范围任务的数据完整性
 
-        Args:
-            df: 数据DataFrame
-            task_config: 任务配置
-            result: 当前结果
-
-        Returns:
-            更新后的结果
+        检查三个维度：
+        1. 起始日期是否覆盖目标起始
+        2. 结束日期是否覆盖当前日期（而非遥远的未来）
+        3. 中间是否有年份空洞
         """
         # 查找日期字段
         date_field = None
@@ -235,20 +258,41 @@ class DataIntegrityChecker:
 
         print(f"  📅 时间范围: {result['min_date']} ~ {result['max_date']}")
 
-        # 检查是否覆盖目标年份
-        target_start = datetime(self.start_year, 1, 1)
-        target_end = datetime(self.end_year, 12, 31)
-
         if pd.isna(min_date) or pd.isna(max_date):
             result['status'] = 'invalid_dates'
-        elif min_date > target_start:
+            return result
+
+        # 用当前日期作为结束目标（而非 end_year 年底，未来数据不可能有）
+        target_start = datetime(self.start_year, 1, 1)
+        now = datetime.now()
+        target_end = min(datetime(self.end_year, 12, 31), now - timedelta(days=7))
+
+        issues = []
+
+        # 1. 检查起始日期
+        if min_date > target_start + timedelta(days=30):
+            issues.append(f"缺少早期数据: {target_start.year}年初 ~ {min_date.strftime('%Y-%m-%d')}")
+
+        # 2. 检查结束日期
+        if max_date < target_end:
+            issues.append(f"缺少近期数据: {max_date.strftime('%Y-%m-%d')} ~ {target_end.strftime('%Y-%m-%d')}")
+
+        # 3. 检查中间年份空洞
+        years_with_data = set(df[date_field].dt.year.dropna().unique())
+        expected_years = set(range(max(self.start_year, min_date.year), min(self.end_year, max_date.year) + 1))
+        missing_years = sorted(expected_years - years_with_data)
+        if missing_years:
+            issues.append(f"中间年份空洞: {', '.join(str(y) for y in missing_years)}")
+
+        # 4. 按年统计记录数
+        year_counts = df[date_field].dt.year.value_counts().sort_index()
+        result['year_counts'] = {int(y): int(c) for y, c in year_counts.items()}
+
+        if issues:
             result['status'] = 'incomplete'
-            result['missing_data'].append(f"缺少 {target_start.year} 年初至 {min_date.strftime('%Y-%m-%d')} 的数据")
-            print(f"  ⚠️  缺少早期数据: {target_start.year} ~ {min_date.year}")
-        elif max_date < target_end:
-            result['status'] = 'incomplete'
-            result['missing_data'].append(f"缺少 {max_date.strftime('%Y-%m-%d')} 至 {target_end.year} 年底的数据")
-            print(f"  ⚠️  缺少最新数据: {max_date.year} ~ {target_end.year}")
+            result['missing_data'] = issues
+            for issue in issues:
+                print(f"  ⚠️  {issue}")
         else:
             result['status'] = 'ok'
             print(f"  ✅ 数据完整")
@@ -380,6 +424,11 @@ class DataIntegrityChecker:
             report_lines.append("\n【数据不完整】")
             for task_name, result in status_groups['incomplete']:
                 report_lines.append(f"\n  {task_name}:")
+                if result.get('min_date') and result.get('max_date'):
+                    report_lines.append(f"    实际范围: {result['min_date']} ~ {result['max_date']}  ({result.get('record_count', '?'):,} 条)")
+                if result.get('year_counts'):
+                    years_str = ', '.join(f"{y}:{c:,}" for y, c in sorted(result['year_counts'].items()))
+                    report_lines.append(f"    按年分布: {years_str}")
                 if result.get('missing_periods'):
                     report_lines.append(f"    缺失季度: {len(result['missing_periods'])}个")
                     report_lines.append(f"    {', '.join(result['missing_periods'][:10])}")
