@@ -280,7 +280,7 @@ tasks:
     split: month
     pagination: offset
     limit: 3000
-    dedup_keys: ["trade_date", "index_code"]
+    dedup_keys: ["trade_date", "ts_code"]
     state: "data/states/sw_valuation.json"
     output: "macro/sw_valuation.parquet"
 
@@ -362,3 +362,50 @@ tasks:
     dedup_keys: ["ts_code", "end_date", "div_proc"]
     state: "data/states/dividend.json"
     output: "fundamental/dividend/dividend_all.parquet"
+
+  # P1 高 Alpha 因子数据（分析师预期）
+  forecast:
+    api: forecast
+    mode: year_quarters
+    list_param: period
+    start_year: 2016
+    end_year: 2026
+    quarters: ["0331", "0630", "0930", "1231"]
+    dedup_keys: ["ts_code", "end_date", "type"]
+    state: "data/states/forecast.json"
+    output: "fundamental/forecast/forecast_all.parquet"
+
+  express:
+    api: express
+    mode: year_quarters
+    list_param: period
+    start_year: 2016
+    end_year: 2026
+    quarters: ["0331", "0630", "0930", "1231"]
+    dedup_keys: ["ts_code", "end_date"]
+    state: "data/states/express.json"
+    output: "fundamental/express/express_all.parquet"
+
+  # P1 高 Alpha 因子数据（港股通交易）
+  ggt_daily:
+    api: ggt_daily
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    dedup_keys: ["trade_date", "ts_code"]
+    state: "data/states/ggt_daily.json"
+    output: "northbound/ggt_daily.parquet"
+
+  # P2 高 Alpha 因子数据（个股融资融券明细）
+  margin_detail:
+    api: margin_detail
+    mode: date_range
+    start_field: start_date
+    end_field: end_date
+    split: month
+    pagination: offset
+    limit: 5000
+    dedup_keys: ["trade_date", "ts_code"]
+    state: "data/states/margin_detail.json"
+    output: "margin_detail/margin_detail_all.parquet"

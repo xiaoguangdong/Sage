@@ -19,6 +19,15 @@ class BacktestConfig:
     t_plus_one: bool = True
     data_delay_days: int = 2
 
+    # 权重方法配置
+    weight_method: str = "equal"  # equal/ic_softmax/ic_linear/ic_rank
+    ic_temperature: float = 1.0  # softmax温度参数（越小越集中）
+
+    # 组合优化配置
+    use_portfolio_optimizer: bool = False  # 是否使用组合优化约束
+    max_turnover: float = 0.3  # 单次最大换手率
+    max_sector_exposure: float = 0.3  # 单行业最大暴露
+
 
 @dataclass
 class BacktestResult:

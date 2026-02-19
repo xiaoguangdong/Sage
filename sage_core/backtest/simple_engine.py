@@ -308,14 +308,57 @@ class SimpleBacktestEngine:
             turnover = sum(abs(weight) for weight in holdings.values())
             return {}, turnover, {}
 
-        # 权重
-        if day_signals["weight"].notna().any():
+        # 权重计算
+        if "weight" in day_signals.columns and day_signals["weight"].notna().any():
+            # 使用传入的权重
             weights = day_signals["weight"].fillna(0.0).astype(float)
             weights = (
                 weights / weights.sum() if weights.sum() > 0 else pd.Series([1.0 / len(day_signals)] * len(day_signals))
             )
+        elif "score" in day_signals.columns and self.config.weight_method != "equal":
+            # 使用 IC 加权
+            from sage_core.portfolio.portfolio_optimizer import PortfolioOptimizer
+
+            optimizer = PortfolioOptimizer()
+            weighted_df = optimizer.ic_weighted_portfolio(
+                day_signals.reset_index(drop=True),
+                score_col="score",
+                weight_method=self.config.weight_method.replace("ic_", ""),
+                temperature=self.config.ic_temperature,
+            )
+            weights = weighted_df["weight"].values
         else:
+            # 等权
             weights = pd.Series([1.0 / len(day_signals)] * len(day_signals))
+
+        # 应用组合优化约束（在风控前）
+        if self.config.use_portfolio_optimizer:
+            from sage_core.portfolio.portfolio_optimizer import PortfolioOptimizer
+
+            optimizer = PortfolioOptimizer(
+                max_turnover=self.config.max_turnover, max_sector_exposure=self.config.max_sector_exposure
+            )
+
+            # 换手率约束
+            if holdings:
+                old_weights = pd.Series(holdings)
+                new_weights_df = pd.DataFrame({"ts_code": day_signals["ts_code"].values, "weight": weights.values})
+                new_weights_df = optimizer.apply_turnover_constraint(
+                    new_weights_df, old_weights, max_turnover=self.config.max_turnover
+                )
+                weights = pd.Series(new_weights_df["weight"].values)
+
+            # 行业暴露约束
+            if "industry" in day_signals.columns:
+                weights_df = pd.DataFrame(
+                    {
+                        "ts_code": day_signals["ts_code"].values,
+                        "industry": day_signals["industry"].values,
+                        "weight": weights.values,
+                    }
+                )
+                weights_df = optimizer.apply_sector_constraint(weights_df, max_exposure=self.config.max_sector_exposure)
+                weights = pd.Series(weights_df["weight"].values)
 
         # 应用增强风控的仓位限制
         if self.use_enhanced_risk_control and self.risk_control:

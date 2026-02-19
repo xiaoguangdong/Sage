@@ -52,6 +52,17 @@ class SelectionConfig:
     min_feature_count: int = 8
     max_feature_count: int = 30
 
+    # 高Alpha因子配置
+    use_high_alpha_features: bool = False  # 默认关闭（需要额外数据）
+    high_alpha_groups: Optional[List[str]] = None  # 启用的因子组 ["moneyflow", "northbound", "margin", "analyst"]
+    high_alpha_lookback: int = 20  # 高Alpha因子回溯天数
+    data_root: str = "data/tushare"  # 数据根目录
+
+    # 因子中性化配置
+    neutralize_features: bool = False  # 是否对特征进行中性化
+    neutralize_method: str = "market_cap"  # 中性化方法: market_cap/industry/both
+    neutralize_features_list: Optional[List[str]] = None  # 指定需要中性化的因子（None=全部）
+
     # 模型参数
     lgbm_params: Dict[str, object] = field(
         default_factory=lambda: {
@@ -347,6 +358,59 @@ class StockSelector:
         if "turnover_rate" in df.columns:
             df["turnover_rate_percentile"] = df.groupby(date_col)["turnover_rate"].rank(pct=True)
 
+        # 高Alpha因子（如果启用）
+        if self.config.use_high_alpha_features:
+            from pathlib import Path
+
+            from sage_core.features.high_alpha_wrapper import HighAlphaFeaturesWrapper
+
+            try:
+                high_alpha_gen = HighAlphaFeaturesWrapper(
+                    data_root=Path(self.config.data_root),
+                    enabled_groups=self.config.high_alpha_groups,
+                    lookback_days=self.config.high_alpha_lookback,
+                )
+                df = high_alpha_gen.transform(df)
+                logger.info("✅ 高Alpha因子计算完成")
+            except Exception as e:
+                logger.warning(f"⚠️  高Alpha因子计算失败: {e}")
+
+        # 因子中性化（如果启用）
+        if self.config.neutralize_features:
+            from sage_core.features.factor_optimizer import FactorOptimizer
+
+            optimizer = FactorOptimizer()
+            feature_cols = self._infer_feature_cols(df)
+
+            # 确定需要中性化的因子
+            if self.config.neutralize_features_list:
+                neutralize_cols = [c for c in feature_cols if c in self.config.neutralize_features_list]
+            else:
+                neutralize_cols = list(feature_cols)
+
+            if neutralize_cols:
+                try:
+                    if self.config.neutralize_method == "market_cap":
+                        if "total_mv" in df.columns:
+                            df = optimizer.market_cap_neutralize(df, neutralize_cols, cap_col="total_mv")
+                            logger.info(f"✅ 市值中性化完成 ({len(neutralize_cols)} 个因子)")
+                    elif self.config.neutralize_method == "industry":
+                        if self.config.industry_col and self.config.industry_col in df.columns:
+                            df = optimizer.industry_neutralize(
+                                df, neutralize_cols, industry_col=self.config.industry_col
+                            )
+                            logger.info(f"✅ 行业中性化完成 ({len(neutralize_cols)} 个因子)")
+                    elif self.config.neutralize_method == "both":
+                        if "total_mv" in df.columns:
+                            df = optimizer.market_cap_neutralize(df, neutralize_cols, cap_col="total_mv")
+                        if self.config.industry_col and self.config.industry_col in df.columns:
+                            df = optimizer.industry_neutralize(
+                                df, neutralize_cols, industry_col=self.config.industry_col
+                            )
+                        logger.info(f"✅ 双重中性化完成 ({len(neutralize_cols)} 个因子)")
+                except Exception as e:
+                    logger.warning(f"⚠️  因子中性化失败: {e}")
+
         df["trade_date"] = df[date_col]
         return df
 
@@ -623,6 +687,21 @@ class StockSelector:
             "max_drawdown_60d",
             "beta_120d",
             "liquidity_stability",
+            # 高Alpha因子（新增）
+            "large_net_inflow_ratio",
+            "main_inflow_days",
+            "retail_inst_divergence",
+            "super_large_ratio",
+            "config_fund_ratio",
+            "trading_fund_inflow",
+            "holding_concentration_change",
+            "holding_stability",
+            "margin_balance_change_rate",
+            "margin_net_buy_ratio",
+            "analyst_upgrade_count",
+            "analyst_revision_magnitude",
+            "analyst_surprise_degree",
+            "analyst_consensus",
         ]
         exclude = {
             self.config.date_col,
