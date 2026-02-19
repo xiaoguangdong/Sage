@@ -23,7 +23,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import disable_proxy, get_data_path, setup_logger
 
-
 logger = setup_logger(Path(__file__).stem, module="data")
 
 RATING_KEYWORDS = [
@@ -110,14 +109,14 @@ def parse_reports(html: str, section_key: Optional[str] = None) -> List[Dict[str
     if section_key:
         idx = html.find(section_key)
         if idx != -1:
-            section = html[max(0, idx - 20000): idx + 40000]
+            section = html[max(0, idx - 20000) : idx + 40000]
     else:
         if "stockreport" in html:
             idx = html.find("stockreport")
-            section = html[max(0, idx - 20000): idx + 40000]
+            section = html[max(0, idx - 20000) : idx + 40000]
         elif "机构评级" in html:
             idx = html.find("机构评级")
-            section = html[max(0, idx - 20000): idx + 40000]
+            section = html[max(0, idx - 20000) : idx + 40000]
 
     rows: List[Dict[str, str]] = []
     for block in _extract_blocks(section):
@@ -133,24 +132,28 @@ def parse_reports(html: str, section_key: Optional[str] = None) -> List[Dict[str
                 org = piece
                 break
         if date and rating:
-            rows.append({
-                "publish_date": date,
-                "title": title,
-                "content": text,
-                "rating": rating,
-                "org": org or "",
-                "report_type": "rating",
-            })
+            rows.append(
+                {
+                    "publish_date": date,
+                    "title": title,
+                    "content": text,
+                    "rating": rating,
+                    "org": org or "",
+                    "report_type": "rating",
+                }
+            )
         elif date and any(k in text for k in FORECAST_KEYWORDS):
             signal = next((k for k in FORECAST_KEYWORDS if k in text), "")
-            rows.append({
-                "publish_date": date,
-                "title": title,
-                "content": text,
-                "rating": signal or "业绩预告",
-                "org": org or "",
-                "report_type": "forecast",
-            })
+            rows.append(
+                {
+                    "publish_date": date,
+                    "title": title,
+                    "content": text,
+                    "rating": signal or "业绩预告",
+                    "org": org or "",
+                    "report_type": "forecast",
+                }
+            )
     return rows
 
 

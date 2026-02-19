@@ -21,14 +21,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 
-from scripts.data._shared.runtime import (
-    add_project_root,
-    disable_proxy,
-    get_data_path,
-    get_tushare_root,
-    get_tushare_token,
-)
-
+from scripts.data._shared.runtime import add_project_root, disable_proxy, get_tushare_root, get_tushare_token
 
 add_project_root()
 

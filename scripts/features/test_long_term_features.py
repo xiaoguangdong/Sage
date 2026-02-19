@@ -19,9 +19,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from sage_core.features.long_term_fundamental_features import (
-    LongTermFundamentalFeatures,
-)
+from sage_core.features.long_term_fundamental_features import LongTermFundamentalFeatures
 from scripts.data._shared.runtime import get_tushare_root
 
 
@@ -45,7 +43,7 @@ def test_features():
         print(f"✓ 成功计算 {len(df_rd)} 条记录")
         print("\n样例数据（前5条）：")
         print(df_rd.head())
-        print(f"\n统计信息：")
+        print("\n统计信息：")
         print(df_rd["rd_expense_ratio_ttm"].describe())
     except Exception as e:
         print(f"✗ 失败: {e}")
@@ -57,7 +55,7 @@ def test_features():
         print(f"✓ 成功计算 {len(df_roe)} 条记录")
         print("\n样例数据（前5条）：")
         print(df_roe.head())
-        print(f"\n统计信息：")
+        print("\n统计信息：")
         print(df_roe["roe_5y_avg"].describe())
     except Exception as e:
         print(f"✗ 失败: {e}")
@@ -69,7 +67,7 @@ def test_features():
         print(f"✓ 成功计算 {len(df_revenue_cagr)} 条记录")
         print("\n样例数据（前5条）：")
         print(df_revenue_cagr.head())
-        print(f"\n统计信息：")
+        print("\n统计信息：")
         print(df_revenue_cagr["revenue_cagr_3y"].describe())
     except Exception as e:
         print(f"✗ 失败: {e}")
@@ -81,7 +79,7 @@ def test_features():
         print(f"✓ 成功计算 {len(df_profit_cagr)} 条记录")
         print("\n样例数据（前5条）：")
         print(df_profit_cagr.head())
-        print(f"\n统计信息：")
+        print("\n统计信息：")
         print(df_profit_cagr["profit_cagr_3y"].describe())
     except Exception as e:
         print(f"✗ 失败: {e}")
@@ -89,13 +87,11 @@ def test_features():
     # 测试5：连续分红年数
     print("\n【测试5】连续分红年数")
     try:
-        df_dividend = calculator.calculate_consecutive_dividend_years(
-            start_date, end_date
-        )
+        df_dividend = calculator.calculate_consecutive_dividend_years(start_date, end_date)
         print(f"✓ 成功计算 {len(df_dividend)} 条记录")
         print("\n样例数据（前5条）：")
         print(df_dividend.head())
-        print(f"\n统计信息：")
+        print("\n统计信息：")
         print(df_dividend["consecutive_dividend_years"].describe())
     except Exception as e:
         print(f"✗ 失败: {e}")
@@ -107,7 +103,7 @@ def test_features():
         print(f"✓ 成功计算 {len(df_interest)} 条记录")
         print("\n样例数据（前5条）：")
         print(df_interest.head())
-        print(f"\n统计信息：")
+        print("\n统计信息：")
         print(df_interest["interest_coverage_ratio"].describe())
     except Exception as e:
         print(f"✗ 失败: {e}")
@@ -125,9 +121,7 @@ def test_features():
         print("\n缺失值统计：")
         missing = df_all.isnull().sum()
         missing_pct = (missing / len(df_all) * 100).round(2)
-        missing_df = pd.DataFrame(
-            {"缺失数量": missing, "缺失比例(%)": missing_pct}
-        )
+        missing_df = pd.DataFrame({"缺失数量": missing, "缺失比例(%)": missing_pct})
         print(missing_df[missing_df["缺失数量"] > 0])
 
     except Exception as e:

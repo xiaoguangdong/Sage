@@ -3,11 +3,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from sage_core.execution.broker_adapter import (
-    build_orders_from_portfolio,
-    create_broker_adapter,
-    normalize_ts_code,
-)
+from sage_core.execution.broker_adapter import build_orders_from_portfolio, create_broker_adapter, normalize_ts_code
 
 
 def test_normalize_ts_code():

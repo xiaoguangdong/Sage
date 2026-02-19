@@ -5,25 +5,25 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, Dict
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
 from sage_core.execution.signal_contract import build_stock_signal_contract
-from sage_core.stock_selection.stock_selector import SelectionConfig
 from sage_core.governance.strategy_governance import (
-    ChampionChallengerEngine,
     ChallengerConfig,
+    ChampionChallengerEngine,
     MultiAlphaChallengerStrategies,
     SeedBalanceStrategy,
     StrategyGovernanceConfig,
     normalize_strategy_id,
     save_strategy_outputs,
 )
+from sage_core.stock_selection.stock_selector import SelectionConfig
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
@@ -31,6 +31,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         return {}
     try:
         import yaml  # type: ignore
+
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
@@ -70,12 +71,17 @@ def main() -> None:
         champion_source=governance_raw.get("champion_source", "manual"),
         manual_effective_date=governance_raw.get("manual_effective_date"),
         manual_reason=governance_raw.get("manual_reason"),
-        challengers=tuple(governance_raw.get("challengers", [
-            "balance_strategy_v1",
-            "positive_strategy_v1",
-            "value_strategy_v1",
-            "satellite_strategy_v1",
-        ])),
+        challengers=tuple(
+            governance_raw.get(
+                "challengers",
+                [
+                    "balance_strategy_v1",
+                    "positive_strategy_v1",
+                    "value_strategy_v1",
+                    "satellite_strategy_v1",
+                ],
+            )
+        ),
     )
 
     challenger_weight_raw = cfg.get("challenger_weights", {})
@@ -130,7 +136,9 @@ def main() -> None:
         regime=args.regime,
     )
 
-    output_root = Path(args.output_root) if args.output_root else get_data_path("features", "stock_selector", ensure=True)
+    output_root = (
+        Path(args.output_root) if args.output_root else get_data_path("features", "stock_selector", ensure=True)
+    )
     if not output_root.is_absolute():
         output_root = ROOT / output_root
     output_root.mkdir(parents=True, exist_ok=True)

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
-import logging
 
 import numpy as np
 import pandas as pd
@@ -25,15 +25,15 @@ class SelectionConfig:
     industry_rank: bool = True
     industry_col: Optional[str] = "industry_l1"
     rank_mode: str = "industry"  # industry / market / auto
-    
+
     # P0: 行业中性化标签（防过拟合核心）
     label_neutralized: bool = True  # 标签 = 个股收益 - 行业平均收益
     market_neutralized: bool = False  # 标签 = 个股收益 - 市场平均收益
-    
+
     # P2: 因子 IC 筛选（防过拟合）
-    ic_filter_enabled: bool = True   # 启用 IC 筛选
-    ic_threshold: float = 0.015      # IC 阈值（放宽：A股单因子IC普遍偏低）
-    ic_ir_threshold: float = 0.2     # IC_IR 阈值（放宽：允许更多因子进入模型）
+    ic_filter_enabled: bool = True  # 启用 IC 筛选
+    ic_threshold: float = 0.015  # IC 阈值（放宽：A股单因子IC普遍偏低）
+    ic_ir_threshold: float = 0.2  # IC_IR 阈值（放宽：允许更多因子进入模型）
     ic_hit_rate_threshold: float = 0.50  # IC 胜率阈值（放宽：50%即可）
     max_corr_threshold: float = 0.7  # 共线性阈值
 
@@ -43,8 +43,8 @@ class SelectionConfig:
     price_col: str = "close"
 
     # 股票池过滤
-    exclude_bj: bool = True   # 排除北交所
-    exclude_st: bool = True   # 排除ST/*ST（需要name列）
+    exclude_bj: bool = True  # 排除北交所
+    exclude_st: bool = True  # 排除ST/*ST（需要name列）
 
     # 特征
     feature_cols: Optional[Tuple[str, ...]] = None
@@ -53,30 +53,34 @@ class SelectionConfig:
     max_feature_count: int = 30
 
     # 模型参数
-    lgbm_params: Dict[str, object] = field(default_factory=lambda: {
-        "objective": "regression",
-        "metric": "rmse",
-        "learning_rate": 0.02,        # ↓ 降低学习率
-        "num_leaves": 31,             # ↑ 从15提升，允许更复杂模式
-        "max_depth": 6,               # ↑ 从4提升，捕获特征交互
-        "min_data_in_leaf": 200,      # ↓ 从500降低，学习细粒度模式
-        "feature_fraction": 0.6,      # ↓ 特征采样
-        "bagging_fraction": 0.6,      # ↓ 数据采样
-        "bagging_freq": 5,
-        "lambda_l1": 1.0,             # L1 正则
-        "lambda_l2": 5.0,             # L2 正则（适度放松）
-        "min_gain_to_split": 0.01,    # 分裂最小增益
-        "verbosity": -1,
-        "seed": 42,
-    })
-    xgb_params: Dict[str, object] = field(default_factory=lambda: {
-        "objective": "reg:squarederror",
-        "learning_rate": 0.05,
-        "max_depth": 4,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
-        "n_estimators": 200,
-    })
+    lgbm_params: Dict[str, object] = field(
+        default_factory=lambda: {
+            "objective": "regression",
+            "metric": "rmse",
+            "learning_rate": 0.02,  # ↓ 降低学习率
+            "num_leaves": 31,  # ↑ 从15提升，允许更复杂模式
+            "max_depth": 6,  # ↑ 从4提升，捕获特征交互
+            "min_data_in_leaf": 200,  # ↓ 从500降低，学习细粒度模式
+            "feature_fraction": 0.6,  # ↓ 特征采样
+            "bagging_fraction": 0.6,  # ↓ 数据采样
+            "bagging_freq": 5,
+            "lambda_l1": 1.0,  # L1 正则
+            "lambda_l2": 5.0,  # L2 正则（适度放松）
+            "min_gain_to_split": 0.01,  # 分裂最小增益
+            "verbosity": -1,
+            "seed": 42,
+        }
+    )
+    xgb_params: Dict[str, object] = field(
+        default_factory=lambda: {
+            "objective": "reg:squarederror",
+            "learning_rate": 0.05,
+            "max_depth": 4,
+            "subsample": 0.8,
+            "colsample_bytree": 0.8,
+            "n_estimators": 200,
+        }
+    )
 
     def normalized_label_weights(self) -> Tuple[Tuple[int, ...], Tuple[float, ...]]:
         horizons = self.label_horizons or (20,)
@@ -128,7 +132,7 @@ class StockSelector:
         feature_cols = self._filter_features_by_ic(train_df, list(feature_cols))
         if not feature_cols:
             raise ValueError("IC筛选后无有效因子，请降低 ic_threshold")
-        
+
         self.feature_cols = feature_cols
 
         if self.config.model_type == "rule":
@@ -247,7 +251,9 @@ class StockSelector:
         df["ma_20_ratio"] = df[price_col] / group[price_col].transform(lambda s: s.rolling(20).mean())
         df["ma_60_ratio"] = df[price_col] / group[price_col].transform(lambda s: s.rolling(60).mean())
         df["vol_20d"] = returns.groupby(df[code_col]).rolling(20).std().reset_index(level=0, drop=True)
-        df["downside_vol_20d"] = returns.where(returns < 0).groupby(df[code_col]).rolling(20).std().reset_index(level=0, drop=True)
+        df["downside_vol_20d"] = (
+            returns.where(returns < 0).groupby(df[code_col]).rolling(20).std().reset_index(level=0, drop=True)
+        )
         rolling_dd = group[price_col].transform(lambda s: s / s.rolling(60).max() - 1)
         df["max_drawdown_60d"] = rolling_dd.groupby(df[code_col]).rolling(60).min().reset_index(level=0, drop=True)
 
@@ -322,7 +328,9 @@ class StockSelector:
             df["northbound_hold_ratio"] = pd.to_numeric(df[nb_hold_col], errors="coerce")
         if nb_flow_col and nb_flow_col != "northbound_net_flow_20d":
             flow = pd.to_numeric(df[nb_flow_col], errors="coerce")
-            df["northbound_net_flow_20d"] = flow.groupby(df[code_col]).rolling(20).mean().reset_index(level=0, drop=True)
+            df["northbound_net_flow_20d"] = (
+                flow.groupby(df[code_col]).rolling(20).mean().reset_index(level=0, drop=True)
+            )
         if beta_col and beta_col != "beta_120d":
             df["beta_120d"] = pd.to_numeric(df[beta_col], errors="coerce")
 
@@ -357,22 +365,22 @@ class StockSelector:
 
         for horizon, weight in zip(horizons, weights):
             future_ret = group[price_col].shift(-horizon) / df[price_col] - 1
-            
+
             # P0: 行业中性化（防过拟合核心）
             if cfg.label_neutralized and cfg.industry_col and cfg.industry_col in df.columns:
                 # 计算行业平均收益（按日期+行业分组）
                 df_temp = df.copy()
-                df_temp['_future_ret'] = future_ret.values if hasattr(future_ret, 'values') else future_ret
-                industry_mean = df_temp.groupby([date_col, cfg.industry_col])['_future_ret'].transform('mean')
+                df_temp["_future_ret"] = future_ret.values if hasattr(future_ret, "values") else future_ret
+                industry_mean = df_temp.groupby([date_col, cfg.industry_col])["_future_ret"].transform("mean")
                 # 行业中性化：个股收益 - 行业平均收益
                 future_ret = future_ret - industry_mean
             elif cfg.market_neutralized:
                 # 市场中性化
                 df_temp = df.copy()
-                df_temp['_future_ret'] = future_ret.values if hasattr(future_ret, 'values') else future_ret
-                market_mean = df_temp.groupby(date_col)['_future_ret'].transform('mean')
+                df_temp["_future_ret"] = future_ret.values if hasattr(future_ret, "values") else future_ret
+                market_mean = df_temp.groupby(date_col)["_future_ret"].transform("mean")
                 future_ret = future_ret - market_mean
-            
+
             if cfg.risk_adjusted:
                 label = future_ret / (vol + 1e-8)
             else:
@@ -448,7 +456,9 @@ class StockSelector:
         score = sum(zscores)
         return score.to_numpy()
 
-    def _fit_lgbm(self, train_df: pd.DataFrame, feature_cols: Sequence[str], sample_weight: Optional[np.ndarray] = None) -> None:
+    def _fit_lgbm(
+        self, train_df: pd.DataFrame, feature_cols: Sequence[str], sample_weight: Optional[np.ndarray] = None
+    ) -> None:
         try:
             import lightgbm as lgb
         except ModuleNotFoundError as exc:
@@ -489,14 +499,8 @@ class StockSelector:
         if use_ranking_group:
             y_train = self._to_lgbm_rank_labels(y_train)
             y_val = self._to_lgbm_rank_labels(y_val)
-            train_groups = (
-                training_frame[~val_mask].groupby(date_col, sort=True)
-                .size().astype(int).tolist()
-            )
-            val_groups = (
-                training_frame[val_mask].groupby(date_col, sort=True)
-                .size().astype(int).tolist()
-            )
+            train_groups = training_frame[~val_mask].groupby(date_col, sort=True).size().astype(int).tolist()
+            val_groups = training_frame[val_mask].groupby(date_col, sort=True).size().astype(int).tolist()
             dataset = lgb.Dataset(X_train, label=y_train, weight=w_train, group=train_groups)
             val_dataset = lgb.Dataset(X_val, label=y_val, weight=w_val, group=val_groups, reference=dataset)
         else:
@@ -645,7 +649,7 @@ class StockSelector:
     def _filter_features_by_ic(self, df: pd.DataFrame, feature_cols: List[str], label_col: str = "label") -> List[str]:
         """
         P2: 因子 IC 筛选（防过拟合）
-        
+
         筛选条件：
         1. |IC| > ic_threshold
         2. IC_IR > ic_ir_threshold
@@ -653,11 +657,11 @@ class StockSelector:
         """
         if not self.config.ic_filter_enabled:
             return feature_cols
-        
+
         date_col = self.config.date_col
         if label_col not in df.columns:
             return feature_cols
-        
+
         # 1. 计算 IC（按日期截面，一次性计算所有特征）
         valid_cols = [c for c in feature_cols if c in df.columns]
         ic_records = []
@@ -674,11 +678,13 @@ class StockSelector:
             return feature_cols
 
         ic_df = pd.DataFrame(ic_records)
-        ic_series = {col: ic_df[col].dropna() for col in valid_cols if col in ic_df.columns and ic_df[col].notna().any()}
-        
+        ic_series = {
+            col: ic_df[col].dropna() for col in valid_cols if col in ic_df.columns and ic_df[col].notna().any()
+        }
+
         if not ic_series:
             return feature_cols
-        
+
         # 2. IC 筛选
         selected = []
         ic_stats = {}
@@ -693,7 +699,7 @@ class StockSelector:
                 if ic_ir >= self.config.ic_ir_threshold:
                     if hit_rate >= self.config.ic_hit_rate_threshold:
                         selected.append(col)
-        
+
         # 最小特征数保障：不足时按 |IC| 排序补充
         min_count = max(self.config.min_feature_count, 5)
         if len(selected) < min_count and ic_stats:
@@ -724,12 +730,12 @@ class StockSelector:
                 if not high_corr:
                     final_selected.append(col)
             selected = final_selected
-        
+
         logger.info(f"共线性过滤: {len(selected)} 因子")
-        
+
         # 保存 IC 统计信息
         self.feature_ic_stats = ic_stats
-        
+
         return selected if selected else feature_cols
 
     def _fill_missing_features(self, df: pd.DataFrame, feature_cols: Sequence[str], fit: bool) -> pd.DataFrame:

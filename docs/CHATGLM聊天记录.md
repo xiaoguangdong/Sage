@@ -67,42 +67,42 @@ import talib
 def detect_market_theme(price_data, fundamental_data, window=60):
     """
     识别市场主线逻辑的函数
-    
+
     参数:
     price_data: DataFrame, 包含各板块指数的收盘价
     fundamental_data: DataFrame, 包含各板块的盈利预测变动(ROE Forecast Change)
-    
+
     返回:
     ranked_sectors: Series, 按照主线强度排名的板块
     """
-    
+
     # 1. 计算动量因子 (RPS)
     # 计算过去window日的涨跌幅
     momentum = price_data.iloc[-1] / price_data.iloc[-window] - 1
-    
+
     # 2. 计算波动率 (风险控制，低波动在牛市中期往往更稳)
     returns = price_data.pct_change()
     volatility = returns.iloc[-window:].std() * np.sqrt(252)
-    
+
     # 3. 基本面改善 (预期修正)
     # 假设fundamental_data是近期分析师上调预期的比例
     fund_score = fundamental_data['Forecast_Up_Ratio']
-    
+
     # 4. 综合评分
     # 逻辑：主线 = 高动量 + 基本面改善 + 相对较低的波动(避免纯投机)
     # 权重分配可以根据市场环境微调
     weights = {'momentum': 0.5, 'fund': 0.4, 'vol': -0.1}
-    
+
     # 标准化处理
     def normalize(s):
         return (s - s.mean()) / s.std()
-    
-    score = (normalize(momentum) * weights['momentum'] + 
-             normalize(fund_score) * weights['fund'] + 
+
+    score = (normalize(momentum) * weights['momentum'] +
+             normalize(fund_score) * weights['fund'] +
              normalize(1/volatility) * abs(weights['vol']))
-    
+
     ranked_sectors = score.sort_values(ascending=False)
-    
+
     return ranked_sectors
 # 模拟数据生成 (实盘时需接入Wind/同花顺接口)
 sectors = ['Liquor', 'NewEnergy', 'AI', 'Coal', 'Bank']
@@ -183,43 +183,43 @@ def get_mainline_industries(end_date):
     通过计算过去20日各申万行业的超额收益，选出最强板块。
     """
     print(f"=== 正在分析 {end_date} 的市场主线 ===")
-    
+
     # 1. 获取申万一级行业列表
-    df_ind = pro.index_classify(level='L1', src='SW2021') 
+    df_ind = pro.index_classify(level='L1', src='SW2021')
     # 注意：实际使用中SW2021接口可能需要积分，或者用通用指数接口 pro.index_basic(market='SSE')
-    
+
     # 为演示简化，假设我们已经拿到了主要行业指数代码，例如：801010.SI (农林牧渔) ...
     # 实际生产中需要维护一个 'sw_index_map.csv' 或者动态获取
     # 这里我们手动模拟几个代表性指数代码进行逻辑演示
     # 真实场景：遍历 df_ind 中的 index_code
     index_codes = ['801010.SI', '801020.SI', '801030.SI', '801040.SI', '801050.SI', '801080.SI', '801120.SI', '801730.SI', '801750.SI', '801880.SI']
-    
+
     industry_performance = []
-    
+
     # 获取基准（沪深300）过去20天的表现
     df_bench = pro.index_daily(ts_code='000300.SH', end_date=end_date, fields='trade_date,close,pct_chg')
     df_bench = df_bench.sort_values('trade_date').tail(20)
     bench_return = df_bench['pct_chg'].sum() # 简单加总近似累计涨幅
-    
+
     for code in index_codes:
         # 获取行业指数日线
         df_ind_daily = pro.index_daily(ts_code=code, end_date=end_date, fields='trade_date,close,pct_chg')
         if df_ind_daily.empty:
             continue
-            
+
         df_ind_daily = df_ind_daily.sort_values('trade_date').tail(20)
         ind_return = df_ind_daily['pct_chg'].sum()
-        
+
         # 计算超额收益
         excess_return = ind_return - bench_return
-        
+
         industry_performance.append({
             'sw_index_code': code,
             'excess_return': excess_return
         })
-    
+
     df_perf = pd.DataFrame(industry_performance)
-    
+
     # 选出超额收益最高的行业
     df_top_ind = df_perf.sort_values('excess_return', ascending=False).head(TOP_K_INDUSTRY)
     print(f"检测到主线行业: {df_top_ind['sw_index_code'].tolist()}")
@@ -230,30 +230,30 @@ def select_stocks_in_industry(sw_index_code, trade_date):
     结合 动量、盈利质量、估值 进行打分
     """
     print(f"--- 正在筛选 {sw_index_code} 中的优质股票 ---")
-    
+
     # 1. 获取该行业成分股
     # 接口: pro.index_member(index_code=...) 获取指数成分
     df_members = pro.index_member(index_code=sw_index_code)
     ts_codes = df_members['con_code'].tolist()
-    
+
     # 为演示效率，只取前30只做分析
     ts_codes = ts_codes[:30]
-    
+
     stock_list = []
-    
+
     # 2. 获取个股的基本面数据 (最新一期)
     # daily_basic 包含了 pe_ttm, 市值等
-    df_basic = pro.daily_basic(trade_date=trade_date, ts_code=','.join(ts_codes), 
+    df_basic = pro.daily_basic(trade_date=trade_date, ts_code=','.join(ts_codes),
                                 fields='ts_code,pe_ttm,dv_ratio,total_mv')
-    
+
     # fina_indicator 包含了 roe, roe_dt(扣非摊薄), netprofit_yoy(净利同比)
     # 注意：fina_indicator 的 end_date 往往滞后，需要取最近一期
-    df_fin = pro.fina_indicator(ts_code=','.join(ts_codes), end_date=20231231, 
+    df_fin = pro.fina_indicator(ts_code=','.join(ts_codes), end_date=20231231,
                                  fields='ts_code,roe,roe_dt,netprofit_yoy')
-    
+
     # 合并数据
     df_merge = pd.merge(df_basic, df_fin, on='ts_code', how='left')
-    
+
     # 3. 获取个股过去20日涨跌幅（动量）
     # 为简化代码，这里假设我们需要单独请求，实际中可批量获取
     # 这里用随机数模拟动量数据，避免代码过长超时，实际请用 pro.daily
@@ -261,34 +261,34 @@ def select_stocks_in_industry(sw_index_code, trade_date):
     # df_merge['momentum_20'] = df_price['pct_chg'].sum()
     np.random.seed(int(sw_index_code[-3:])) # 伪随机，确保演示结果固定
     df_merge['momentum_20'] = np.random.uniform(-5, 25, size=len(df_merge))
-    
+
     # 4. 数据清洗与打分
     # 剔除亏损股 (PE<0 或 净利同比过低)
     df_merge = df_merge[(df_merge['pe_ttm'] > 0) & (df_merge['netprofit_yoy'] > 0)].dropna()
-    
+
     if df_merge.empty:
         return []
-        
+
     # 标准化打分 (Z-Score -> Rank)
     def rank_score(series):
         return series.rank(pct=True) * 100
-    
+
     # 动量越大越好
     df_merge['score_mom'] = rank_score(df_merge['momentum_20'])
     # ROE越大越好
     df_merge['score_roe'] = rank_score(df_merge['roe_dt'])
     # 估值 (PE) 越小越好 (这里简化处理，未做历史分位，仅做横截面比较)
     df_merge['score_val'] = rank_score(-1 * df_merge['pe_ttm'])
-    
+
     # 综合评分
     # 权重：动量40% (因为是牛市，顺势而为)，盈利40%，估值20%
-    df_merge['final_score'] = (0.4 * df_merge['score_mom'] + 
-                               0.4 * df_merge['score_roe'] + 
+    df_merge['final_score'] = (0.4 * df_merge['score_mom'] +
+                               0.4 * df_merge['score_roe'] +
                                0.2 * df_merge['score_val'])
-    
+
     # 排序
     df_result = df_merge.sort_values('final_score', ascending=False).head(TOP_K_STOCKS)
-    
+
     return df_result[['ts_code', 'pe_ttm', 'roe_dt', 'netprofit_yoy', 'final_score']]
 # =================主程序执行=================
 # 1. 获取主线
@@ -388,7 +388,7 @@ class ICIndustryMonitor:
     def __init__(self, end_date):
         self.end_date = end_date
         self.industry_name = '集成电路'
-        
+
     def get_nbs_data(self):
         """
         模拟获取国家统计局数据
@@ -412,17 +412,17 @@ class ICIndustryMonitor:
         """
         # 获取主要成分股（简化列表，实盘应动态获取）
         ic_stocks = ['688981.SH', '688008.SH', '600584.SH', '002049.SZ', '603501.SH']
-        
+
         # 获取最近一期财报数据 (接口: fina_indicator)
         # 注意：需要指定最新的会计期，这里硬编码示例，实盘需动态获取 latest_period
-        df_fin = pro.fina_indicator(ts_code=','.join(ic_stocks), 
-                                     end_date=20231231, 
+        df_fin = pro.fina_indicator(ts_code=','.join(ic_stocks),
+                                     end_date=20231231,
                                      fields='ts_code,end_date,orv,inv') # orv:营收增速, inv:存货
-        
+
         # 计算行业整体数据（按市值加权会更准，这里简化为等权平均）
         avg_orv = df_fin['orv'].mean()
         avg_inv = df_fin['inv'].mean()
-        
+
         return avg_orv, avg_inv
     def get_valuation_percentile(self):
         """
@@ -432,33 +432,33 @@ class ICIndustryMonitor:
         df_index = pro.index_daily(ts_code='801081.SI', start_date='20180101', end_date=self.end_date)
         # 计算PB需要指数的市值和净资产，这里简化为直接获取PE或PB数据(如有高级权限)
         # 或者使用行业龙头股的PB中位数代替
-        
+
         # 模拟：假设计算出了当前PB在历史中的分位数为 18%
-        current_pb_percentile = 0.18 
+        current_pb_percentile = 0.18
         return current_pb_percentile
     def generate_signal(self):
         print(f"=== {self.industry_name} 景气度监测报告 ({self.end_date}) ===")
-        
+
         # 1. 宏观维度
         nbs_growth = self.get_nbs_data()
         macro_boom = 1 if nbs_growth > 0 else 0
         print(f"[NBS] 产量同比增速: {nbs_growth}% -> {'景气回升' if macro_boom else '景气下行'}")
-        
+
         # 2. 微观库存周期
         avg_rev_growth, avg_inv_growth = self.get_tushare_financials()
         # 逻辑：营收增长为正，且存货增速下降 (被动去库)
         inventory_cycle_up = 1 if (avg_rev_growth > 0 and avg_inv_growth < 10) else 0
         print(f"[Tushare] 营收增速: {avg_rev_growth}%, 存货增速: {avg_inv_growth}% -> {'被动去库/补库' if inventory_cycle_up else '主动去库'}")
-        
+
         # 3. 估值维度
         pb_pct = self.get_valuation_percentile()
         is_undervalued = 1 if pb_pct < 0.2 else 0
         print(f"[Val] PB历史分位: {pb_pct*100:.1f}% -> {'低估' if is_undervalued else '正常/高估'}")
-        
+
         # 综合决策
         # 规则：宏观反转 + 微观去库结束 + 估值低
         total_score = macro_boom + inventory_cycle_up + is_undervalued
-        
+
         print("\n--- 决策结果 ---")
         if total_score >= 3:
             print("【强烈买入信号】：基本面、估值、库存周期发生完美共振，类似19年新能源前夕。")
@@ -476,37 +476,37 @@ monitor.generate_signal()
 3.  **历史会重演**：回顾白酒牛市，买的是“确定性的估值修复”；回顾新能源，买的是“爆发性的业绩增长”。对于现在的集成电路，如果数据符合上述模型（低PB + 去库结束 + NBS增速回升），那么它大概率会复制新能源初期的行情——**从估值修复开始，走向业绩驱动**。
 
 
- 
+
  # 这些数据获取成本很高吗？普通人员是否可以通过调用API或者用工具爬取?
 **先把结论说在前面：**
-- 对“普通个人/小团队量化”来说，用你提到的那几类核心宏观/中观数据做“美林时钟 + 行业CAPEX + 分行业PPI”这一套，  
+- 对“普通个人/小团队量化”来说，用你提到的那几类核心宏观/中观数据做“美林时钟 + 行业CAPEX + 分行业PPI”这一套，
   成本是“不高”的，甚至可以做到接近零费用，但需要花一点时间搭好数据管道（主要是手动 + 轻量爬虫 + Tushare 这类免费/低门槛 API）。
 - 真正贵的是“结构化、自动、全历史、秒级更新”的高端数据库（比如 CEIC、Wind、Choice），但对你这套模型来说，并不是非要那种级别。
 下面分块说：哪些数据从哪拿、难度和成本大概多少、给一个实际可执行的组合方案，最后附 Python 伪代码。
 ---
 ## 一、你真正需要的数据，拆开来看
 你要的核心指标其实就三类：
-1) 宏观价格与利率  
-- CPI：全国及核心CPI  
-- PPI：总指数 + 分行业PPI（至少对你关心的行业，比如：计算机通信和其他电子设备制造业）  
+1) 宏观价格与利率
+- CPI：全国及核心CPI
+- PPI：总指数 + 分行业PPI（至少对你关心的行业，比如：计算机通信和其他电子设备制造业）
 - 10年期国债收益率：用来做“贴现率 + 美林时钟”
-2) 行业资本开支 / CAPEX  
-- 行业固定资产投资（国家统计局口径的“分行业固定资产投资增速”）  
-- 或从个股财报反推：  
-  - 购建固定资产、无形资产和其他长期资产支付的现金（CFI）  
+2) 行业资本开支 / CAPEX
+- 行业固定资产投资（国家统计局口径的“分行业固定资产投资增速”）
+- 或从个股财报反推：
+  - 购建固定资产、无形资产和其他长期资产支付的现金（CFI）
   - 固定资产原值/在建工程等科目
-3) 行业产出/景气（可选，但很有用）  
-- 行业工业增加值增速  
-- 行业产量（如集成电路产量、发电量、新能源汽车产量等）  
+3) 行业产出/景气（可选，但很有用）
+- 行业工业增加值增速
+- 行业产量（如集成电路产量、发电量、新能源汽车产量等）
 这些都是国家统计局、央行、公开网站已经在发布的东西，只是“有没有一个统一的 API”的问题。
 ---
 ## 二、每一类数据的获取路径与成本（从“最省事”到“最省钱”）
 ### 1. CPI / 总体 PPI：Tushare 一行搞定（成本几乎为 0）
 - Tushare Pro 有现成宏观数据接口：
-  - `cn_cpi`：全国 CPI（当月值、同比、环比，含城市/农村）  
+  - `cn_cpi`：全国 CPI（当月值、同比、环比，含城市/农村）
   - `cn_ppi`：PPI 总指数（当月值、同比、环比等）【在“宏观经济 - 价格指数”目录下】
 - 权限要求：
-  - 文档里写的是“积累 600 积分可用”。  
+  - 文档里写的是“积累 600 积分可用”。
   - 实际上注册 + 完善个人信息就有 120 左右，日常贡献一点文档/分享很容易到 600，属于“免费但要轻量参与”的级别。
 - 示例调用（伪代码）：
 ```python
@@ -524,59 +524,59 @@ df_ppi = pro.cn_ppi(start_m="202001", end_m="202512")
   - `10年期` 对应的那一列（字段名通常是类似 `y10` 或具体见接口文档）。
 - 权限：一般也是积分制，但门槛不高，同上。
 有了 10Y 国债收益率，你就有了：
-- 贴现率 proxy：用于 DCF 估值时做分母  
+- 贴现率 proxy：用于 DCF 估值时做分母
 - 美林时钟的一个维度：利率下行/低位 → 成长/长久期资产友好；利率上行 → 价值/短久期、周期更受益
 ---
 ### 3. 分行业 PPI：公开 + 轻量爬虫（免费）
 这里是你最关心的“PPI 分项、分行业”。现实情况是：
 - 国家统计局本身不提供简单 REST API，但：
   - 每月会发布“工业生产者出厂价格主要分组指数表”等表格，里面有：
-    - 按工业门类：采矿业、制造业、电力/热力/燃气及水生产和供应业  
-    - 按行业大类：如“计算机、通信和其他电子设备制造业”“汽车制造业”等  
+    - 按工业门类：采矿业、制造业、电力/热力/燃气及水生产和供应业
+    - 按行业大类：如“计算机、通信和其他电子设备制造业”“汽车制造业”等
   - 各地统计调查网也有“工业生产者分行业出厂价格指数”页面，以 HTML 表格形式给出，可直接解析。
 - 第三方数据库如“前瞻数据库”“慧博 EDB”等把这些做成了结构化指标，可在线查看和下载，但往往需要注册/付费，偏“研用+轻度商业”。
 对普通人来说，低成本的方案是：
-- 方案 A（最推荐）：定期从国家统计局/地方统计局网页手动下载表格（Excel 或 HTML），写一个解析脚本存到本地数据库/CSV，然后程序自动读取。  
+- 方案 A（最推荐）：定期从国家统计局/地方统计局网页手动下载表格（Excel 或 HTML），写一个解析脚本存到本地数据库/CSV，然后程序自动读取。
 - 方案 B：如果不怕写一点爬虫，就写一个轻量爬虫，定期拉对应页面并解析表格（注意频率与合规，避免给对方造成压力）。
 成本：0 元；时间成本：一次性搭好脚本后，基本自动。
 ---
 ### 4. 行业固定资产投资 / 行业 CAPEX：国家统计局月度/年度通报 + 爬虫
 国家统计局每月/每季会发布“固定资产投资（不含农户）情况”，里面就有分行业投资的同比增速，例如：
 - “2025年1–9月份全国固定资产投资基本情况”给出了：
-  - 制造业投资同比增长 4.0%  
-  - 其中：农副食品加工业 14.3%，汽车制造业 19.2%，计算机、通信和其他电子设备制造业 -2.1%，等等。  
+  - 制造业投资同比增长 4.0%
+  - 其中：农副食品加工业 14.3%，汽车制造业 19.2%，计算机、通信和其他电子设备制造业 -2.1%，等等。
 - 年度数据同样给出“分行业投资同比增长情况”。
 这些数据就是你模型中“行业 CAPEX 连续 3 个季度环比增长”的直接来源。
 获取方式跟“分行业 PPI”类似：
-- 方案 A：定期从统计局网站手动复制/下载 Excel，整理成 CSV。  
+- 方案 A：定期从统计局网站手动复制/下载 Excel，整理成 CSV。
 - 方案 B：写简单爬虫，解析对应页面的表格（大部分都是标准 HTML table 或 Excel 附件）。
 成本：0 元；时间成本：写一次脚本，之后维护性很低。
 ---
 ### 5. 行业产量 / 景气度：国家统计局 / 行业协会 / 地方统计局
 例如你要追踪“集成电路”：
-- 国家统计局月度/年度数据里经常会有“主要产品产量”的表格，其中可能包含“集成电路产量”；  
-- 对应行业（电子信息制造业）的工信部或行业协会也会发布月度运行情况；  
+- 国家统计局月度/年度数据里经常会有“主要产品产量”的表格，其中可能包含“集成电路产量”；
+- 对应行业（电子信息制造业）的工信部或行业协会也会发布月度运行情况；
 - 有些地方统计局会单独发布细分行业运行情况（例如某省集成电路产业月度数据）。
 这些同样可以通过：
-- 手动下载表格  
+- 手动下载表格
 - 或解析网页、附件 Excel
 来获得结构化时间序列数据。
 ---
 ## 三、如果不写爬虫，有没有更“懒”的第三方数据接口？
 有，但免费程度不一：
 - Tushare：
-  - CPI/PPI：有官方接口，积分门槛低。  
-  - 10 年期国债收益率曲线：有接口。  
+  - CPI/PPI：有官方接口，积分门槛低。
+  - 10 年期国债收益率曲线：有接口。
   - 分行业 PPI / 分行业投资：目前公开文档里没有直接接口，需自己从统计局或三方库整合。
 - 同花顺 10jqka、东方财富 data.eastmoney：
-  - 有“宏观数据”专区，提供图表与表格，很多可以导出 Excel，也有部分 API（但更多面向商业用户/量化平台，比如同花顺量化 API）。  
+  - 有“宏观数据”专区，提供图表与表格，很多可以导出 Excel，也有部分 API（但更多面向商业用户/量化平台，比如同花顺量化 API）。
   - 对个人来说，最简单的做法是：定期手动从网站导出 CSV/Excel，再通过脚本自动化。
 - 前瞻数据库、慧博 EDB 等：
-  - 宏观指标非常全，PPI 分行业、固定资产投资分行业等都有，但基本是付费数据库，更偏专业机构用户。  
+  - 宏观指标非常全，PPI 分行业、固定资产投资分行业等都有，但基本是付费数据库，更偏专业机构用户。
   - 如果你对数据质量和时间极其看重，这类数据可以视为“贵但省心”。
-总结一句：  
-- 宏观总量（CPI/PPI 总指数 + 10Y 收益率）Tushare 基本够用且便宜。  
-- 分行业 PPI / CAPEX：官方免费但需要你自己搭一点数据管道（手动或爬虫）。  
+总结一句：
+- 宏观总量（CPI/PPI 总指数 + 10Y 收益率）Tushare 基本够用且便宜。
+- 分行业 PPI / CAPEX：官方免费但需要你自己搭一点数据管道（手动或爬虫）。
 - 如果不想自己搭，就要花钱买第三方库（CEIC/Choice/东方财富专业版 等）。
 ---
 ## 四、一个“低数据成本”的落地架构（适合你这种只用 Tushare + NBS 的场景）
@@ -597,21 +597,21 @@ flowchart LR
   FactorDB --> Model[景气度/估值/时钟模型\n生成行业信号]
 ```
 这个架构的关键点：
-- Tushare 负责：CPI、总 PPI、10 年期国债收益率；  
-- 国家统计局（网页 + 爬虫）负责：  
-  - 分行业固定资产投资增速（CAPEX proxy）  
-  - 分行业 PPI  
-  - 主要行业产量（集成电路、新能源车等）  
+- Tushare 负责：CPI、总 PPI、10 年期国债收益率；
+- 国家统计局（网页 + 爬虫）负责：
+  - 分行业固定资产投资增速（CAPEX proxy）
+  - 分行业 PPI
+  - 主要行业产量（集成电路、新能源车等）
 - 所有数据统一存成本地 SQLite / MySQL / Parquet，方便做回测和因子构建。
 对“普通个人”来说，这个方案：
-- 金钱成本：基本为 0（最多就是付一点网费 + 电费）。  
-- 时间成本：  
-  - 写脚本：1～3 个工作日（主要在解析 Excel/HTML）。  
+- 金钱成本：基本为 0（最多就是付一点网费 + 电费）。
+- 时间成本：
+  - 写脚本：1～3 个工作日（主要在解析 Excel/HTML）。
   - 日常维护：每月/每季更新数据的时候，花 10 分钟下载文件 + 跑一次脚本即可。
 ---
 ## 五、简单实现代码（示意：用 Tushare + 本地行业CAPEX/PPI 表）
 下面是一个非常简化的示例，展示如何“读入 Tushare 宏观数据 + 本地行业数据 + 计算你说的指标”。
-注意：  
+注意：
 - “分行业 CAPEX / PPI 表”这里用模拟数据代替，你只要换成自己从国家统计局抓来的真实列名就行。
 ```python
 import pandas as pd
@@ -682,37 +682,37 @@ if __name__ == "__main__":
     print(recent[["date", "industry", "fa_ind_yoy", "ppi_ind_yoy"]].head())
 ```
 这段代码的核心思路：
-- 把统计局的“分行业固定资产投资”和“分行业PPI”整理成时间序列；  
-- 用简单 rolling window 判断“CAPEX 是否连续 3 个季度（或 3 个月）为正”以及“PPI 是否在回升”；  
+- 把统计局的“分行业固定资产投资”和“分行业PPI”整理成时间序列；
+- 用简单 rolling window 判断“CAPEX 是否连续 3 个季度（或 3 个月）为正”以及“PPI 是否在回升”；
 - 再叠加上 Tushare 的 CPI/总 PPI/10Y 收益率，做美林时钟风格的宏观环境划分。
 ---
 ## 六、回到你的原问题：“获取成本高吗？普通人能做到吗？”
 从上面的拆解可以很直接地回答：
-- 宏观总量（CPI / 总 PPI / 10Y 收益率）  
-  - 成本：基本为 0（Tushare 免费积分）。  
+- 宏观总量（CPI / 总 PPI / 10Y 收益率）
+  - 成本：基本为 0（Tushare 免费积分）。
   - 难度：极低，就是几行 API 调用。
-- 分行业 PPI / 行业固定资产投资（行业 CAPEX proxy）  
-  - 成本：0 元，但需要你花时间“搭数据管道”：  
-    - 要么每月手动从国家统计局/地方统计局网站下载 Excel/CSV；  
-    - 要么写一次简单的爬虫解析页面或附件。  
+- 分行业 PPI / 行业固定资产投资（行业 CAPEX proxy）
+  - 成本：0 元，但需要你花时间“搭数据管道”：
+    - 要么每月手动从国家统计局/地方统计局网站下载 Excel/CSV；
+    - 要么写一次简单的爬虫解析页面或附件。
   - 难度：中等偏易，更多是工程活而不是算法难题。
-- 高级自动化结构化数据（CEIC / Choice / Wind 等）  
-  - 成本：高（几万～几十万一年），对个人/小团队一般不现实；  
+- 高级自动化结构化数据（CEIC / Choice / Wind 等）
+  - 成本：高（几万～几十万一年），对个人/小团队一般不现实；
   - 但对你这一套模型来说，完全不是必需品，用 NBS + Tushare 已经足够支撑“美林时钟 + CAPEX + PPI”的核心逻辑。
 所以总结一下给你一个可直接执行的“低成本方案”：
-- 第一步：注册 Tushare，拿到 token，搞定：  
-  - `cn_cpi`（CPI）  
-  - `cn_ppi`（PPI 总指数）  
+- 第一步：注册 Tushare，拿到 token，搞定：
+  - `cn_cpi`（CPI）
+  - `cn_ppi`（PPI 总指数）
   - 国债收益率曲线接口（取 10 年期）
-- 第二步：在国家统计局官网上，找到你关心的行业的以下两类表格：  
-  - “固定资产投资（不含农户）分行业情况”（月度/季度）  
-  - “工业生产者出厂价格主要分组指数表”或“工业生产者分行业出厂价格指数”（有行业 PPI）  
-- 第三步：写两个简单脚本：  
-  - 一个解析投资表格（date, 行业, 投资额或同比 → 存 CSV）；  
+- 第二步：在国家统计局官网上，找到你关心的行业的以下两类表格：
+  - “固定资产投资（不含农户）分行业情况”（月度/季度）
+  - “工业生产者出厂价格主要分组指数表”或“工业生产者分行业出厂价格指数”（有行业 PPI）
+- 第三步：写两个简单脚本：
+  - 一个解析投资表格（date, 行业, 投资额或同比 → 存 CSV）；
   - 一个解析 PPI 表格（date, 行业, PPI 同比/环比 → 存 CSV）。
-- 第四步：用类似上面提供的示例代码，将 Tushare 宏观 + 本地行业数据合并，构造你模型中的：  
-  - 行业 CAPEX 连续扩张指标；  
-  - 行业 PPI 回升指标；  
+- 第四步：用类似上面提供的示例代码，将 Tushare 宏观 + 本地行业数据合并，构造你模型中的：
+  - 行业 CAPEX 连续扩张指标；
+  - 行业 PPI 回升指标；
   - 叠加 CPI/10Y 收益率，用来做宏观时钟与行业景气共振的判断。
 这样一来，你就可以在“只用 Tushare + 国家统计局公开数据”的前提下，比较低成本、稳定地跑起你说的那套“宏观 + 行业 CAPEX + PPI”的规则/模型。
 
@@ -777,12 +777,12 @@ def classify_market_scenario(
     fai_yoy,           # 固定资产投资同比 (CAPEX proxy)
     inv_yoy,           # 存货同比增速
     rev_yoy,           # 营收同比增速
-    
+
     # 市场情绪/估值
     pb_percentile,     # PB历史分位数
     turnover_rate,     # 换手率
     rps_120,           # 120日相对强度排名 (0-100)
-    
+
     # 宏观流动性 (用于判断全局衰退)
     credit_growth,     # 社融增速
     pmi_value          # PMI数值
@@ -790,11 +790,11 @@ def classify_market_scenario(
     """
     返回当前场景状态
     """
-    
+
     # 1. 优先判断全局衰退 (系统风险优先)
     if credit_growth < 9.5 or pmi_value < 48.5:
         return "SYSTEMIC RECESSION (全行业衰退/空仓)"
-    
+
     # 2. 判断行业大涨 (泡沫)
     # 逻辑：估值极高 + 换手率极高 + 动量极强
     if pb_percentile > 80 and turnover_rate > 0.08 and rps_120 > 90:
@@ -804,14 +804,14 @@ def classify_market_scenario(
     ppi_improving = ppi_yoy > -2 # 跌幅收窄或转正
     inventory_cleared = inv_yoy < rev_yoy and inv_yoy < 10
     reasonable_val = pb_percentile < 60
-    
+
     if ppi_improving and inventory_cleared and reasonable_val:
         return "RECOVERY (行业复苏/布局)"
     # 4. 判断行业衰退
     # 逻辑：价格暴跌 + 扩产停止 + 盈利恶化
     if ppi_yoy < -5 and fai_yoy < 0 and rev_yoy < 0:
         return "INDUSTRY RECESSION (行业衰退/规避)"
-    
+
     # 5. 默认状态
     return "NEUTRAL / MIXED (震荡/观察)"
 # --- 模拟测试 ---
@@ -939,7 +939,7 @@ def adaptive_factor_scoring(df_factor, df_returns, window=20):
 adaptive_scores, ic_df = adaptive_factor_scoring(df_factor, df_returns, window=20)
 print("=== IC 衰减监控 ===")
 # 你会发现 IC 在前50天大概在0.05左右，后50天在0附近震荡
-print(ic_df.tail(10)) 
+print(ic_df.tail(10))
 print("\n=== 因子值变化 ===")
 # 对比第40天（有效期内）和第90天（失效期）的因子分布
 print("Day 40 (Effective period) - Max Score:", adaptive_scores.iloc[40].max())
@@ -1010,7 +1010,7 @@ ELSE:
 不要训练完就不管了。你要定期观察特征重要性变化。
 *   如果你发现特征A的重要性突然从 0 跳升到 Top 5，说明市场环境变了，这个特征进入了“有效期”。这时候你要警惕，这不一定是模型变聪明了，也可能是过拟合了，需要人工介入检查。
 ### 总结
-**你的思路是对的。** 
+**你的思路是对的。**
 在量化 2.0 时代，我们不再手动去筛选“这个因子今年能不能用”，而是构建足够复杂的非线性模型（如 XGBoost/LightGBM），把所有因子（包括那些看起来时有时无的）都丢进去。
 **但前提是：**
 1.  你的历史数据足够长，包含了多个周期（让模型见过牛熊、见过风格切换）。
@@ -1149,26 +1149,26 @@ class QuantSystem:
         self.llm_agent = LLMAgent() # 负责读文本，生成因子/标签
         self.tree_model = TreeModel() # 负责预测
         self.rule_engine = RuleEngine() # 负责风控/择时
-        
+
     def daily_run(self, date):
         # 1. 宏观层
         news = fetch_news(date)
         macro_narrative = self.llm_agent.analyze_macro(news)
         macro_label = self.rule_engine.get_macro_scene(macro_narrative, fetch_macro_data())
-        
+
         # 2. 行业层
         top_industries = self.tree_model.predict_industry(macro_label)
-        
+
         # 3. 个股层
         stock_pool = get_stock_pool(top_industries)
         # LLM 增强特征：读取个股新闻
         llm_features = self.llm_agent.generate_stock_features(stock_pool)
         # 树模型预测
         scores = self.tree_model.predict_stock(stock_pool, llm_features)
-        
+
         # 4. 组合与风控
         target_pos = self.rule_engine.risk_control(scores, macro_label)
-        
+
         # 5. 执行
         if self.rule_engine.check_entry(target_pos):
             execute_trade(target_pos)
@@ -1213,10 +1213,10 @@ graph TD
     B --> LLM
     HMM --> State_Fusion{状态融合}
     LLM --> State_Fusion
-    
+
     State_Fusion -->|输出: Market_State_Code| Tree
     State_Fusion -->|输出: Confidence_Level| Risk
-    
+
     Tree --> Rule --> Risk
 ```
 ---
@@ -1261,7 +1261,7 @@ class MarketRegimeDetector:
         self.n_states = n_states
         self.roll_window = roll_window # 滚动窗口，防止历史太久远的状态干扰当下
         self.model = hmm.GaussianHMM(n_components=n_states, covariance_type="full", n_iter=100)
-        
+
     def train(self, data):
         """
         data: DataFrame 包含 ['return', 'volatility', 'volume_change']
@@ -1269,7 +1269,7 @@ class MarketRegimeDetector:
         # 使用最近 N 天的数据重新训练，适应市场变化
         recent_data = data.iloc[-self.roll_window:].values
         self.model.fit(recent_data)
-        
+
     def predict_current_state(self, current_data):
         """
         current_data: 今天的数据 [return, vol, vol_change]
@@ -1332,51 +1332,51 @@ print(f"HMM状态概率: {state_probs}, 建议仓位: {position_scale}")
 
 作为量化科学家，可通过多维度数据挖掘与动态因子模型捕捉主线逻辑，以下是系统性框架及案例解析：
 
-一、牛市初期主线预测模型  
-1. 数据层构建  
-   • 宏观指标：PMI拐点+利率曲线斜率（10Y-2Y利差突破阈值）  
+一、牛市初期主线预测模型
+1. 数据层构建
+   • 宏观指标：PMI拐点+利率曲线斜率（10Y-2Y利差突破阈值）
 
-   • 行业景气度：营收增速二阶导>0且毛利率扩张（公式：Δ(ΔRevenue/Δt) > ε）  
+   • 行业景气度：营收增速二阶导>0且毛利率扩张（公式：Δ(ΔRevenue/Δt) > ε）
 
-   • 资金流：北向资金行业配置比例突破布林带上轨  
-   # 行业动量因子计算示例  
-   def momentum_score(industry):  
-       return 0.4*ROE_growth + 0.3*institutional_flow + 0.3*breakout_ratio  
-   
+   • 资金流：北向资金行业配置比例突破布林带上轨
+   # 行业动量因子计算示例
+   def momentum_score(industry):
+       return 0.4*ROE_growth + 0.3*institutional_flow + 0.3*breakout_ratio
 
-2. 历史案例验证  
-   • 白酒牛市（2016-2018）：  
 
-     关键因子：高端酒批价月环比>3% + 渠道库存周转天数同比下降  
-     策略回测夏普比达2.1（年化收益34%，最大回撤12%）  
-   • 新能源牛市（2020）：  
+2. 历史案例验证
+   • 白酒牛市（2016-2018）：
 
-     触发信号：光伏组件出口量同比+120% + 碳酸锂现货价突破前高  
-   • AI牛市（2023）：  
+     关键因子：高端酒批价月环比>3% + 渠道库存周转天数同比下降
+     策略回测夏普比达2.1（年化收益34%，最大回撤12%）
+   • 新能源牛市（2020）：
 
-     核心指标：算力投资增速>50% + 大模型专利数季度环比增长  
+     触发信号：光伏组件出口量同比+120% + 碳酸锂现货价突破前高
+   • AI牛市（2023）：
 
-二、熊市生存策略  
-1. 动态风险预算模型  
-   采用CVaR约束下的最小方差组合：  
-   \min_w w^TΣw \quad s.t. \quad CVaR_{5\%} \leq \beta \cdot \sigma_{market}  
-     
-2. 逻辑切换检测  
-   构建行业逻辑强度指数（LSI）：  
-  
-   LSI = Σ(新闻情绪分值*机构研报权重)*Google Trends斜率  
-     
-   当LSI跌破200日均线时触发防御模式  
+     核心指标：算力投资增速>50% + 大模型专利数季度环比增长
 
-三、智能调仓算法  
-建议采用双层LSTM架构：  
-• 第一层预测行业逻辑持续性（输入：政策文本+产业链数据）  
+二、熊市生存策略
+1. 动态风险预算模型
+   采用CVaR约束下的最小方差组合：
+   \min_w w^TΣw \quad s.t. \quad CVaR_{5\%} \leq \beta \cdot \sigma_{market}
 
-• 第二层优化组合权重（输出模块含回撤控制项）  
-class DualLSTM(nn.Module):  
-    def forward(self, x):  
-        logic_strength = lstm1(x[:,:10])  # 逻辑层  
-        return lstm2(torch.cat([logic_strength, x[:,10:]]))  # 组合优化层  
-  
+2. 逻辑切换检测
+   构建行业逻辑强度指数（LSI）：
+
+   LSI = Σ(新闻情绪分值*机构研报权重)*Google Trends斜率
+
+   当LSI跌破200日均线时触发防御模式
+
+三、智能调仓算法
+建议采用双层LSTM架构：
+• 第一层预测行业逻辑持续性（输入：政策文本+产业链数据）
+
+• 第二层优化组合权重（输出模块含回撤控制项）
+class DualLSTM(nn.Module):
+    def forward(self, x):
+        logic_strength = lstm1(x[:,:10])  # 逻辑层
+        return lstm2(torch.cat([logic_strength, x[:,10:]]))  # 组合优化层
+
 
 （注：具体参数需结合实时数据校准，建议使用SW行业分类+中信产业链数据库进行验证）

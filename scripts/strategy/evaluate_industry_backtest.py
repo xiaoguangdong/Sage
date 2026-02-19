@@ -45,7 +45,9 @@ def main() -> None:
     parser.add_argument("--hold-days", type=int, default=5, help="每次持有天数（周频默认5）")
     parser.add_argument("--rebalance-step", type=int, default=5, help="调仓步长（交易日）")
     parser.add_argument("--cost-rate", type=float, default=0.005, help="单边交易成本")
-    parser.add_argument("--compare-enhanced", action="store_true", help="输出增强方案（趋势门控+拥挤度降温+行业暴露惩罚）对照")
+    parser.add_argument(
+        "--compare-enhanced", action="store_true", help="输出增强方案（趋势门控+拥挤度降温+行业暴露惩罚）对照"
+    )
     parser.add_argument(
         "--compare-regime-concept-overlay",
         action="store_true",
@@ -179,11 +181,14 @@ def main() -> None:
             "baseline": summary,
             "enhanced": enhanced_summary,
             "delta": {
-                "industry_excess_annual_return": enhanced_summary["industry_excess_annual_return"] - summary["industry_excess_annual_return"],
-                "industry_cost_adjusted_annual_return": enhanced_summary["industry_cost_adjusted_annual_return"] - summary["industry_cost_adjusted_annual_return"],
+                "industry_excess_annual_return": enhanced_summary["industry_excess_annual_return"]
+                - summary["industry_excess_annual_return"],
+                "industry_cost_adjusted_annual_return": enhanced_summary["industry_cost_adjusted_annual_return"]
+                - summary["industry_cost_adjusted_annual_return"],
                 "industry_max_drawdown": enhanced_summary["industry_max_drawdown"] - summary["industry_max_drawdown"],
                 "industry_hit_rate": enhanced_summary["industry_hit_rate"] - summary["industry_hit_rate"],
-                "industry_turnover_mean": enhanced_summary["industry_turnover_mean"] - summary["industry_turnover_mean"],
+                "industry_turnover_mean": enhanced_summary["industry_turnover_mean"]
+                - summary["industry_turnover_mean"],
                 "industry_rank_ic_ir": enhanced_summary["industry_rank_ic_ir"] - summary["industry_rank_ic_ir"],
             },
         }
@@ -264,7 +269,9 @@ def main() -> None:
         blended_scores.to_parquet(blend_score_path, index=False)
         dominant_state.to_parquet(dominant_state_path, index=False)
         regime_summary_path.write_text(json.dumps(regime_summary, ensure_ascii=False, indent=2), encoding="utf-8")
-        prosperity_summary_path.write_text(json.dumps(prosperity_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        prosperity_summary_path.write_text(
+            json.dumps(prosperity_summary, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         regime_compare = {
             "baseline": summary,
@@ -284,20 +291,28 @@ def main() -> None:
             },
             "delta": {
                 "overlay_minus_baseline": {
-                    "industry_excess_annual_return": regime_summary["industry_excess_annual_return"] - summary["industry_excess_annual_return"],
-                    "industry_cost_adjusted_annual_return": regime_summary["industry_cost_adjusted_annual_return"] - summary["industry_cost_adjusted_annual_return"],
+                    "industry_excess_annual_return": regime_summary["industry_excess_annual_return"]
+                    - summary["industry_excess_annual_return"],
+                    "industry_cost_adjusted_annual_return": regime_summary["industry_cost_adjusted_annual_return"]
+                    - summary["industry_cost_adjusted_annual_return"],
                     "industry_max_drawdown": regime_summary["industry_max_drawdown"] - summary["industry_max_drawdown"],
                     "industry_hit_rate": regime_summary["industry_hit_rate"] - summary["industry_hit_rate"],
-                    "industry_turnover_mean": regime_summary["industry_turnover_mean"] - summary["industry_turnover_mean"],
+                    "industry_turnover_mean": regime_summary["industry_turnover_mean"]
+                    - summary["industry_turnover_mean"],
                     "industry_rank_ic_ir": regime_summary["industry_rank_ic_ir"] - summary["industry_rank_ic_ir"],
                 },
                 "overlay_minus_prosperity_only": {
-                    "industry_excess_annual_return": regime_summary["industry_excess_annual_return"] - prosperity_summary["industry_excess_annual_return"],
-                    "industry_cost_adjusted_annual_return": regime_summary["industry_cost_adjusted_annual_return"] - prosperity_summary["industry_cost_adjusted_annual_return"],
-                    "industry_max_drawdown": regime_summary["industry_max_drawdown"] - prosperity_summary["industry_max_drawdown"],
+                    "industry_excess_annual_return": regime_summary["industry_excess_annual_return"]
+                    - prosperity_summary["industry_excess_annual_return"],
+                    "industry_cost_adjusted_annual_return": regime_summary["industry_cost_adjusted_annual_return"]
+                    - prosperity_summary["industry_cost_adjusted_annual_return"],
+                    "industry_max_drawdown": regime_summary["industry_max_drawdown"]
+                    - prosperity_summary["industry_max_drawdown"],
                     "industry_hit_rate": regime_summary["industry_hit_rate"] - prosperity_summary["industry_hit_rate"],
-                    "industry_turnover_mean": regime_summary["industry_turnover_mean"] - prosperity_summary["industry_turnover_mean"],
-                    "industry_rank_ic_ir": regime_summary["industry_rank_ic_ir"] - prosperity_summary["industry_rank_ic_ir"],
+                    "industry_turnover_mean": regime_summary["industry_turnover_mean"]
+                    - prosperity_summary["industry_turnover_mean"],
+                    "industry_rank_ic_ir": regime_summary["industry_rank_ic_ir"]
+                    - prosperity_summary["industry_rank_ic_ir"],
                 },
             },
         }

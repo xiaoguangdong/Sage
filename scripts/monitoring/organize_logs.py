@@ -4,7 +4,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-
 MODULE_RULES = {
     "fetch_": "data",
     "concept_": "strategy",

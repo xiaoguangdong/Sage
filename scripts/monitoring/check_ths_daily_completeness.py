@@ -93,7 +93,11 @@ def main() -> None:
         },
     }
 
-    out = Path(args.output) if args.output else get_data_path("processed", "concepts", "ths_daily_completeness_report.json")
+    out = (
+        Path(args.output)
+        if args.output
+        else get_data_path("processed", "concepts", "ths_daily_completeness_report.json")
+    )
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"完整性报告已保存: {out}")

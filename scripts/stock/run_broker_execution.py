@@ -38,7 +38,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="券商执行入口（当前支持 PingAn dry-run）")
     parser.add_argument("--broker", type=str, default="pingan", help="券商标识，默认 pingan")
     parser.add_argument("--portfolio-path", type=str, default=None, help="组合文件路径，默认读取最新 portfolio_*.csv")
-    parser.add_argument("--execution-context-path", type=str, default=None, help="执行上下文路径，默认读取最新 execution_context_*.json")
+    parser.add_argument(
+        "--execution-context-path", type=str, default=None, help="执行上下文路径，默认读取最新 execution_context_*.json"
+    )
     parser.add_argument("--config-path", type=str, default=None, help="券商配置文件路径，默认 config/app/broker.yaml")
     parser.add_argument("--top-n", type=int, default=10, help="下单股票数上限，默认10")
     parser.add_argument("--submit", action="store_true", help="发起实盘提交（当前 PingAn 未实现，默认 dry-run）")
@@ -46,12 +48,16 @@ def main() -> None:
     args = parser.parse_args()
 
     portfolio_dir = PROJECT_ROOT / "data" / "portfolio"
-    portfolio_path = Path(args.portfolio_path) if args.portfolio_path else _latest_file(portfolio_dir, "portfolio_*.csv")
+    portfolio_path = (
+        Path(args.portfolio_path) if args.portfolio_path else _latest_file(portfolio_dir, "portfolio_*.csv")
+    )
     if not portfolio_path or not portfolio_path.exists():
         raise FileNotFoundError("未找到组合文件，请先运行 weekly 流程生成 portfolio_*.csv")
 
-    context_path = Path(args.execution_context_path) if args.execution_context_path else _latest_file(
-        portfolio_dir, "execution_context_*.json"
+    context_path = (
+        Path(args.execution_context_path)
+        if args.execution_context_path
+        else _latest_file(portfolio_dir, "execution_context_*.json")
     )
     context = _load_json(context_path) if context_path else {}
 
@@ -65,8 +71,10 @@ def main() -> None:
     adapter = create_broker_adapter(args.broker, config=brokers.get(args.broker, {}))
     result = adapter.submit_orders(orders=orders, dry_run=not args.submit)
 
-    output_path = Path(args.output_path) if args.output_path else (
-        portfolio_dir / f"broker_submit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    output_path = (
+        Path(args.output_path)
+        if args.output_path
+        else (portfolio_dir / f"broker_submit_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
     )
     payload = {
         "broker": args.broker,

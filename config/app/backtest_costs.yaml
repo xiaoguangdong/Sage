@@ -1,0 +1,45 @@
+# 交易成本模型配置
+# 参考：Almgren-Chriss (2001), Kissell & Glantz (2013)
+
+# 默认配置（适合大多数回测场景）
+default:
+  # 固定成本（单边）
+  commission_rate: 0.0003       # 佣金费率（万三）
+  stamp_tax_rate: 0.001         # 印花税（卖出时收取，千一）
+  transfer_fee_rate: 0.00002    # 过户费
+
+  # 滑点成本
+  fixed_slippage_bps: 1.0       # 固定滑点（基点，1bp=0.01%）
+  volatility_slippage_factor: 0.1  # 波动率滑点系数
+
+  # 市场冲击成本（Almgren-Chriss简化）
+  market_impact_factor: 0.05    # 市场冲击系数
+  temporary_impact_decay: 0.3   # 临时冲击衰减系数
+
+  # 流动性约束
+  max_participation_rate: 0.05  # 最大成交量占比（5%）
+  min_daily_volume: 1000000     # 最小日成交额（元）
+
+# 保守配置（较高成本估计，用于压力测试）
+conservative:
+  commission_rate: 0.0003
+  stamp_tax_rate: 0.001
+  transfer_fee_rate: 0.00002
+  fixed_slippage_bps: 2.0
+  volatility_slippage_factor: 0.5
+  market_impact_factor: 0.1
+  temporary_impact_decay: 0.5
+  max_participation_rate: 0.05
+  min_daily_volume: 1000000
+
+# 激进配置（乐观估计，用于对比）
+aggressive:
+  commission_rate: 0.0001       # 万一佣金（机构费率）
+  stamp_tax_rate: 0.001
+  transfer_fee_rate: 0.00002
+  fixed_slippage_bps: 1.0
+  volatility_slippage_factor: 0.3
+  market_impact_factor: 0.05
+  temporary_impact_decay: 0.3
+  max_participation_rate: 0.10
+  min_daily_volume: 500000

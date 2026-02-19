@@ -25,9 +25,11 @@ def build_industry_score_series(industry_contract: pd.DataFrame) -> pd.DataFrame
     grouped = source.groupby(["trade_date", "sw_industry"], as_index=False).apply(
         lambda frame: pd.Series(
             {
-                "score": float((frame["score"] * frame["confidence"]).sum() / frame["confidence"].sum())
-                if float(frame["confidence"].sum()) > 0
-                else float(frame["score"].mean())
+                "score": (
+                    float((frame["score"] * frame["confidence"]).sum() / frame["confidence"].sum())
+                    if float(frame["confidence"].sum()) > 0
+                    else float(frame["score"].mean())
+                )
             }
         )
     )
@@ -141,16 +143,16 @@ def prepare_prosperity_scores(
 
     source["momentum_rank"] = source.groupby("trade_date")["momentum"].transform(_rank_pct)
     source["amount_rank"] = source.groupby("trade_date")["amount_ratio"].transform(_rank_pct)
-    source["stability_rank"] = source.groupby("trade_date")["volatility"].transform(lambda s: _rank_pct(s, ascending=False))
+    source["stability_rank"] = source.groupby("trade_date")["volatility"].transform(
+        lambda s: _rank_pct(s, ascending=False)
+    )
 
     source["momentum_rank"] = source["momentum_rank"].fillna(0.5).clip(0.0, 1.0)
     source["amount_rank"] = source["amount_rank"].fillna(0.5).clip(0.0, 1.0)
     source["stability_rank"] = source["stability_rank"].fillna(0.5).clip(0.0, 1.0)
 
     source["score"] = (
-        source["momentum_rank"] * 0.5
-        + source["amount_rank"] * 0.3
-        + source["stability_rank"] * 0.2
+        source["momentum_rank"] * 0.5 + source["amount_rank"] * 0.3 + source["stability_rank"] * 0.2
     ).clip(0.0, 1.0)
     has_momentum = source["momentum"].notna().astype(float)
     has_amount = source["amount_ratio"].notna().astype(float)
@@ -158,9 +160,11 @@ def prepare_prosperity_scores(
     source["confidence"] = ((has_momentum + has_amount + has_vol) / 3.0).clip(0.0, 1.0)
     source["rank"] = source.groupby("trade_date")["score"].rank(ascending=False, method="first").astype(int)
 
-    return source[["trade_date", "sw_industry", "score", "confidence", "rank"]].sort_values(
-        ["trade_date", "rank"]
-    ).reset_index(drop=True)
+    return (
+        source[["trade_date", "sw_industry", "score", "confidence", "rank"]]
+        .sort_values(["trade_date", "rank"])
+        .reset_index(drop=True)
+    )
 
 
 def prepare_benchmark_returns(index_df: pd.DataFrame) -> pd.DataFrame:
@@ -271,16 +275,19 @@ def prepare_crowding_penalty(
         source["sw_industry"] = source["ts_code"]
 
     source = source.sort_values(["sw_industry", "trade_date"])
-    roll_mean = source.groupby("sw_industry")["amount"].transform(lambda s: s.rolling(roll_window, min_periods=5).mean())
+    roll_mean = source.groupby("sw_industry")["amount"].transform(
+        lambda s: s.rolling(roll_window, min_periods=5).mean()
+    )
     roll_std = source.groupby("sw_industry")["amount"].transform(lambda s: s.rolling(roll_window, min_periods=5).std())
     source["crowding_z"] = (source["amount"] - roll_mean) / roll_std.replace(0.0, np.nan)
     source["crowding_z"] = source["crowding_z"].replace([np.inf, -np.inf], np.nan).fillna(0.0)
     source["is_overcrowded"] = (source["crowding_z"] >= float(z_threshold)) & (source["pct_return"] >= 0.03)
     source["crowding_penalty"] = np.where(source["is_overcrowded"], float(penalty_factor), 1.0)
 
-    grouped = (
-        source.groupby(["trade_date", "sw_industry"], as_index=False)
-        .agg(crowding_penalty=("crowding_penalty", "min"), crowding_z=("crowding_z", "mean"), is_overcrowded=("is_overcrowded", "max"))
+    grouped = source.groupby(["trade_date", "sw_industry"], as_index=False).agg(
+        crowding_penalty=("crowding_penalty", "min"),
+        crowding_z=("crowding_z", "mean"),
+        is_overcrowded=("is_overcrowded", "max"),
     )
     grouped["is_overcrowded"] = grouped["is_overcrowded"].astype(bool)
     grouped["crowding_penalty"] = grouped["crowding_penalty"].clip(lower=0.0, upper=1.0)
@@ -334,7 +341,11 @@ def prepare_trend_dominant_state(
 
     source = trend_gate.copy()
     source["trade_date"] = _normalize_trade_date(source["trade_date"])
-    source = source.dropna(subset=["trade_date"]).sort_values("trade_date").drop_duplicates(subset=["trade_date"], keep="last")
+    source = (
+        source.dropna(subset=["trade_date"])
+        .sort_values("trade_date")
+        .drop_duplicates(subset=["trade_date"], keep="last")
+    )
 
     if "trend_state" in source.columns:
         state = source["trend_state"].astype(str).str.upper()
@@ -356,7 +367,7 @@ def prepare_trend_dominant_state(
     window = max(1, int(lookback_days))
     threshold = float(dominance_threshold)
     for idx, date in enumerate(dates):
-        segment = states[max(0, idx - window + 1): idx + 1]
+        segment = states[max(0, idx - window + 1) : idx + 1]
         total = len(segment)
         risk_on_ratio = segment.count("RISK_ON") / total
         neutral_ratio = segment.count("NEUTRAL") / total
@@ -410,7 +421,9 @@ def blend_industry_scores_with_concept(
     stale_days = max(1, int(concept_max_stale_days))
     for industry_name, group in scores.groupby("sw_industry"):
         group_sorted = group.sort_values("trade_date_dt")
-        concept_group = concept[concept["sw_industry"] == industry_name][["trade_date_dt", "concept_score", "concept_confidence"]]
+        concept_group = concept[concept["sw_industry"] == industry_name][
+            ["trade_date_dt", "concept_score", "concept_confidence"]
+        ]
         if concept_group.empty:
             fill = group_sorted[["row_id"]].copy()
             fill["concept_score"] = 0.5
@@ -430,7 +443,11 @@ def blend_industry_scores_with_concept(
         )
         aligned_rows.append(aligned[["row_id", "concept_score", "concept_confidence"]])
 
-    aligned_all = pd.concat(aligned_rows, ignore_index=True) if aligned_rows else pd.DataFrame(columns=["row_id", "concept_score", "concept_confidence"])
+    aligned_all = (
+        pd.concat(aligned_rows, ignore_index=True)
+        if aligned_rows
+        else pd.DataFrame(columns=["row_id", "concept_score", "concept_confidence"])
+    )
     scores = scores.merge(aligned_all, on="row_id", how="left")
     scores["concept_score"] = scores["concept_score"].fillna(0.5).clip(0.0, 1.0)
     scores["concept_confidence"] = scores["concept_confidence"].fillna(0.0).clip(0.0, 1.0)
@@ -457,7 +474,9 @@ def blend_industry_scores_with_concept(
         "NEUTRAL": float(neutral_concept_weight),
         "RISK_OFF": float(risk_off_concept_weight),
     }
-    scores["concept_weight"] = scores["state_for_blend"].map(weights).fillna(float(neutral_concept_weight)).clip(0.0, 1.0)
+    scores["concept_weight"] = (
+        scores["state_for_blend"].map(weights).fillna(float(neutral_concept_weight)).clip(0.0, 1.0)
+    )
     scores["effective_concept_weight"] = (scores["concept_weight"] * scores["concept_confidence"]).clip(0.0, 1.0)
     scores["base_score"] = scores["score"]
     scores["score"] = (
@@ -559,7 +578,9 @@ def evaluate_industry_rotation(
         if not {"trade_date", "sw_industry", "crowding_penalty"}.issubset(crowding_df.columns):
             raise ValueError("crowding_penalty 缺少字段: trade_date/sw_industry/crowding_penalty")
         crowding_df["trade_date"] = _normalize_trade_date(crowding_df["trade_date"])
-        crowding_df["crowding_penalty"] = pd.to_numeric(crowding_df["crowding_penalty"], errors="coerce").fillna(1.0).clip(0.0, 1.0)
+        crowding_df["crowding_penalty"] = (
+            pd.to_numeric(crowding_df["crowding_penalty"], errors="coerce").fillna(1.0).clip(0.0, 1.0)
+        )
 
     trade_dates = sorted(returns["trade_date"].dropna().unique().tolist())
     date_to_idx = {date: idx for idx, date in enumerate(trade_dates)}
@@ -578,10 +599,19 @@ def evaluate_industry_rotation(
         future_rows.append(future_group)
 
     if not future_rows:
-        empty_detail = pd.DataFrame(columns=[
-            "trade_date", "selected_industries", "portfolio_return", "benchmark_return",
-            "excess_return", "turnover", "cost", "net_excess_return", "rank_ic",
-        ])
+        empty_detail = pd.DataFrame(
+            columns=[
+                "trade_date",
+                "selected_industries",
+                "portfolio_return",
+                "benchmark_return",
+                "excess_return",
+                "turnover",
+                "cost",
+                "net_excess_return",
+                "rank_ic",
+            ]
+        )
         empty_contrib = pd.DataFrame(columns=["sw_industry", "drawdown_contribution", "drawdown_share"])
         empty_summary = {
             "periods": 0,
@@ -628,7 +658,9 @@ def evaluate_industry_rotation(
                 suffixes=("", "_crowd"),
             )
             if "crowding_penalty_crowd" in selected.columns:
-                selected["crowding_penalty"] = pd.to_numeric(selected["crowding_penalty_crowd"], errors="coerce").fillna(1.0)
+                selected["crowding_penalty"] = pd.to_numeric(
+                    selected["crowding_penalty_crowd"], errors="coerce"
+                ).fillna(1.0)
                 selected = selected.drop(columns=["crowding_penalty_crowd"])
             selected["crowding_penalty"] = selected["crowding_penalty"].clip(0.0, 1.0)
 
@@ -646,9 +678,7 @@ def evaluate_industry_rotation(
                     selected.at[idx, "exposure_penalty"] = float(exposure_penalty_factor)
 
         selected["effective_return"] = (
-            selected["future_return"]
-            * selected["crowding_penalty"]
-            * selected["exposure_penalty"]
+            selected["future_return"] * selected["crowding_penalty"] * selected["exposure_penalty"]
         )
         gate_multiplier = float(trend_gate_map.get(date, 1.0))
         portfolio_return = float(selected["effective_return"].mean()) * gate_multiplier
@@ -761,7 +791,11 @@ def evaluate_industry_rotation(
         "industry_rank_ic_mean": rank_ic_mean,
         "industry_rank_ic_ir": rank_ic_ir,
         "trend_gate_mean": float(detail["trend_gate"].mean()) if "trend_gate" in detail.columns else 1.0,
-        "crowding_penalty_mean": float(detail["crowding_penalty_mean"].mean()) if "crowding_penalty_mean" in detail.columns else 1.0,
-        "exposure_penalty_mean": float(detail["exposure_penalty_mean"].mean()) if "exposure_penalty_mean" in detail.columns else 1.0,
+        "crowding_penalty_mean": (
+            float(detail["crowding_penalty_mean"].mean()) if "crowding_penalty_mean" in detail.columns else 1.0
+        ),
+        "exposure_penalty_mean": (
+            float(detail["exposure_penalty_mean"].mean()) if "exposure_penalty_mean" in detail.columns else 1.0
+        ),
     }
     return detail, contribution, summary

@@ -12,11 +12,12 @@
 5. 单日冲击止损
 """
 
+import logging
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
-import pandas as pd
+
 import numpy as np
-import logging
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,8 @@ class RiskControlConfig:
 
     # 1. 动态仓位配置
     base_position: float = 0.6  # 基础仓位
-    max_position: float = 1.0   # 最大仓位
-    min_position: float = 0.3   # 最小仓位
+    max_position: float = 1.0  # 最大仓位
+    min_position: float = 0.3  # 最小仓位
     confidence_multiplier: float = 1.0  # confidence乘数
 
     # 2. ATR止损配置
@@ -103,19 +104,17 @@ class EnhancedRiskControl:
         """
         # 1. 基于confidence计算基础仓位
         confidence = np.clip(confidence, 0.0, 1.0)
-        base_position = self.config.base_position + (
-            self.config.max_position - self.config.base_position
-        ) * confidence * self.config.confidence_multiplier
+        base_position = (
+            self.config.base_position
+            + (self.config.max_position - self.config.base_position) * confidence * self.config.confidence_multiplier
+        )
 
         # 2. 应用组合分档降仓
         if self.config.enable_tiered_drawdown and current_drawdown is not None:
             for threshold, position_ratio in sorted(self.config.drawdown_tiers):
                 if current_drawdown <= threshold:
                     base_position *= position_ratio
-                    logger.info(
-                        f"组合回撤{current_drawdown:.2%}触发分档降仓，"
-                        f"仓位调整至{position_ratio:.0%}"
-                    )
+                    logger.info(f"组合回撤{current_drawdown:.2%}触发分档降仓，" f"仓位调整至{position_ratio:.0%}")
                     break
 
         # 3. 应用单日冲击止损
@@ -123,16 +122,11 @@ class EnhancedRiskControl:
             if daily_return <= self.config.daily_shock_threshold:
                 base_position *= self.config.daily_shock_position_cut
                 logger.warning(
-                    f"单日跌幅{daily_return:.2%}触发冲击止损，"
-                    f"仓位降至{self.config.daily_shock_position_cut:.0%}"
+                    f"单日跌幅{daily_return:.2%}触发冲击止损，" f"仓位降至{self.config.daily_shock_position_cut:.0%}"
                 )
 
         # 4. 限制在最小/最大仓位之间
-        final_position = np.clip(
-            base_position,
-            self.config.min_position,
-            self.config.max_position
-        )
+        final_position = np.clip(base_position, self.config.min_position, self.config.max_position)
 
         return final_position
 
@@ -194,19 +188,17 @@ class EnhancedRiskControl:
                 continue
 
             stock = stock_data.loc[ts_code]
-            entry_price = holding.get('entry_price', stock['close'])
+            entry_price = holding.get("entry_price", stock["close"])
 
             # 计算止损价
-            if 'high' in stock_data.columns and 'low' in stock_data.columns:
+            if "high" in stock_data.columns and "low" in stock_data.columns:
                 # 获取历史数据计算ATR
-                hist_data = stock_data[stock_data.index == ts_code].tail(
-                    self.config.atr_period + 1
-                )
+                hist_data = stock_data[stock_data.index == ts_code].tail(self.config.atr_period + 1)
                 if len(hist_data) >= self.config.atr_period:
                     stop_price = self.compute_atr_stop_loss(
-                        hist_data['close'],
-                        hist_data['high'],
-                        hist_data['low'],
+                        hist_data["close"],
+                        hist_data["high"],
+                        hist_data["low"],
                         entry_price,
                     )
                 else:
@@ -217,20 +209,22 @@ class EnhancedRiskControl:
                 stop_price = entry_price * 0.92
 
             # 检查是否触发止损
-            current_price = stock['close']
+            current_price = stock["close"]
             if current_price <= stop_price:
                 stop_loss_stocks.append(ts_code)
                 loss_pct = (current_price - entry_price) / entry_price
 
-                self.stop_loss_events.append({
-                    'date': stock.get('trade_date', pd.Timestamp.now()),
-                    'ts_code': ts_code,
-                    'type': 'ATR_STOP',
-                    'entry_price': entry_price,
-                    'stop_price': stop_price,
-                    'current_price': current_price,
-                    'loss_pct': loss_pct,
-                })
+                self.stop_loss_events.append(
+                    {
+                        "date": stock.get("trade_date", pd.Timestamp.now()),
+                        "ts_code": ts_code,
+                        "type": "ATR_STOP",
+                        "entry_price": entry_price,
+                        "stop_price": stop_price,
+                        "current_price": current_price,
+                        "loss_pct": loss_pct,
+                    }
+                )
 
                 logger.warning(
                     f"个股{ts_code}触发ATR止损：入场价{entry_price:.2f}，"
@@ -263,28 +257,25 @@ class EnhancedRiskControl:
                 self.industry_peak_values[industry] = 1.0
 
             current_value = 1.0 + cum_return
-            self.industry_peak_values[industry] = max(
-                self.industry_peak_values[industry],
-                current_value
-            )
+            self.industry_peak_values[industry] = max(self.industry_peak_values[industry], current_value)
 
             # 计算行业回撤
-            drawdown = (
-                current_value / self.industry_peak_values[industry] - 1.0
-            )
+            drawdown = current_value / self.industry_peak_values[industry] - 1.0
 
             # 检查是否触发止损
             if drawdown <= self.config.industry_drawdown_threshold:
                 stop_loss_industries.append(industry)
 
-                self.stop_loss_events.append({
-                    'date': pd.Timestamp.now(),
-                    'industry': industry,
-                    'type': 'INDUSTRY_STOP',
-                    'peak_value': self.industry_peak_values[industry],
-                    'current_value': current_value,
-                    'drawdown': drawdown,
-                })
+                self.stop_loss_events.append(
+                    {
+                        "date": pd.Timestamp.now(),
+                        "industry": industry,
+                        "type": "INDUSTRY_STOP",
+                        "peak_value": self.industry_peak_values[industry],
+                        "current_value": current_value,
+                        "drawdown": drawdown,
+                    }
+                )
 
                 logger.warning(
                     f"行业{industry}触发止损：峰值{self.industry_peak_values[industry]:.2f}，"
@@ -321,9 +312,7 @@ class EnhancedRiskControl:
         adjusted_weights = weights.copy()
 
         # 1. 单只股票仓位限制
-        adjusted_weights = adjusted_weights.clip(
-            upper=self.config.max_single_position
-        )
+        adjusted_weights = adjusted_weights.clip(upper=self.config.max_single_position)
 
         # 2. 行业仓位限制
         if industries is not None and self.config.max_industry_exposure < 1.0:

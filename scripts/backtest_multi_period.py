@@ -1,17 +1,22 @@
 """选股模型多区间回测 — 支持趋势模型仓位联动 + 增强风控"""
-import os, sys, copy, logging, warnings
-import numpy as np, pandas as pd
+
+import copy
+import logging
+import os
+import sys
+import warnings
+
+import numpy as np
+import pandas as pd
 
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
-from sage_core.stock_selection.regime_stock_selector import (
-    RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
-)
-from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
+from sage_core.backtest.cost_model import create_default_cost_model
 from sage_core.portfolio.enhanced_risk_control import EnhancedRiskControl, RiskControlConfig
-from sage_core.backtest.cost_model import TradingCostModel, create_default_cost_model
+from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
+from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
 
 logging.basicConfig(level=logging.WARNING)
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
@@ -27,13 +32,12 @@ def build_ma_regime(idx: pd.DataFrame) -> dict:
     df["ma20"] = df["close"].rolling(20).mean()
     df["ma60"] = df["close"].rolling(60).mean()
     regime = np.where(
-        (df["close"] > df["ma60"]) & (df["ma20"] > df["ma60"]), 2,  # bull
-        np.where(
-            (df["close"] < df["ma60"]) & (df["ma20"] < df["ma60"]), 0,  # bear
-            1  # neutral
-        )
+        (df["close"] > df["ma60"]) & (df["ma20"] > df["ma60"]),
+        2,  # bull
+        np.where((df["close"] < df["ma60"]) & (df["ma20"] < df["ma60"]), 0, 1),  # bear  # neutral
     )
     return dict(zip(pd.to_datetime(df["date"]).values, regime))
+
 
 # 宏观级别 regime 标签（基于沪深300实际走势人工划分）
 MACRO_REGIMES = [
@@ -70,7 +74,11 @@ def load_all_data():
 
     basic = pd.read_parquet(os.path.join(DATA_ROOT, "daily_basic_all.parquet"))
     basic["trade_date"] = pd.to_datetime(basic["trade_date"], format="%Y%m%d")
-    cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"] if c in basic.columns]
+    cols = [
+        c
+        for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
+        if c in basic.columns
+    ]
     df = stk.merge(basic[cols], on=["ts_code", "trade_date"], how="left")
 
     member_path = os.path.join(DATA_ROOT, "sw_industry", "sw_index_member.parquet")
@@ -81,8 +89,13 @@ def load_all_data():
         # 只取当前有效成员
         current = member[member["is_new"] == "Y"][["index_code", "con_code"]].drop_duplicates("con_code")
         current = current.merge(ind[["index_code", "industry_name"]], on="index_code", how="left")
-        df = df.merge(current[["con_code", "industry_name"]].rename(columns={"con_code": "ts_code", "industry_name": "industry_l1"}),
-                      on="ts_code", how="left")
+        df = df.merge(
+            current[["con_code", "industry_name"]].rename(
+                columns={"con_code": "ts_code", "industry_name": "industry_l1"}
+            ),
+            on="ts_code",
+            how="left",
+        )
 
     # ST 标记（用于股票池过滤）
     ths_path = os.path.join(DATA_ROOT, "concepts", "ths_member.parquet")
@@ -177,8 +190,7 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     )
     trend = TrendModelRuleV2(cfg_trend)
 
-    cfg = SelectionConfig(model_type="lgbm", label_neutralized=True,
-                          ic_filter_enabled=True, industry_col="industry_l1")
+    cfg = SelectionConfig(model_type="lgbm", label_neutralized=True, ic_filter_enabled=True, industry_col="industry_l1")
 
     single = StockSelector(copy.deepcopy(cfg))
     single.fit(df_train)
@@ -195,7 +207,9 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     res_bt = trend.predict(idx_bt, return_history=True)
     d2s_trend = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
 
-    bt_dates = sorted(df_all[(df_all["trade_date"] >= bt_start) & (df_all["trade_date"] <= bt_end)]["trade_date"].unique())
+    bt_dates = sorted(
+        df_all[(df_all["trade_date"] >= bt_start) & (df_all["trade_date"] <= bt_end)]["trade_date"].unique()
+    )
     rb_dates = bt_dates[::HOLD_DAYS]
 
     # 增强风控实例
@@ -206,8 +220,12 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
     PORTFOLIO_VALUE = 10_000_000  # 假设1000万组合
 
     results = {
-        "single": [], "regime": [], "trend_single": [], "trend_regime": [],
-        "risk_regime": [], "risk_trend_regime": [],
+        "single": [],
+        "regime": [],
+        "trend_single": [],
+        "trend_regime": [],
+        "risk_regime": [],
+        "risk_trend_regime": [],
     }
 
     # 风控策略的累计净值（用于计算回撤）
@@ -220,9 +238,12 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
 
     # 跟踪每个策略的上期持仓（用于计算换手率）
     prev_holdings = {
-        "single": set(), "regime": set(),
-        "trend_single": set(), "trend_regime": set(),
-        "risk_regime": set(), "risk_trend_regime": set(),
+        "single": set(),
+        "regime": set(),
+        "trend_single": set(),
+        "trend_regime": set(),
+        "risk_regime": set(),
+        "risk_trend_regime": set(),
     }
 
     for i, rb in enumerate(rb_dates):
@@ -243,7 +264,9 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
             top_r = pred_r.nlargest(TOP_N, "score")["ts_code"].tolist()
 
             # 获取 Regime 模型的 confidence（Top30 平均 confidence）
-            confidence = float(pred_r.nlargest(TOP_N, "score")["confidence"].mean()) if "confidence" in pred_r.columns else 0.7
+            confidence = (
+                float(pred_r.nlargest(TOP_N, "score")["confidence"].mean()) if "confidence" in pred_r.columns else 0.7
+            )
 
             hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]
 
@@ -267,7 +290,16 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
                 results[key].append({"date": rb, "regime": rname, "ret": period_ret, "n": len(rets), "cost": cost})
                 # 趋势联动版本
                 trend_ret = period_ret * pos_ratio + 0 * (1 - pos_ratio)
-                results[f"trend_{key}"].append({"date": rb, "regime": rname, "ret": trend_ret, "n": len(rets), "pos": pos_ratio, "cost": cost * pos_ratio})
+                results[f"trend_{key}"].append(
+                    {
+                        "date": rb,
+                        "regime": rname,
+                        "ret": trend_ret,
+                        "n": len(rets),
+                        "pos": pos_ratio,
+                        "cost": cost * pos_ratio,
+                    }
+                )
                 prev_holdings[f"trend_{key}"] = new_set
 
             # ── 新增：Regime + 增强风控 ──
@@ -295,12 +327,19 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
                 daily_return=raw_ret,  # 用期间收益近似
             )
             risk_ret = raw_ret * risk_position
-            risk_nav *= (1 + risk_ret)
+            risk_nav *= 1 + risk_ret
             risk_nav_peak = max(risk_nav_peak, risk_nav)
-            results["risk_regime"].append({
-                "date": rb, "regime": rname, "ret": risk_ret,
-                "n": n_stocks, "pos": risk_position, "stopped": n_stopped, "cost": risk_cost,
-            })
+            results["risk_regime"].append(
+                {
+                    "date": rb,
+                    "regime": rname,
+                    "ret": risk_ret,
+                    "n": n_stocks,
+                    "pos": risk_position,
+                    "stopped": n_stopped,
+                    "cost": risk_cost,
+                }
+            )
 
             # ── 新增：趋势 + Regime + 增强风控 ──
             # 趋势仓位 × 风控仓位（双重保护）
@@ -313,13 +352,20 @@ def run_one_backtest(idx, df_all, bt_start, bt_end, train_years, with_trend_posi
             # 取趋势仓位和风控仓位的较小值（更保守）
             combined_position = min(pos_ratio, risk_trend_position)
             risk_trend_ret = raw_ret * combined_position
-            risk_trend_nav *= (1 + risk_trend_ret)
+            risk_trend_nav *= 1 + risk_trend_ret
             risk_trend_nav_peak = max(risk_trend_nav_peak, risk_trend_nav)
             prev_holdings["risk_trend_regime"] = risk_new_set
-            results["risk_trend_regime"].append({
-                "date": rb, "regime": rname, "ret": risk_trend_ret,
-                "n": n_stocks, "pos": combined_position, "stopped": n_stopped, "cost": risk_cost,
-            })
+            results["risk_trend_regime"].append(
+                {
+                    "date": rb,
+                    "regime": rname,
+                    "ret": risk_trend_ret,
+                    "n": n_stocks,
+                    "pos": combined_position,
+                    "stopped": n_stopped,
+                    "cost": risk_cost,
+                }
+            )
 
         except Exception:
             pass
@@ -391,7 +437,7 @@ def main():
         print(f"\n  风控统计: 止损触发 {risk_stats['stop_count']} 次")
 
         # 分regime
-        print(f"\n  分Regime:")
+        print("\n  分Regime:")
         for rname in ["bull", "neutral", "bear"]:
             parts = []
             for key, name in ALL_STRATEGIES:
@@ -415,7 +461,9 @@ def main():
             s = data["stats"].get(key)
             if not s:
                 continue
-            print(f"{label:<20} {name:<18} {s['total']:>+10.2%} {s['sharpe']:>8.2f} {s['max_dd']:>10.2%} {s['win_rate']:>8.1%}")
+            print(
+                f"{label:<20} {name:<18} {s['total']:>+10.2%} {s['sharpe']:>8.2f} {s['max_dd']:>10.2%} {s['win_rate']:>8.1%}"
+            )
         print(f"{label:<20} {'沪深300':<18} {data['idx_ret']:>+10.2%}")
         print("-" * 90)
 

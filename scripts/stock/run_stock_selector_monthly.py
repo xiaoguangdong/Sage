@@ -15,8 +15,8 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.data._shared.runtime import get_data_root, get_tushare_root
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
+from scripts.data._shared.runtime import get_data_root, get_tushare_root
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
@@ -24,6 +24,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         return {}
     try:
         import yaml  # type: ignore
+
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
@@ -106,42 +107,42 @@ def _load_hs300_universe(data_root: Path, trade_date: str) -> List[str]:
 def _load_all_stocks_universe(data_root: Path, trade_date: str, exclude_st: bool = True) -> List[str]:
     """
     加载全市场股票池（支持 ST 过滤）
-    
+
     Args:
         data_root: 数据根目录
         trade_date: 交易日期
         exclude_st: 是否剔除 ST 股票
-    
+
     Returns:
         股票代码列表
     """
     # 优先使用已过滤的股票列表
     filtered_path = data_root / "metadata" / "filtered_stocks_list.csv"
     all_path = data_root / "metadata" / "all_stocks_list.csv"
-    
+
     if exclude_st and filtered_path.exists():
         df = pd.read_csv(filtered_path)
         if "tushare_code" in df.columns:
             return sorted(df["tushare_code"].astype(str).unique().tolist())
-    
+
     if all_path.exists():
         df = pd.read_csv(all_path)
         if "tushare_code" in df.columns:
             return sorted(df["tushare_code"].astype(str).unique().tolist())
-    
+
     # 回退到从 daily_basic 提取
     path = data_root / "daily_basic_all.parquet"
     if not path.exists():
         raise FileNotFoundError(f"未找到 daily_basic 文件: {path}")
-    
+
     df = pd.read_parquet(path, columns=["ts_code", "trade_date"])
     df["trade_date"] = df["trade_date"].astype(str)
-    
+
     # 只取交易日期附近的股票
     valid = df[df["trade_date"] <= trade_date]
     if valid.empty:
         raise ValueError(f"在 {trade_date} 前无可用股票数据")
-    
+
     # 取最近有数据的股票
     recent_dates = valid["trade_date"].sort_values().unique()
     if len(recent_dates) < 5:
@@ -149,23 +150,26 @@ def _load_all_stocks_universe(data_root: Path, trade_date: str, exclude_st: bool
     else:
         # 取最近5个交易日都有数据的股票
         recent_5_dates = recent_dates[-5:]
-        recent_stocks = valid[valid["trade_date"].isin(recent_5_dates)].groupby("ts_code").filter(
-            lambda x: x["trade_date"].nunique() >= 3
-        )["ts_code"].unique()
-    
+        recent_stocks = (
+            valid[valid["trade_date"].isin(recent_5_dates)]
+            .groupby("ts_code")
+            .filter(lambda x: x["trade_date"].nunique() >= 3)["ts_code"]
+            .unique()
+        )
+
     return sorted(recent_stocks.tolist())
 
 
 def _load_st_stock_list(data_root: Path, trade_date: str) -> set:
     """
     加载指定日期的 ST 股票列表
-    
+
     通过 Tushare 股票基本信息判断 ST 状态
-    
+
     Args:
         data_root: 数据根目录
         trade_date: 交易日期
-    
+
     Returns:
         ST 股票代码集合
     """
@@ -175,53 +179,52 @@ def _load_st_stock_list(data_root: Path, trade_date: str) -> set:
         df = pd.read_csv(st_path)
         if "tushare_code" in df.columns:
             return set(df["tushare_code"].astype(str).tolist())
-    
+
     # 从 filtered_stocks_list 和 all_stocks_list 的差异推断 ST
     filtered_path = data_root / "metadata" / "filtered_stocks_list.csv"
     all_path = data_root / "metadata" / "all_stocks_list.csv"
-    
+
     if filtered_path.exists() and all_path.exists():
         filtered_df = pd.read_csv(filtered_path)
         all_df = pd.read_csv(all_path)
-        
-        filtered_codes = set(filtered_df["tushare_code"].astype(str).tolist()) if "tushare_code" in filtered_df.columns else set()
+
+        filtered_codes = (
+            set(filtered_df["tushare_code"].astype(str).tolist()) if "tushare_code" in filtered_df.columns else set()
+        )
         all_codes = set(all_df["tushare_code"].astype(str).tolist()) if "tushare_code" in all_df.columns else set()
-        
+
         # 差集即为被过滤的股票（可能包含 ST）
         excluded_codes = all_codes - filtered_codes
         return excluded_codes
-    
+
     return set()
 
 
 def _filter_st_and_new_stocks(
-    universe: List[str], 
-    st_stocks: set, 
-    daily_panel: pd.DataFrame,
-    min_list_days: int = 60
+    universe: List[str], st_stocks: set, daily_panel: pd.DataFrame, min_list_days: int = 60
 ) -> List[str]:
     """
     过滤 ST 股票和上市不足 N 天的新股
-    
+
     Args:
         universe: 原始股票池
         st_stocks: ST 股票集合
         daily_panel: 日线数据
         min_list_days: 最小上市天数
-    
+
     Returns:
         过滤后的股票池
     """
     # 1. 剔除 ST
     filtered = [code for code in universe if code not in st_stocks]
-    
+
     # 2. 剔除上市不足 min_list_days 的新股
     if not daily_panel.empty and len(filtered) > 0:
         daily_filtered = daily_panel[daily_panel["ts_code"].isin(filtered)]
         stock_trade_counts = daily_filtered.groupby("ts_code").size()
         valid_stocks = stock_trade_counts[stock_trade_counts >= min_list_days].index.tolist()
         filtered = [code for code in filtered if code in valid_stocks]
-    
+
     return filtered
 
 
@@ -251,7 +254,13 @@ def _load_daily_panel(data_root: Path, start_date: str, end_date: str, universe:
 def _load_daily_basic_panel(data_root: Path, start_date: str, end_date: str, universe: Sequence[str]) -> pd.DataFrame:
     path = data_root / "daily_basic_all.parquet"
     cols = [
-        "ts_code", "trade_date", "turnover_rate_f", "pe_ttm", "pb", "total_mv", "dv_ttm",
+        "ts_code",
+        "trade_date",
+        "turnover_rate_f",
+        "pe_ttm",
+        "pb",
+        "total_mv",
+        "dv_ttm",
     ]
     df = _read_parquet(path, columns=cols)
     if df.empty:
@@ -278,9 +287,7 @@ def _load_northbound_panel(data_root: Path, start_date: str, end_date: str, univ
     df["northbound_hold_ratio"] = pd.to_numeric(df["ratio"], errors="coerce") / 100.0
     df["northbound_net_flow"] = pd.to_numeric(df["vol"], errors="coerce")
     df["northbound_net_flow"] = (
-        df.sort_values(["ts_code", "trade_date"])
-        .groupby("ts_code")["northbound_net_flow"]
-        .diff()
+        df.sort_values(["ts_code", "trade_date"]).groupby("ts_code")["northbound_net_flow"].diff()
     )
     return df[["ts_code", "trade_date", "northbound_hold_ratio", "northbound_net_flow"]]
 
@@ -334,8 +341,15 @@ def _load_fina_asof_panel(
 ) -> pd.DataFrame:
     fina_dir = data_root / "fundamental"
     cols = [
-        "ts_code", "ann_date", "roe_dt", "grossprofit_margin", "netprofit_yoy",
-        "dt_netprofit_yoy", "debt_to_assets", "ocfps", "roic",
+        "ts_code",
+        "ann_date",
+        "roe_dt",
+        "grossprofit_margin",
+        "netprofit_yoy",
+        "dt_netprofit_yoy",
+        "debt_to_assets",
+        "ocfps",
+        "roic",
     ]
     frames: List[pd.DataFrame] = []
     start_year = int(start_date[:4]) - 1
@@ -393,7 +407,16 @@ def _load_fina_asof_panel(
         merged_chunks.append(chunk)
 
     merged = pd.concat(merged_chunks, ignore_index=True) if merged_chunks else left.copy()
-    out_cols = ["ts_code", "trade_date", "roe_dt", "grossprofit_margin", "netprofit_yoy", "debt_to_assets", "ocfps", "roic"]
+    out_cols = [
+        "ts_code",
+        "trade_date",
+        "roe_dt",
+        "grossprofit_margin",
+        "netprofit_yoy",
+        "debt_to_assets",
+        "ocfps",
+        "roic",
+    ]
     for col in out_cols:
         if col not in merged.columns:
             merged[col] = np.nan
@@ -524,7 +547,9 @@ def _evaluate_holdout_predictions(
     daily_rank_ic = (
         eval_df.groupby("trade_date")
         .apply(
-            lambda g: g["score"].rank(pct=True).corr(
+            lambda g: g["score"]
+            .rank(pct=True)
+            .corr(
                 g["future_return"].rank(pct=True),
                 method="pearson",
             )
@@ -557,7 +582,9 @@ def _evaluate_holdout_predictions(
         "days": float(compare["trade_date"].nunique()),
         "rank_ic_mean": ic_mean,
         "rank_ic_std": ic_std,
-        "rank_ic_ir": float(ic_mean / (ic_std + 1e-12)) if np.isfinite(ic_mean) and np.isfinite(ic_std) else float("nan"),
+        "rank_ic_ir": (
+            float(ic_mean / (ic_std + 1e-12)) if np.isfinite(ic_mean) and np.isfinite(ic_std) else float("nan")
+        ),
         "top_n_avg_return": float(compare["top_return"].mean()),
         "universe_avg_return": float(compare["all_return"].mean()),
         "top_n_excess_return": float(compare["excess_return"].mean()),
@@ -632,13 +659,15 @@ def main() -> None:
     parser.add_argument("--valid-days", type=int, default=120, help="训练后留出验证交易日数量（0表示关闭）")
     parser.add_argument("--eval-top-n", type=int, default=10, help="验证集TopN收益评估口径")
     parser.add_argument("--data-dir", type=str, default=None, help="Tushare数据根目录")
-    parser.add_argument("--output-root", type=str, default=None, help="输出目录，默认 data/signals/stock_selector/monthly")
     parser.add_argument(
-        "--universe", 
-        type=str, 
-        default="hs300", 
+        "--output-root", type=str, default=None, help="输出目录，默认 data/signals/stock_selector/monthly"
+    )
+    parser.add_argument(
+        "--universe",
+        type=str,
+        default="hs300",
         choices=["hs300", "all"],
-        help="股票池：hs300=沪深300, all=全市场（过滤ST）"
+        help="股票池：hs300=沪深300, all=全市场（过滤ST）",
     )
     parser.add_argument("--exclude-st", action="store_true", default=True, help="剔除ST股票（仅对 all 生效）")
     parser.add_argument("--min-list-days", type=int, default=60, help="最小上市天数（新股过滤）")
@@ -662,18 +691,16 @@ def main() -> None:
     else:
         universe = _load_all_stocks_universe(data_root, end_date, exclude_st=args.exclude_st)
         print(f"股票池：全市场，共 {len(universe)} 只股票（ST过滤={'开启' if args.exclude_st else '关闭'}）")
-        
+
         # 加载 ST 股票并进一步过滤
         if args.exclude_st:
             st_stocks = _load_st_stock_list(data_root, end_date)
             if st_stocks:
                 # 先加载日线数据用于新股过滤
                 daily_panel = _load_daily_panel(data_root, start_date, end_date, universe)
-                universe = _filter_st_and_new_stocks(
-                    universe, st_stocks, daily_panel, min_list_days=args.min_list_days
-                )
+                universe = _filter_st_and_new_stocks(universe, st_stocks, daily_panel, min_list_days=args.min_list_days)
                 print(f"ST/新股过滤后：{len(universe)} 只股票")
-    
+
     panel = _build_training_panel(data_root, start_date, end_date, universe)
     if panel.empty:
         raise ValueError("训练面板为空")
@@ -714,7 +741,9 @@ def main() -> None:
 
     importance = _extract_feature_importance(selector)
 
-    output_root = Path(args.output_root) if args.output_root else (get_data_root() / "signals" / "stock_selector" / "monthly")
+    output_root = (
+        Path(args.output_root) if args.output_root else (get_data_root() / "signals" / "stock_selector" / "monthly")
+    )
     if not output_root.is_absolute():
         output_root = ROOT / output_root
     output_root.mkdir(parents=True, exist_ok=True)

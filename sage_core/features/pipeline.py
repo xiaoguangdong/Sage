@@ -5,9 +5,10 @@ from typing import Iterable, List, Optional, Sequence
 
 import pandas as pd
 
+from sage_core.data import DataStore
+
 from .base import FeatureGenerator
 from .registry import FEATURE_REGISTRY
-from sage_core.data import DataStore, DataCatalog, DatasetSpec
 
 
 @dataclass

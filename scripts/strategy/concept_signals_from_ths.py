@@ -49,9 +49,7 @@ def build_signals(df: pd.DataFrame) -> pd.DataFrame:
     df["vol_20d"] = df.groupby("ts_code")["pct_change"].transform(lambda s: s.rolling(20).std())
 
     df["heat_score"] = (
-        df["ret_20d"].fillna(0) * 0.5
-        + df["ret_60d"].fillna(0) * 0.3
-        + df["turnover_20d"].fillna(0) * 0.2 / 100
+        df["ret_20d"].fillna(0) * 0.5 + df["ret_60d"].fillna(0) * 0.3 + df["turnover_20d"].fillna(0) * 0.2 / 100
     )
 
     df["rank_pct"] = df.groupby("trade_date")["heat_score"].rank(pct=True)
@@ -91,15 +89,17 @@ def main() -> None:
     if not names.empty:
         signals = signals.merge(names, on="ts_code", how="left")
 
-    signals = signals.rename(columns={
-        "ts_code": "concept_code",
-        "name": "concept_name",
-        "ret_20d": "heat_20d",
-        "ret_60d": "heat_60d",
-        "heat_score": "concept_heat_score",
-        "turnover_20d": "concept_turnover_20d",
-        "vol_20d": "concept_vol_20d",
-    })
+    signals = signals.rename(
+        columns={
+            "ts_code": "concept_code",
+            "name": "concept_name",
+            "ret_20d": "heat_20d",
+            "ret_60d": "heat_60d",
+            "heat_score": "concept_heat_score",
+            "turnover_20d": "concept_turnover_20d",
+            "vol_20d": "concept_vol_20d",
+        }
+    )
 
     if args.top_k:
         signals = signals.sort_values(["trade_date", "concept_heat_score"], ascending=[True, False])

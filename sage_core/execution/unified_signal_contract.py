@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
 import json
+from typing import Any, Dict, Optional
 
 import pandas as pd
-
 
 UNIFIED_SIGNAL_COLUMNS = [
     "trade_date",
@@ -39,7 +38,9 @@ def _to_json_meta(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False)
 
 
-def from_stock_signal_contract(stock_contract: Optional[pd.DataFrame], include_challengers: bool = True) -> pd.DataFrame:
+def from_stock_signal_contract(
+    stock_contract: Optional[pd.DataFrame], include_challengers: bool = True
+) -> pd.DataFrame:
     if stock_contract is None or stock_contract.empty:
         return pd.DataFrame(columns=UNIFIED_SIGNAL_COLUMNS)
 
@@ -61,7 +62,7 @@ def from_stock_signal_contract(stock_contract: Optional[pd.DataFrame], include_c
 
     data = stock_contract.copy()
     if not include_challengers:
-        data = data[data["is_champion"] == True].copy()
+        data = data[data["is_champion"]].copy()
     if data.empty:
         return pd.DataFrame(columns=UNIFIED_SIGNAL_COLUMNS)
 
@@ -80,7 +81,11 @@ def from_stock_signal_contract(stock_contract: Optional[pd.DataFrame], include_c
     out["strategy_id"] = data["strategy_id"].astype(str)
     out["is_champion"] = data["is_champion"].astype(bool)
     out["meta"] = "{}"
-    return out[UNIFIED_SIGNAL_COLUMNS].sort_values(["trade_date", "is_champion", "strategy_id", "rank"], ascending=[True, False, True, True]).reset_index(drop=True)
+    return (
+        out[UNIFIED_SIGNAL_COLUMNS]
+        .sort_values(["trade_date", "is_champion", "strategy_id", "rank"], ascending=[True, False, True, True])
+        .reset_index(drop=True)
+    )
 
 
 def from_industry_signal_contract(industry_contract: Optional[pd.DataFrame]) -> pd.DataFrame:
@@ -213,7 +218,11 @@ def build_unified_signal_contract(
         return pd.DataFrame(columns=UNIFIED_SIGNAL_COLUMNS)
     out = pd.concat(frames, ignore_index=True)
     out["trade_date"] = out["trade_date"].map(_normalize_trade_date)
-    return out[UNIFIED_SIGNAL_COLUMNS].sort_values(
-        ["trade_date", "signal_domain", "signal_name", "rank"],
-        ascending=[True, True, True, True],
-    ).reset_index(drop=True)
+    return (
+        out[UNIFIED_SIGNAL_COLUMNS]
+        .sort_values(
+            ["trade_date", "signal_domain", "signal_name", "rank"],
+            ascending=[True, True, True, True],
+        )
+        .reset_index(drop=True)
+    )

@@ -29,7 +29,6 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import get_data_path, get_data_root, get_tushare_root
 
-
 DEFAULT_INPUT_NAMES = {
     "tushare_announcement": [
         "tushare_anns.parquet",
@@ -60,6 +59,7 @@ def load_yaml(path: Path) -> Dict:
         return {}
     try:
         import yaml  # type: ignore
+
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
@@ -123,11 +123,13 @@ def _extract_title(df: pd.DataFrame) -> pd.Series:
 def normalize_records(df: pd.DataFrame, source_type: str) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
-    result = pd.DataFrame({
-        "publish_date": _extract_date(df),
-        "title": _extract_title(df),
-        "content": _extract_text(df),
-    })
+    result = pd.DataFrame(
+        {
+            "publish_date": _extract_date(df),
+            "title": _extract_title(df),
+            "content": _extract_text(df),
+        }
+    )
     industry_raw = None
     for col in ["industry", "industry_name", "sw_industry"]:
         if col in df.columns:
@@ -360,24 +362,25 @@ def aggregate_signals(
         stability_score = 1.0
         if not source_health.empty:
             matched = source_health[
-                (source_health["source_type"] == source_type)
-                & (source_health["trade_date"] == trade_date)
+                (source_health["source_type"] == source_type) & (source_health["trade_date"] == trade_date)
             ]
             if not matched.empty:
                 stability_score = float(matched.iloc[-1]["source_stability_score"])
         weight = base_weight * stability_score
         for industry in industries:
-            rows.append({
-                "trade_date": trade_date,
-                "sw_industry": industry,
-                "score": base_score,
-                "weight": weight,
-                "base_weight": base_weight,
-                "source_stability_score": stability_score,
-                "source_type": source_type,
-                "pos_hits": pos_hits,
-                "neg_hits": neg_hits,
-            })
+            rows.append(
+                {
+                    "trade_date": trade_date,
+                    "sw_industry": industry,
+                    "score": base_score,
+                    "weight": weight,
+                    "base_weight": base_weight,
+                    "source_stability_score": stability_score,
+                    "source_type": source_type,
+                    "pos_hits": pos_hits,
+                    "neg_hits": neg_hits,
+                }
+            )
 
     if not rows:
         return pd.DataFrame()
@@ -391,20 +394,20 @@ def aggregate_signals(
             return float(group["score"].mean())
         return float((group["score"] * group["weight"]).sum() / total)
 
-    aggregated = (
+    aggregated = df.groupby(["trade_date", "sw_industry"]).apply(_weighted_mean).reset_index(name="policy_score")
+    meta = (
         df.groupby(["trade_date", "sw_industry"])
-        .apply(_weighted_mean)
-        .reset_index(name="policy_score")
+        .agg(
+            doc_count=("score", "count"),
+            source_count=("source_type", "nunique"),
+            source_weights=("weight", "sum"),
+            avg_source_stability=("source_stability_score", "mean"),
+            score_std=("score", "std"),
+            pos_hits=("pos_hits", "sum"),
+            neg_hits=("neg_hits", "sum"),
+        )
+        .reset_index()
     )
-    meta = df.groupby(["trade_date", "sw_industry"]).agg(
-        doc_count=("score", "count"),
-        source_count=("source_type", "nunique"),
-        source_weights=("weight", "sum"),
-        avg_source_stability=("source_stability_score", "mean"),
-        score_std=("score", "std"),
-        pos_hits=("pos_hits", "sum"),
-        neg_hits=("neg_hits", "sum"),
-    ).reset_index()
 
     result = aggregated.merge(meta, on=["trade_date", "sw_industry"], how="left")
     result["score_std"] = result["score_std"].fillna(0.0)
@@ -413,7 +416,9 @@ def aggregate_signals(
     source_component = (result["source_count"].clip(upper=3) / 3.0) * 0.3
     stability_component = result["avg_source_stability"].clip(lower=0.0, upper=1.0) * 0.2
     dispersion_component = (1.0 - (result["score_std"] / 0.25).clip(lower=0.0, upper=1.0)) * 0.1
-    result["confidence"] = (doc_component + source_component + stability_component + dispersion_component).clip(0.0, 1.0)
+    result["confidence"] = (doc_component + source_component + stability_component + dispersion_component).clip(
+        0.0, 1.0
+    )
     return result.sort_values(["trade_date", "policy_score"], ascending=[True, False])
 
 

@@ -20,10 +20,9 @@ import re
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
@@ -117,13 +116,7 @@ def load_gb_keyword_rules(path: Path) -> List[Tuple[List[str], str]]:
 
 
 def normalize_text(text: str) -> str:
-    return (
-        text.replace("（", "(")
-        .replace("）", ")")
-        .replace(" ", "")
-        .replace("\n", "")
-        .strip()
-    )
+    return text.replace("（", "(").replace("）", ")").replace(" ", "").replace("\n", "").strip()
 
 
 def build_gb_name_index(gb_df: pd.DataFrame) -> List[str]:
@@ -265,14 +258,18 @@ def main():
 
     refs_dir = PROJECT_ROOT / "refs_docs"
 
-    product_file = Path(args.product_file) if args.product_file else find_first(
-        ["*工业产品产量目录*.xlsx", "*工业产品产量目录*.xls", "*工业产品产量目录*.csv"], refs_dir
+    product_file = (
+        Path(args.product_file)
+        if args.product_file
+        else find_first(["*工业产品产量目录*.xlsx", "*工业产品产量目录*.xls", "*工业产品产量目录*.csv"], refs_dir)
     )
     if not product_file or not product_file.exists():
         raise SystemExit("未找到工业产品产量目录文件，请放到 refs_docs/ 或使用 --product-file 指定。")
 
-    gbt_notes = Path(args.gbt_notes) if args.gbt_notes else find_first(
-        ["*国民经济行业分类注释*xlsx", "*行业分类注释*xlsx"], refs_dir
+    gbt_notes = (
+        Path(args.gbt_notes)
+        if args.gbt_notes
+        else find_first(["*国民经济行业分类注释*xlsx", "*行业分类注释*xlsx"], refs_dir)
     )
     if not gbt_notes or not gbt_notes.exists():
         raise SystemExit("未找到 GB/T 4754-2017 行业分类注释（xlsx）。")
@@ -363,6 +360,7 @@ def main():
         raise SystemExit("缺少 PyYAML，请先安装后再运行。")
 
     products = []
+
     def _clean(value):
         if value is None:
             return None

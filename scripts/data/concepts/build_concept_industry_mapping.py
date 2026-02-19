@@ -14,6 +14,7 @@ import pandas as pd
 
 from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
+
 def load_ths_member(path: Path) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"同花顺概念成分文件不存在: {path}")
@@ -78,9 +79,13 @@ def normalize_ths_member(member_df: pd.DataFrame, index_df: pd.DataFrame) -> pd.
         normalized = normalized.rename(columns={concept_name_col: "concept_name"})
 
     if "concept_name" not in normalized.columns and not index_df.empty and "ts_code" in index_df.columns:
-        name_col = "name" if "name" in index_df.columns else ("index_name" if "index_name" in index_df.columns else None)
+        name_col = (
+            "name" if "name" in index_df.columns else ("index_name" if "index_name" in index_df.columns else None)
+        )
         if name_col:
-            names = index_df[["ts_code", name_col]].rename(columns={"ts_code": "concept_code", name_col: "concept_name"})
+            names = index_df[["ts_code", name_col]].rename(
+                columns={"ts_code": "concept_code", name_col: "concept_name"}
+            )
             normalized = normalized.merge(names, on="concept_code", how="left")
 
     if "concept_name" not in normalized.columns:
@@ -134,10 +139,14 @@ def build_mapping(
         return coverage, primary, unmapped, report
 
     mapped["stock_count"] = 1
-    grouped = mapped.groupby(["concept_code", "concept_name", "industry_name"]).agg(
-        stock_count=("stock_count", "sum"),
-        stock_count_unique=("ts_code", "nunique"),
-    ).reset_index()
+    grouped = (
+        mapped.groupby(["concept_code", "concept_name", "industry_name"])
+        .agg(
+            stock_count=("stock_count", "sum"),
+            stock_count_unique=("ts_code", "nunique"),
+        )
+        .reset_index()
+    )
     grouped["stock_count"] = grouped["stock_count_unique"]
 
     grouped = grouped.drop(columns=["stock_count_unique"])
@@ -204,7 +213,9 @@ def main() -> None:
 
     coverage.to_parquet(output_dir / "concept_industry_coverage.parquet", index=False)
     primary.to_parquet(output_dir / "concept_industry_primary.parquet", index=False)
-    primary[primary["mapping_quality"] == "high"].to_parquet(output_dir / "concept_industry_primary_high_conf.parquet", index=False)
+    primary[primary["mapping_quality"] == "high"].to_parquet(
+        output_dir / "concept_industry_primary_high_conf.parquet", index=False
+    )
     unmapped.to_parquet(output_dir / "concept_industry_unmapped.parquet", index=False)
     (output_dir / "concept_industry_mapping_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"

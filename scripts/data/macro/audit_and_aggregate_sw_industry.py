@@ -18,15 +18,16 @@
 
 import argparse
 import sys
-from pathlib import Path
 from datetime import datetime
-import yaml
+from pathlib import Path
+
 import pandas as pd
+import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_tushare_root, get_data_path
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 
 def load_mapping(config_path: Path) -> list[str]:

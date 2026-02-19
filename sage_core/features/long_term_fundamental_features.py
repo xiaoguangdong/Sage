@@ -104,14 +104,10 @@ class LongTermFundamentalFeatures:
         )
 
         # 计算研发费用率
-        df_income["rd_expense_ratio_ttm"] = (
-            df_income["rd_exp_ttm"] / df_income["revenue_ttm"] * 100
-        )
+        df_income["rd_expense_ratio_ttm"] = df_income["rd_exp_ttm"] / df_income["revenue_ttm"] * 100
 
         # 处理异常值
-        df_income["rd_expense_ratio_ttm"] = df_income["rd_expense_ratio_ttm"].clip(
-            lower=0, upper=100
-        )
+        df_income["rd_expense_ratio_ttm"] = df_income["rd_expense_ratio_ttm"].clip(lower=0, upper=100)
 
         # 返回结果
         result = df_income[["ts_code", "end_date", "rd_expense_ratio_ttm"]].copy()
@@ -214,9 +210,7 @@ class LongTermFundamentalFeatures:
         df_income["revenue_3y_ago"] = df_income.groupby("ts_code")["revenue"].shift(3)
 
         # 计算CAGR
-        df_income["revenue_cagr_3y"] = (
-            (df_income["revenue"] / df_income["revenue_3y_ago"]) ** (1 / 3) - 1
-        ) * 100
+        df_income["revenue_cagr_3y"] = ((df_income["revenue"] / df_income["revenue_3y_ago"]) ** (1 / 3) - 1) * 100
 
         # 最后筛选目标日期范围
         df_income = df_income[
@@ -272,9 +266,7 @@ class LongTermFundamentalFeatures:
         # 计算CAGR（处理负值情况）
         mask = (df_income["n_income"] > 0) & (df_income["n_income_3y_ago"] > 0)
         df_income.loc[mask, "profit_cagr_3y"] = (
-            (df_income.loc[mask, "n_income"] / df_income.loc[mask, "n_income_3y_ago"])
-            ** (1 / 3)
-            - 1
+            (df_income.loc[mask, "n_income"] / df_income.loc[mask, "n_income_3y_ago"]) ** (1 / 3) - 1
         ) * 100
 
         # 最后筛选目标日期范围
@@ -318,9 +310,7 @@ class LongTermFundamentalFeatures:
         df_dividend = pd.concat(df_list, ignore_index=True)
 
         # 筛选有效分红记录（现金分红 > 0）
-        df_dividend = df_dividend[
-            ["ts_code", "end_date", "div_proc", "cash_div"]
-        ].copy()
+        df_dividend = df_dividend[["ts_code", "end_date", "div_proc", "cash_div"]].copy()
         df_dividend = df_dividend[df_dividend["cash_div"] > 0]
 
         # 提取年份
@@ -350,17 +340,11 @@ class LongTermFundamentalFeatures:
 
             return max_consecutive
 
-        result = (
-            df_dividend.groupby("ts_code")
-            .apply(count_consecutive_years, include_groups=False)
-            .reset_index()
-        )
+        result = df_dividend.groupby("ts_code").apply(count_consecutive_years, include_groups=False).reset_index()
         result.columns = ["ts_code", "consecutive_dividend_years"]
 
         # 添加end_date（使用最新的分红记录日期）
-        latest_dates = (
-            df_dividend.groupby("ts_code")["end_date"].max().reset_index()
-        )
+        latest_dates = df_dividend.groupby("ts_code")["end_date"].max().reset_index()
         result = result.merge(latest_dates, on="ts_code", how="left")
 
         return result[["ts_code", "end_date", "consecutive_dividend_years"]]
@@ -395,9 +379,7 @@ class LongTermFundamentalFeatures:
         df_income = pd.concat(df_list, ignore_index=True)
 
         # 筛选需要的字段
-        df_income = df_income[
-            ["ts_code", "end_date", "operate_profit", "int_exp"]
-        ].copy()
+        df_income = df_income[["ts_code", "end_date", "operate_profit", "int_exp"]].copy()
         df_income["end_date"] = pd.to_datetime(df_income["end_date"], format="%Y%m%d")
         df_income = df_income[
             (df_income["end_date"] >= pd.to_datetime(start_date, format="%Y%m%d"))
@@ -412,10 +394,7 @@ class LongTermFundamentalFeatures:
 
         # 计算TTM（滚动4个季度）
         df_income["ebit_ttm"] = (
-            df_income.groupby("ts_code")["ebit"]
-            .rolling(window=4, min_periods=4)
-            .sum()
-            .reset_index(level=0, drop=True)
+            df_income.groupby("ts_code")["ebit"].rolling(window=4, min_periods=4).sum().reset_index(level=0, drop=True)
         )
 
         df_income["int_exp_ttm"] = (
@@ -426,9 +405,7 @@ class LongTermFundamentalFeatures:
         )
 
         # 计算利息保障倍数
-        df_income["interest_coverage_ratio"] = (
-            df_income["ebit_ttm"] / df_income["int_exp_ttm"]
-        )
+        df_income["interest_coverage_ratio"] = df_income["ebit_ttm"] / df_income["int_exp_ttm"]
 
         # 处理异常值（利息费用为0或负数的情况）
         df_income.loc[df_income["int_exp_ttm"] <= 0, "interest_coverage_ratio"] = np.nan

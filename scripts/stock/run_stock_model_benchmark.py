@@ -15,6 +15,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from sage_core.stock_selection.stock_selector import StockSelector
 from scripts.data._shared.runtime import get_data_root
 from scripts.stock.run_stock_selector_monthly import (
     _build_selector_config,
@@ -25,7 +26,6 @@ from scripts.stock.run_stock_selector_monthly import (
     _resolve_tushare_root,
     _split_train_valid_by_date,
 )
-from sage_core.stock_selection.stock_selector import StockSelector
 
 
 def _safe_float(value: Any, default: float = float("-inf")) -> float:
@@ -137,7 +137,9 @@ def main() -> None:
     for row in benchmark_rows:
         row["benchmark_rank"] = rank_by_model.get(row["model_type"])
 
-    output_root = Path(args.output_root) if args.output_root else (get_data_root() / "backtest" / "stock_selector" / "benchmark")
+    output_root = (
+        Path(args.output_root) if args.output_root else (get_data_root() / "backtest" / "stock_selector" / "benchmark")
+    )
     if not output_root.is_absolute():
         output_root = ROOT / output_root
     output_root.mkdir(parents=True, exist_ok=True)

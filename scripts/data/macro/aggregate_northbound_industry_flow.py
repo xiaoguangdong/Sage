@@ -15,6 +15,7 @@
 import argparse
 import sys
 from pathlib import Path
+
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -46,7 +47,9 @@ def _build_sw_constituents_from_sw_industry(tushare_root: Path) -> pd.DataFrame:
     merged = merged.dropna(subset=["ts_code", "industry_name"]).copy()
     merged["ts_code"] = merged["ts_code"].astype(str)
     merged = merged[merged["ts_code"].map(_looks_like_a_share)]
-    merged = merged.drop_duplicates(subset=["ts_code", "industry_name", "index_code", "in_date", "out_date"], keep="first")
+    merged = merged.drop_duplicates(
+        subset=["ts_code", "industry_name", "index_code", "in_date", "out_date"], keep="first"
+    )
     return merged
 
 
@@ -138,7 +141,9 @@ def _extend_with_proxy_dates(agg: pd.DataFrame, market_dates: pd.Series) -> pd.D
     if forward_dates.empty:
         return result
 
-    template = result[result["trade_date"] == last_ratio_date][["industry_code", "industry_name", "industry_ratio"]].copy()
+    template = result[result["trade_date"] == last_ratio_date][
+        ["industry_code", "industry_name", "industry_ratio"]
+    ].copy()
     if template.empty:
         return result
 
@@ -172,17 +177,19 @@ def aggregate(tushare_root: Path) -> Path:
         on="ts_code",
         how="left",
     )
-    valid = merged[
-        (merged["trade_date"] >= merged["in_date"]) & (merged["trade_date"] <= merged["out_date"])
-    ].copy()
+    valid = merged[(merged["trade_date"] >= merged["in_date"]) & (merged["trade_date"] <= merged["out_date"])].copy()
 
     if valid.empty:
         raise RuntimeError("无法匹配行业成分（无有效记录）")
 
-    agg = valid.groupby(["industry_code", "industry_name", "trade_date"]).agg(
-        vol=("vol", "sum"),
-        ratio=("ratio", "mean"),
-    ).reset_index()
+    agg = (
+        valid.groupby(["industry_code", "industry_name", "trade_date"])
+        .agg(
+            vol=("vol", "sum"),
+            ratio=("ratio", "mean"),
+        )
+        .reset_index()
+    )
 
     total_vol = agg.groupby("trade_date")["vol"].transform("sum")
     agg["industry_ratio"] = agg["vol"] / total_vol.replace(0, pd.NA)

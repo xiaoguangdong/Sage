@@ -12,12 +12,13 @@
 import argparse
 import sys
 from pathlib import Path
+
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from sage_core.industry.signal_indicators import MacroSignal, IndustryProsperity, NorthboundFlow
+from sage_core.industry.signal_indicators import IndustryProsperity, MacroSignal, NorthboundFlow
 from scripts.data.macro.aggregate_northbound_industry_flow import aggregate as aggregate_northbound_industry_flow
 
 
@@ -37,11 +38,7 @@ def _last_date_str(df: pd.DataFrame, col: str) -> str | None:
 
 
 def export_macro_signals(
-    output_dir: Path,
-    delay_days: int,
-    spread_threshold: float,
-    spread_mode: str,
-    tushare_root: Path | None = None
+    output_dir: Path, delay_days: int, spread_threshold: float, spread_mode: str, tushare_root: Path | None = None
 ):
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -53,22 +50,24 @@ def export_macro_signals(
         macro = MacroSignal(data_dir=macro_dir)
         macro_result = macro.get_macro_signal(spread_threshold=spread_threshold, spread_mode=spread_mode)
 
-        pmi_sig = macro_result['pmi_signal'].copy()
+        pmi_sig = macro_result["pmi_signal"].copy()
         if not pmi_sig.empty:
-            pmi_sig['date'] = pd.to_datetime(pmi_sig['month'], format='%Y%m')
-            pmi_sig = apply_delay(pmi_sig, 'date', delay_days)
-            pmi_last = _last_date_str(pmi_sig, 'date')
+            pmi_sig["date"] = pd.to_datetime(pmi_sig["month"], format="%Y%m")
+            pmi_sig = apply_delay(pmi_sig, "date", delay_days)
+            pmi_last = _last_date_str(pmi_sig, "date")
             if pmi_last:
                 pmi_out = output_dir / f"macro_pmi_signal_{pmi_last}.parquet"
-                pmi_sig[['date', 'pmi', 'pmi_diff', 'turning_point']].to_parquet(pmi_out, index=False)
+                pmi_sig[["date", "pmi", "pmi_diff", "turning_point"]].to_parquet(pmi_out, index=False)
 
-        spread_sig = macro_result['spread_signal'].copy()
+        spread_sig = macro_result["spread_signal"].copy()
         if not spread_sig.empty:
-            spread_sig = apply_delay(spread_sig, 'trade_date', delay_days)
-            spread_last = _last_date_str(spread_sig, 'trade_date')
+            spread_sig = apply_delay(spread_sig, "trade_date", delay_days)
+            spread_last = _last_date_str(spread_sig, "trade_date")
             if spread_last:
                 spread_out = output_dir / f"macro_yield_spread_{spread_last}.parquet"
-                spread_sig[['trade_date', 'yield_10y', 'yield_2y', 'spread', 'spread_signal']].to_parquet(spread_out, index=False)
+                spread_sig[["trade_date", "yield_10y", "yield_2y", "spread", "spread_signal"]].to_parquet(
+                    spread_out, index=False
+                )
     except FileNotFoundError:
         pass
 
@@ -79,14 +78,14 @@ def export_macro_signals(
         prosperity = IndustryProsperity(data_dir=fundamental_dir)
         prosperity_df = prosperity.get_prosperity_signal()
         if prosperity_df is not None and len(prosperity_df) > 0:
-            prosperity_df['end_date'] = pd.to_datetime(prosperity_df['end_date'])
-            prosperity_df = apply_delay(prosperity_df, 'end_date', delay_days)
-            prosperity_last = _last_date_str(prosperity_df, 'end_date')
+            prosperity_df["end_date"] = pd.to_datetime(prosperity_df["end_date"])
+            prosperity_df = apply_delay(prosperity_df, "end_date", delay_days)
+            prosperity_last = _last_date_str(prosperity_df, "end_date")
             if prosperity_last:
                 prosperity_out = output_dir / f"industry_prosperity_{prosperity_last}.parquet"
-                prosperity_df[['ts_code', 'end_date', 'tr_yoy', 'gross_margin', 'revenue_acceleration', 'prosperity_signal']].to_parquet(
-                    prosperity_out, index=False
-                )
+                prosperity_df[
+                    ["ts_code", "end_date", "tr_yoy", "gross_margin", "revenue_acceleration", "prosperity_signal"]
+                ].to_parquet(prosperity_out, index=False)
     except FileNotFoundError:
         pass
 
@@ -103,20 +102,22 @@ def export_macro_signals(
         flow = NorthboundFlow(data_dir=northbound_dir)
         flow_df = flow.get_flow_signal()
         if flow_df is not None and not flow_df.empty:
-            flow_df = apply_delay(flow_df, 'trade_date', delay_days)
-            flow_last = _last_date_str(flow_df, 'trade_date')
+            flow_df = apply_delay(flow_df, "trade_date", delay_days)
+            flow_last = _last_date_str(flow_df, "trade_date")
             if flow_last:
                 flow_out = output_dir / f"northbound_flow_{flow_last}.parquet"
-                flow_df[['trade_date', 'north_money', 'flow_ma', 'upper_band', 'flow_signal']].to_parquet(flow_out, index=False)
+                flow_df[["trade_date", "north_money", "flow_ma", "upper_band", "flow_signal"]].to_parquet(
+                    flow_out, index=False
+                )
 
         industry_flow_df = flow.get_industry_flow_signal()
         if industry_flow_df is not None and len(industry_flow_df) > 0:
-            industry_flow_df = apply_delay(industry_flow_df, 'trade_date', delay_days)
-            industry_last = _last_date_str(industry_flow_df, 'trade_date')
+            industry_flow_df = apply_delay(industry_flow_df, "trade_date", delay_days)
+            industry_last = _last_date_str(industry_flow_df, "trade_date")
             if industry_last:
                 industry_out = output_dir / f"northbound_industry_ratio_{industry_last}.parquet"
                 industry_flow_df[
-                    ['industry_code', 'industry_name', 'trade_date', 'industry_ratio', 'ratio_signal']
+                    ["industry_code", "industry_name", "trade_date", "industry_ratio", "ratio_signal"]
                 ].to_parquet(industry_out, index=False)
     except FileNotFoundError:
         pass
@@ -126,7 +127,7 @@ def export_macro_signals(
         "spread": spread_out,
         "prosperity": prosperity_out,
         "northbound_flow": flow_out,
-        "northbound_industry": industry_out
+        "northbound_industry": industry_out,
     }
 
 
@@ -136,7 +137,9 @@ def main():
     parser.add_argument("--delay-days", type=int, default=2)
     parser.add_argument("--spread-threshold", type=float, default=0.5)
     parser.add_argument("--spread-mode", type=str, default="threshold", choices=["threshold", "bollinger"])
-    parser.add_argument("--tushare-root", type=str, default=None, help="Tushare数据根目录（包含macro/fundamental/northbound）")
+    parser.add_argument(
+        "--tushare-root", type=str, default=None, help="Tushare数据根目录（包含macro/fundamental/northbound）"
+    )
     args = parser.parse_args()
 
     tushare_root = Path(args.tushare_root) if args.tushare_root else None
@@ -145,7 +148,7 @@ def main():
         delay_days=args.delay_days,
         spread_threshold=args.spread_threshold,
         spread_mode=args.spread_mode,
-        tushare_root=tushare_root
+        tushare_root=tushare_root,
     )
 
     print("宏观信号导出完成:")

@@ -1,4 +1,3 @@
-from .entry_model import EntryModelLR
 from .broker_adapter import (
     BrokerOrder,
     BrokerSubmitResult,
@@ -9,6 +8,7 @@ from .broker_adapter import (
     normalize_ts_code,
     save_submit_payload,
 )
+from .entry_model import EntryModelLR
 from .order_lifecycle import ALLOWED_TRANSITIONS, OrderLifecycle, OrderStateEvent, OrderStatus
 from .signal_contract import (
     apply_industry_overlay,

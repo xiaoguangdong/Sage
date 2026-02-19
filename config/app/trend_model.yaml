@@ -4,26 +4,26 @@
 trend_model:
   # 是否启用趋势模型
   enabled: true
-  
+
   # 模型类型：rule（规则） / lgbm（LightGBM） / hmm（HMM）
   model_type: rule
-  
+
   # 是否使用20个特征（rule模式下为false）
   use_all_features: false
-  
+
   # 数据源配置
   data_sources:
     # 指数代码
     index_code: "000300.SH"  # 沪深300指数
-    
+
     # 是否使用新浪市场宽度数据
     enable_market_breadth: false
     sina_api_key: null  # 需要申请
-    
+
     # 是否使用Tushare数据
     enable_tushare: false
     tushare_token: "2bcc0e9feb650d9862330a9743e5cc2e6469433c4d1ea0ce2d79371e"
-    
+
     # 是否使用中证指数官网数据
     enable_csindex: false
 
@@ -32,14 +32,14 @@ basic_features:
   # 收益指标
   ret_4w: true
   ret_12w: true
-  
+
   # 波动率指标
   vol_4w: true
   vol_12w: true
-  
+
   # 成交额指标
   amt_chg: true
-  
+
   # 均线指标
   ma_20: true
   ma_60: true
@@ -50,31 +50,31 @@ advanced_features:
   # 价格排名
   price_rank_20d: false
   price_rank_60d: false
-  
+
   # 趋势强度
   trend_strength: false
-  
+
   # 波动率比率
   vol_ratio: false
-  
+
   # 极端波动
   extreme_vol_count: false
-  
+
   # 成交额趋势
   amt_trend_20d: false
-  
+
   # 量价相关性
   price_volume_corr: false
-  
+
   # 最大回撤
   max_dd_20d: false
-  
+
   # 回撤频率
   drawdown_count: false
-  
+
   # ATR
   atr: false
-  
+
   # 市场宽度（需要新浪API）
   advance_decline_ratio: false
   market_breadth: false
@@ -85,7 +85,7 @@ rule_params:
   ma_short: 20
   ma_medium: 60
   ma_long: 120
-  
+
   # 波动率窗口
   vol_window: 4
   vol_median_window: 60

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# 运行 pre-commit（如果已安装）
+if command -v pre-commit &> /dev/null; then
+    pre-commit run --config "$(cd "$(dirname "$0")/.." && pwd)/.pre-commit-config.yaml" || exit 1
+fi

@@ -73,7 +73,9 @@ def test_evaluate_industry_rotation_outputs_required_metrics():
     )
     assert not detail.empty
     assert {"trade_date", "excess_return", "turnover", "net_excess_return", "rank_ic"}.issubset(detail.columns)
-    assert {"periods", "industry_hit_rate", "industry_excess_annual_return", "industry_turnover_mean"}.issubset(summary.keys())
+    assert {"periods", "industry_hit_rate", "industry_excess_annual_return", "industry_turnover_mean"}.issubset(
+        summary.keys()
+    )
     assert "industry_cost_adjusted_total_return" in summary
     assert "industry_max_drawdown" in summary
     assert {"sw_industry", "drawdown_contribution", "drawdown_share"}.issubset(contribution.columns)
@@ -114,8 +116,12 @@ def test_prepare_prosperity_scores():
     rows = []
     for idx, date in enumerate(dates):
         date_str = date.strftime("%Y%m%d")
-        rows.append({"trade_date": date_str, "ts_code": "801010.SI", "pct_change": 0.5 + idx * 0.01, "amount": 1000 + idx * 5})
-        rows.append({"trade_date": date_str, "ts_code": "801020.SI", "pct_change": -0.2 + idx * 0.005, "amount": 800 + idx * 3})
+        rows.append(
+            {"trade_date": date_str, "ts_code": "801010.SI", "pct_change": 0.5 + idx * 0.01, "amount": 1000 + idx * 5}
+        )
+        rows.append(
+            {"trade_date": date_str, "ts_code": "801020.SI", "pct_change": -0.2 + idx * 0.005, "amount": 800 + idx * 3}
+        )
     sw_daily = pd.DataFrame(rows)
     sw_l1_map = pd.DataFrame(
         [
@@ -157,7 +163,9 @@ def test_evaluate_industry_rotation_with_penalties():
         ret_rows.append({"trade_date": date_str, "sw_industry": "行业A", "industry_return": 0.01})
         ret_rows.append({"trade_date": date_str, "sw_industry": "行业B", "industry_return": 0.002})
     industry_returns = pd.DataFrame(ret_rows)
-    benchmark_returns = pd.DataFrame({"trade_date": [d.strftime("%Y%m%d") for d in dates], "benchmark_return": [0.004] * len(dates)})
+    benchmark_returns = pd.DataFrame(
+        {"trade_date": [d.strftime("%Y%m%d") for d in dates], "benchmark_return": [0.004] * len(dates)}
+    )
 
     baseline_detail, _, baseline_summary = evaluate_industry_rotation(
         industry_scores=scores,
@@ -194,7 +202,10 @@ def test_evaluate_industry_rotation_with_penalties():
         exposure_penalty_factor=0.8,
     )
     assert not enhanced_detail.empty
-    assert enhanced_summary["industry_cost_adjusted_total_return"] < baseline_summary["industry_cost_adjusted_total_return"]
+    assert (
+        enhanced_summary["industry_cost_adjusted_total_return"]
+        < baseline_summary["industry_cost_adjusted_total_return"]
+    )
 
 
 def test_prepare_trend_dominant_state_and_blend_scores():
@@ -214,8 +225,18 @@ def test_prepare_trend_dominant_state_and_blend_scores():
     concept = prepare_concept_bias_scores(
         pd.DataFrame(
             [
-                {"trade_date": "2026-01-06", "sw_industry": "电子", "concept_bias_strength": 1.0, "concept_signal_confidence": 1.0},
-                {"trade_date": "2026-01-06", "sw_industry": "煤炭", "concept_bias_strength": -1.0, "concept_signal_confidence": 1.0},
+                {
+                    "trade_date": "2026-01-06",
+                    "sw_industry": "电子",
+                    "concept_bias_strength": 1.0,
+                    "concept_signal_confidence": 1.0,
+                },
+                {
+                    "trade_date": "2026-01-06",
+                    "sw_industry": "煤炭",
+                    "concept_bias_strength": -1.0,
+                    "concept_signal_confidence": 1.0,
+                },
             ]
         )
     )

@@ -6,12 +6,13 @@
 - 按趋势模型输出的 RISK_ON/NEUTRAL/RISK_OFF 分别训练三个 StockSelector
 - 推理时根据当天 regime 选择对应模型打分
 """
+
 from __future__ import annotations
 
 import copy
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -36,11 +37,13 @@ class RegimeSelectionConfig:
     base_config: SelectionConfig = field(default_factory=SelectionConfig)
 
     # 各 regime 的 LightGBM 参数覆盖（key: regime int）
-    regime_lgbm_overrides: Dict[int, Dict] = field(default_factory=lambda: {
-        RISK_ON: {"min_data_in_leaf": 200, "lambda_l2": 5.0},
-        NEUTRAL: {"min_data_in_leaf": 200, "lambda_l2": 5.0},
-        RISK_OFF: {"min_data_in_leaf": 300, "lambda_l2": 8.0},
-    })
+    regime_lgbm_overrides: Dict[int, Dict] = field(
+        default_factory=lambda: {
+            RISK_ON: {"min_data_in_leaf": 200, "lambda_l2": 5.0},
+            NEUTRAL: {"min_data_in_leaf": 200, "lambda_l2": 5.0},
+            RISK_OFF: {"min_data_in_leaf": 300, "lambda_l2": 8.0},
+        }
+    )
 
     # 趋势模型配置
     trend_config: TrendModelConfig = field(default_factory=TrendModelConfig)
@@ -79,9 +82,7 @@ class RegimeStockSelector:
             cfg.lgbm_params = {**cfg.lgbm_params, **overrides}
         return cfg
 
-    def generate_regime_labels(
-        self, df_index: pd.DataFrame, dates: pd.Series
-    ) -> pd.Series:
+    def generate_regime_labels(self, df_index: pd.DataFrame, dates: pd.Series) -> pd.Series:
         """
         用趋势模型为每个交易日生成 regime 标签
 
@@ -136,9 +137,7 @@ class RegimeStockSelector:
             self.train_stats[regime] = {"n_samples": n_target}
 
             if n_target < self.config.min_samples_per_regime:
-                logger.warning(
-                    f"[{name}] 样本不足 ({n_target} < {self.config.min_samples_per_regime})，使用全量模型"
-                )
+                logger.warning(f"[{name}] 样本不足 ({n_target} < {self.config.min_samples_per_regime})，使用全量模型")
                 self.models[regime] = self.fallback_model
                 continue
 
@@ -164,18 +163,14 @@ class RegimeStockSelector:
             self.models[regime] = model
 
             # 记录特征信息
-            self.train_stats[regime]["n_features"] = (
-                len(model.feature_cols) if model.feature_cols else 0
-            )
+            self.train_stats[regime]["n_features"] = len(model.feature_cols) if model.feature_cols else 0
             if hasattr(model, "feature_ic_stats"):
                 top_features = sorted(
                     model.feature_ic_stats.items(),
                     key=lambda x: abs(x[1]["mean_ic"]),
                     reverse=True,
                 )[:5]
-                self.train_stats[regime]["top_features"] = [
-                    (f, round(s["mean_ic"], 4)) for f, s in top_features
-                ]
+                self.train_stats[regime]["top_features"] = [(f, round(s["mean_ic"], 4)) for f, s in top_features]
 
         self.is_trained = True
         self._log_summary()
@@ -229,9 +224,7 @@ class RegimeStockSelector:
         model = self.models.get(regime, self.fallback_model)
         return model.predict_prepared(df_features)
 
-    def predict_with_index(
-        self, df: pd.DataFrame, df_index: pd.DataFrame, trade_date: str
-    ) -> pd.DataFrame:
+    def predict_with_index(self, df: pd.DataFrame, df_index: pd.DataFrame, trade_date: str) -> pd.DataFrame:
         """
         自动判断 regime 并预测（端到端接口）
 
@@ -242,10 +235,7 @@ class RegimeStockSelector:
         """
         trend_result = self.trend_model.predict(df_index)
         regime = trend_result.state
-        logger.info(
-            f"[{trade_date}] regime={REGIME_NAMES[regime]}, "
-            f"confidence={trend_result.confidence:.2f}"
-        )
+        logger.info(f"[{trade_date}] regime={REGIME_NAMES[regime]}, " f"confidence={trend_result.confidence:.2f}")
         return self.predict(df, regime)
 
     def _log_summary(self):

@@ -13,10 +13,9 @@
 
 from __future__ import annotations
 
-import pandas as pd
-import numpy as np
-from typing import Optional
 from pathlib import Path
+
+import pandas as pd
 
 
 class ValueStockSelector:
@@ -65,25 +64,25 @@ class ValueStockSelector:
         filtered = df.copy()
 
         # 1. ROE > 15%（盈利能力底线）
-        filtered = filtered[filtered['roe'] > self.min_roe]
+        filtered = filtered[filtered["roe"] > self.min_roe]
 
         # 2. 负债率 < 60%（财务安全底线）
-        filtered = filtered[filtered['debt_ratio'] < self.max_debt_ratio]
+        filtered = filtered[filtered["debt_ratio"] < self.max_debt_ratio]
 
         # 3. 连续分红5年+（现金流稳定）
-        filtered = filtered[filtered['consecutive_dividend'] >= self.min_consecutive_dividend]
+        filtered = filtered[filtered["consecutive_dividend"] >= self.min_consecutive_dividend]
 
         # 4. 非ST股
-        if 'is_st' in filtered.columns:
-            filtered = filtered[filtered['is_st'] == False]
+        if "is_st" in filtered.columns:
+            filtered = filtered[not filtered["is_st"]]
 
         # 5. 非退市股
-        if 'is_delisted' in filtered.columns:
-            filtered = filtered[filtered['is_delisted'] == False]
+        if "is_delisted" in filtered.columns:
+            filtered = filtered[not filtered["is_delisted"]]
 
         # 6. 营收正增长（成长性底线）
-        if 'revenue_growth' in filtered.columns:
-            filtered = filtered[filtered['revenue_growth'] > 0]
+        if "revenue_growth" in filtered.columns:
+            filtered = filtered[filtered["revenue_growth"] > 0]
 
         return filtered
 
@@ -104,68 +103,68 @@ class ValueStockSelector:
             带有评分的DataFrame
         """
         scored = df.copy()
-        scored['score'] = 0.0
+        scored["score"] = 0.0
 
         # 1. 盈利能力（30%）
-        if 'roe' in scored.columns:
+        if "roe" in scored.columns:
             # ROE标准化（0-100分）
-            roe_score = (scored['roe'] - 0.10) / 0.30 * 100  # 10%-40%映射到0-100
+            roe_score = (scored["roe"] - 0.10) / 0.30 * 100  # 10%-40%映射到0-100
             roe_score = roe_score.clip(0, 100)
-            scored['score'] += roe_score * 0.20
+            scored["score"] += roe_score * 0.20
 
-        if 'roe_5y_std' in scored.columns:
+        if "roe_5y_std" in scored.columns:
             # ROE稳定性（标准差越小越好）
-            roe_stability_score = (1 - scored['roe_5y_std'] / 0.10) * 100
+            roe_stability_score = (1 - scored["roe_5y_std"] / 0.10) * 100
             roe_stability_score = roe_stability_score.clip(0, 100)
-            scored['score'] += roe_stability_score * 0.10
+            scored["score"] += roe_stability_score * 0.10
 
         # 2. 财务安全（25%）
-        if 'debt_ratio' in scored.columns:
+        if "debt_ratio" in scored.columns:
             # 负债率（越低越好）
-            debt_score = (1 - scored['debt_ratio']) * 100
+            debt_score = (1 - scored["debt_ratio"]) * 100
             debt_score = debt_score.clip(0, 100)
-            scored['score'] += debt_score * 0.15
+            scored["score"] += debt_score * 0.15
 
-        if 'interest_coverage' in scored.columns:
+        if "interest_coverage" in scored.columns:
             # 利息保障倍数（>5倍为优秀）
-            interest_score = (scored['interest_coverage'] / 10) * 100
+            interest_score = (scored["interest_coverage"] / 10) * 100
             interest_score = interest_score.clip(0, 100)
-            scored['score'] += interest_score * 0.10
+            scored["score"] += interest_score * 0.10
 
         # 3. 分红能力（20%）
-        if 'consecutive_dividend' in scored.columns:
+        if "consecutive_dividend" in scored.columns:
             # 连续分红年数（10年+为满分）
-            dividend_years_score = (scored['consecutive_dividend'] / 10) * 100
+            dividend_years_score = (scored["consecutive_dividend"] / 10) * 100
             dividend_years_score = dividend_years_score.clip(0, 100)
-            scored['score'] += dividend_years_score * 0.10
+            scored["score"] += dividend_years_score * 0.10
 
-        if 'dividend_yield' in scored.columns:
+        if "dividend_yield" in scored.columns:
             # 股息率（5%为满分）
-            dividend_yield_score = (scored['dividend_yield'] / 0.05) * 100
+            dividend_yield_score = (scored["dividend_yield"] / 0.05) * 100
             dividend_yield_score = dividend_yield_score.clip(0, 100)
-            scored['score'] += dividend_yield_score * 0.10
+            scored["score"] += dividend_yield_score * 0.10
 
         # 4. 估值水平（15%）
-        if 'pe_relative' in scored.columns:
+        if "pe_relative" in scored.columns:
             # PE相对值（<0.8为优秀）
-            pe_score = (1 - scored['pe_relative']) * 100
+            pe_score = (1 - scored["pe_relative"]) * 100
             pe_score = pe_score.clip(0, 100)
-            scored['score'] += pe_score * 0.15
+            scored["score"] += pe_score * 0.15
 
         # 5. 机构认可（10%）
-        if 'fund_holders' in scored.columns:
+        if "fund_holders" in scored.columns:
             # 基金持仓家数（50家+为满分）
-            fund_score = (scored['fund_holders'] / 50) * 100
+            fund_score = (scored["fund_holders"] / 50) * 100
             fund_score = fund_score.clip(0, 100)
-            scored['score'] += fund_score * 0.05
+            scored["score"] += fund_score * 0.05
 
-        if 'inst_holding_change' in scored.columns:
+        if "inst_holding_change" in scored.columns:
             # 机构增持（>10%为满分）
-            inst_change_score = (scored['inst_holding_change'] / 0.10) * 100
+            inst_change_score = (scored["inst_holding_change"] / 0.10) * 100
             inst_change_score = inst_change_score.clip(0, 100)
-            scored['score'] += inst_change_score * 0.05
+            scored["score"] += inst_change_score * 0.05
 
-        return scored.sort_values('score', ascending=False)
+        return scored.sort_values("score", ascending=False)
 
     def construct_portfolio(
         self,
@@ -196,11 +195,11 @@ class ValueStockSelector:
 
         for _, stock in scored_df.iterrows():
             # 流动性约束
-            if 'avg_amount' in stock and stock['avg_amount'] < min_avg_amount:
+            if "avg_amount" in stock and stock["avg_amount"] < min_avg_amount:
                 continue
 
             # 行业分散约束
-            industry = stock.get('industry', 'Unknown')
+            industry = stock.get("industry", "Unknown")
             if industry_count.get(industry, 0) >= max_per_industry:
                 continue
 
@@ -214,7 +213,7 @@ class ValueStockSelector:
 
         # 等权重配置
         if not portfolio_df.empty:
-            portfolio_df['weight'] = 1.0 / len(portfolio_df)
+            portfolio_df["weight"] = 1.0 / len(portfolio_df)
 
         return portfolio_df
 

@@ -1,6 +1,7 @@
 """
 日志规范化工具
 """
+
 from __future__ import annotations
 
 import logging

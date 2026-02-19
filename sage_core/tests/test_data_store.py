@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from sage_core.data import DataCatalog, DataStore, DatasetSpec
+from sage_core.data import DataCatalog, DatasetSpec, DataStore
 from sage_core.utils import runtime_paths
 
 

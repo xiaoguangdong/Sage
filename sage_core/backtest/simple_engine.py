@@ -4,11 +4,10 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
-import numpy as np
 
-from .types import BacktestConfig, BacktestResult
-from .cost_model import TradingCostModel, create_default_cost_model
 from ..portfolio.enhanced_risk_control import EnhancedRiskControl, RiskControlConfig
+from .cost_model import TradingCostModel, create_default_cost_model
+from .types import BacktestConfig, BacktestResult
 
 
 @dataclass
@@ -45,7 +44,9 @@ class SimpleBacktestEngine:
         self.risk_control = EnhancedRiskControl(risk_control_config) if use_enhanced_risk_control else None
         self.entry_model = entry_model  # EntryModelLR 实例（可选）
 
-    def run(self, signals: pd.DataFrame, returns: pd.DataFrame, industry_map: Optional[pd.DataFrame] = None) -> BacktestResult:
+    def run(
+        self, signals: pd.DataFrame, returns: pd.DataFrame, industry_map: Optional[pd.DataFrame] = None
+    ) -> BacktestResult:
         """
         Args:
             signals: DataFrame columns = [trade_date, ts_code, score(optional), weight(optional), industry(optional), confidence(optional)]
@@ -72,9 +73,7 @@ class SimpleBacktestEngine:
         trading_dates = sorted(returns["trade_date"].unique())
         signals = self._shift_signals(signals, trading_dates, self.config.data_delay_days)
 
-        signals_by_date = {
-            date: day for date, day in signals.groupby("exec_date")
-        } if not signals.empty else {}
+        signals_by_date = {date: day for date, day in signals.groupby("exec_date")} if not signals.empty else {}
 
         portfolio_values = [self.config.initial_capital]
         portfolio_returns: List[float] = []
@@ -97,7 +96,11 @@ class SimpleBacktestEngine:
             if self.entry_model is not None and not day_returns.empty:
                 for _, row in day_returns.iterrows():
                     ts_code = row["ts_code"]
-                    record = {"trade_date": trade_date, "close": row.get("close", 0), "turnover": row.get("turnover", 0)}
+                    record = {
+                        "trade_date": trade_date,
+                        "close": row.get("close", 0),
+                        "turnover": row.get("turnover", 0),
+                    }
                     if "high" in row.index:
                         record["high"] = row["high"]
                     if "low" in row.index:
@@ -177,16 +180,18 @@ class SimpleBacktestEngine:
             portfolio_returns.append(daily_ret)
             portfolio_values.append(portfolio_values[-1] * (1 + daily_ret))
 
-            trades.append({
-                "trade_date": trade_date,
-                "positions": len(holdings),
-                "turnover": turnover,
-                "cost": cost,
-                "return": daily_ret,
-                "confidence": confidence,
-                "stop_stocks": len(stop_stocks),
-                "stop_industries": len(stop_industries),
-            })
+            trades.append(
+                {
+                    "trade_date": trade_date,
+                    "positions": len(holdings),
+                    "turnover": turnover,
+                    "cost": cost,
+                    "return": daily_ret,
+                    "confidence": confidence,
+                    "stop_stocks": len(stop_stocks),
+                    "stop_industries": len(stop_industries),
+                }
+            )
 
         metrics = self._metrics(portfolio_returns, portfolio_values)
 
@@ -266,9 +271,7 @@ class SimpleBacktestEngine:
                 if ts_code in history_cache and len(history_cache[ts_code]) >= 30:
                     stock_histories[ts_code] = pd.DataFrame(history_cache[ts_code])
             if stock_histories:
-                entry_signals = self.entry_model.predict_batch(
-                    stock_histories, existing_holdings=set(holdings.keys())
-                )
+                entry_signals = self.entry_model.predict_batch(stock_histories, existing_holdings=set(holdings.keys()))
                 pass_codes = {code for code, sig in entry_signals.items() if sig}
                 # 已持有的 + 历史数据不足的 也放行
                 always_pass = set(holdings.keys()) | (set(candidate_codes) - set(stock_histories.keys()))
@@ -301,7 +304,9 @@ class SimpleBacktestEngine:
         # 权重
         if day_signals["weight"].notna().any():
             weights = day_signals["weight"].fillna(0.0).astype(float)
-            weights = weights / weights.sum() if weights.sum() > 0 else pd.Series([1.0 / len(day_signals)] * len(day_signals))
+            weights = (
+                weights / weights.sum() if weights.sum() > 0 else pd.Series([1.0 / len(day_signals)] * len(day_signals))
+            )
         else:
             weights = pd.Series([1.0 / len(day_signals)] * len(day_signals))
 
@@ -321,9 +326,7 @@ class SimpleBacktestEngine:
                 # 整体缩放权重
                 weights = weights * target_position
 
-        new_holdings = {
-            ts_code: float(weight) for ts_code, weight in zip(day_signals["ts_code"], weights)
-        }
+        new_holdings = {ts_code: float(weight) for ts_code, weight in zip(day_signals["ts_code"], weights)}
 
         # 更新入场价格
         new_entry_prices = holdings_entry_prices.copy()
@@ -386,8 +389,8 @@ class SimpleBacktestEngine:
             entry_price = holdings_entry_prices.get(ts_code)
             if entry_price is not None:
                 holdings_info[ts_code] = {
-                    'entry_price': entry_price,
-                    'weight': weight,
+                    "entry_price": entry_price,
+                    "weight": weight,
                 }
 
         # 获取当日股票数据
@@ -411,7 +414,7 @@ class SimpleBacktestEngine:
         daily_mean = pd.Series(returns).mean()
         daily_std = pd.Series(returns).std()
         annual_return = (1 + daily_mean) ** 252 - 1
-        annual_vol = daily_std * (252 ** 0.5)
+        annual_vol = daily_std * (252**0.5)
         sharpe = annual_return / annual_vol if annual_vol > 0 else 0.0
 
         peak = values[0]

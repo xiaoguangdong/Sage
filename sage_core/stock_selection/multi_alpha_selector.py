@@ -2,17 +2,19 @@
 多逻辑选股模型（Value / Growth / Frontier）
 根据 docs/Chatgpt选股模型方案设计.md 实现
 """
+
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-import logging
 
 import numpy as np
 import pandas as pd
 
 from sage_core.utils.runtime_paths import get_tushare_root
+
 logger = logging.getLogger(__name__)
 
 
@@ -86,8 +88,9 @@ class MultiAlphaStockSelector:
     # -----------------------------
     # 公共入口
     # -----------------------------
-    def select(self, trade_date: str, top_n: Optional[int] = None,
-               allocation_method: str = "fixed", regime: str = "sideways") -> Dict[str, pd.DataFrame]:
+    def select(
+        self, trade_date: str, top_n: Optional[int] = None, allocation_method: str = "fixed", regime: str = "sideways"
+    ) -> Dict[str, pd.DataFrame]:
         """
         运行三套选股并返回结果
 
@@ -147,8 +150,9 @@ class MultiAlphaStockSelector:
     # -----------------------------
     # 数据加载
     # -----------------------------
-    def _read_parquet_filtered(self, path: Path, filters: Optional[List[Tuple[str, str, str]]] = None,
-                               columns: Optional[List[str]] = None) -> pd.DataFrame:
+    def _read_parquet_filtered(
+        self, path: Path, filters: Optional[List[Tuple[str, str, str]]] = None, columns: Optional[List[str]] = None
+    ) -> pd.DataFrame:
         """带过滤条件的 parquet 读取（兼容不支持 filters 的环境）"""
         if not path.exists():
             logger.warning("文件不存在: %s", path)
@@ -317,18 +321,20 @@ class MultiAlphaStockSelector:
 
         snapshot = daily[daily["trade_date"] == trade_date].copy()
         snapshot["rps_120"] = snapshot["ret_120"].rank(pct=True)
-        return snapshot[[
-            "ts_code",
-            "trade_date",
-            "close",
-            "ret_60",
-            "ret_120",
-            "vol_60",
-            "down_vol_60",
-            "max_dd_120",
-            "days_above_ma20_60",
-            "rps_120",
-        ]]
+        return snapshot[
+            [
+                "ts_code",
+                "trade_date",
+                "close",
+                "ret_60",
+                "ret_120",
+                "vol_60",
+                "down_vol_60",
+                "max_dd_120",
+                "days_above_ma20_60",
+                "rps_120",
+            ]
+        ]
 
     def _winsorize(self, series: pd.Series) -> pd.Series:
         s = series.copy()
@@ -352,12 +358,8 @@ class MultiAlphaStockSelector:
     def _score_value(self, df: pd.DataFrame) -> pd.DataFrame:
         data = df.copy()
 
-        value = (
-            -self._zscore(data["pe_ttm"]) - self._zscore(data["pb"]) + self._zscore(data["dv_ttm"])
-        )
-        quality = (
-            self._zscore(data["roe_dt"]) + self._zscore(data["ocfps"]) + self._zscore(data["grossprofit_margin"])
-        )
+        value = -self._zscore(data["pe_ttm"]) - self._zscore(data["pb"]) + self._zscore(data["dv_ttm"])
+        quality = self._zscore(data["roe_dt"]) + self._zscore(data["ocfps"]) + self._zscore(data["grossprofit_margin"])
         max_dd_abs = -data["max_dd_120"]
         low_vol = -self._zscore(data["vol_60"]) - self._zscore(max_dd_abs)
         stability = self._zscore(data["days_above_ma20_60"]) - self._zscore(data["down_vol_60"])
@@ -369,14 +371,16 @@ class MultiAlphaStockSelector:
             + self.config.value_weights["stability"] * stability
         )
 
-        result = pd.DataFrame({
-            "ts_code": data["ts_code"],
-            "value_score": score,
-            "value_component": value,
-            "quality_component": quality,
-            "low_vol_component": low_vol,
-            "stability_component": stability,
-        })
+        result = pd.DataFrame(
+            {
+                "ts_code": data["ts_code"],
+                "value_score": score,
+                "value_component": value,
+                "quality_component": quality,
+                "low_vol_component": low_vol,
+                "stability_component": stability,
+            }
+        )
         return result
 
     def _score_growth(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -397,14 +401,16 @@ class MultiAlphaStockSelector:
             + self.config.growth_weights["elasticity"] * elasticity
         )
 
-        result = pd.DataFrame({
-            "ts_code": data["ts_code"],
-            "growth_score": score,
-            "growth_component": growth,
-            "accel_component": accel,
-            "rps_component": rps,
-            "elasticity_component": elasticity,
-        })
+        result = pd.DataFrame(
+            {
+                "ts_code": data["ts_code"],
+                "growth_score": score,
+                "growth_component": growth,
+                "accel_component": accel,
+                "rps_component": rps,
+                "elasticity_component": elasticity,
+            }
+        )
         return result
 
     def _score_frontier(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -424,14 +430,16 @@ class MultiAlphaStockSelector:
             + self.config.frontier_weights["not_priced"] * not_priced
         )
 
-        result = pd.DataFrame({
-            "ts_code": data["ts_code"],
-            "frontier_score": score,
-            "capex_component": capex,
-            "turnaround_component": turnaround,
-            "order_component": order_signal,
-            "not_priced_component": not_priced,
-        })
+        result = pd.DataFrame(
+            {
+                "ts_code": data["ts_code"],
+                "frontier_score": score,
+                "capex_component": capex,
+                "turnaround_component": turnaround,
+                "order_component": order_signal,
+                "not_priced_component": not_priced,
+            }
+        )
         return result
 
     # -----------------------------

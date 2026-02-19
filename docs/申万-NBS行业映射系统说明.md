@@ -212,7 +212,7 @@ def calculate_dynamic_weights(sw_industry, stocks_data):
     # 2. 获取每只股票的主营业务分部营收数据
     # 3. 将业务分部映射到NBS行业
     # 4. 计算权重矩阵
-    
+
     return weight_matrix
 ```
 
@@ -261,6 +261,6 @@ for year_month in get_available_periods():
 
 ---
 
-**文档版本**：1.0  
-**创建日期**：2026-02-11  
+**文档版本**：1.0
+**创建日期**：2026-02-11
 **最后更新**：2026-02-11

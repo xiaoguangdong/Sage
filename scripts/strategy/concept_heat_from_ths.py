@@ -16,7 +16,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_data_root, get_data_path
+from scripts.data._shared.runtime import get_data_path, get_data_root
 
 
 def build_heat(df: pd.DataFrame) -> pd.DataFrame:
@@ -31,9 +31,7 @@ def build_heat(df: pd.DataFrame) -> pd.DataFrame:
 
     # 简单热度分：动量 + 换手 + 波动（可后续配置权重）
     df["heat_score"] = (
-        df["ret_20d"].fillna(0) * 0.5
-        + df["ret_60d"].fillna(0) * 0.3
-        + df["turnover_20d"].fillna(0) * 0.2 / 100
+        df["ret_20d"].fillna(0) * 0.5 + df["ret_60d"].fillna(0) * 0.3 + df["turnover_20d"].fillna(0) * 0.2 / 100
     )
 
     keep = [
@@ -54,7 +52,9 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, default=None)
     args = parser.parse_args()
 
-    input_path = Path(args.input_path) if args.input_path else get_data_root() / "tushare" / "concepts" / "ths_daily.parquet"
+    input_path = (
+        Path(args.input_path) if args.input_path else get_data_root() / "tushare" / "concepts" / "ths_daily.parquet"
+    )
     if not input_path.exists():
         print(f"未找到 ths_daily: {input_path}")
         return

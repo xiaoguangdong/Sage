@@ -5,22 +5,22 @@
 基于9个核心指标，识别市场风格状态
 """
 
+import logging
 import os
 import sys
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Tuple
-import logging
 
-from scripts.data._shared.runtime import get_tushare_root, get_data_path
+import numpy as np
+import pandas as pd
+
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-    ]
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -34,23 +34,23 @@ class StyleModel9Indicators:
 
         # 状态定义
         self.STATES = {
-            0: "ACCUMULATION",   # 积累期
-            1: "HEALTHY_UP",     # 健康扩张（牛市）
-            2: "DISTRIBUTION",   # 风险转移
-            3: "EXIT"            # 逻辑失效
+            0: "ACCUMULATION",  # 积累期
+            1: "HEALTHY_UP",  # 健康扩张（牛市）
+            2: "DISTRIBUTION",  # 风险转移
+            3: "EXIT",  # 逻辑失效
         }
 
         # 阈值配置
         self.thresholds = {
-            "A1_coupling": 0.3,        # 换手-涨幅耦合阈值
-            "A2_liquidity_dry": 0.9,   # 回调成交枯竭率阈值
-            "A3_recovery_days": 7,     # 修复天数阈值
-            "B1_spread": 0.02,         # 龙头-跟风背离阈值
-            "B2_impact_decay": 0.5,    # 利好钝化阈值
-            "B3_dispersion": 0.05,     # 板块分化阈值
-            "C1_diverge": 2.0,         # 情绪-价格背离阈值
-            "C2_failed_count": 3,      # 失败反弹次数阈值
-            "C3_junk_ratio": 0.3       # 垃圾股比例阈值
+            "A1_coupling": 0.3,  # 换手-涨幅耦合阈值
+            "A2_liquidity_dry": 0.9,  # 回调成交枯竭率阈值
+            "A3_recovery_days": 7,  # 修复天数阈值
+            "B1_spread": 0.02,  # 龙头-跟风背离阈值
+            "B2_impact_decay": 0.5,  # 利好钝化阈值
+            "B3_dispersion": 0.05,  # 板块分化阈值
+            "C1_diverge": 2.0,  # 情绪-价格背离阈值
+            "C2_failed_count": 3,  # 失败反弹次数阈值
+            "C3_junk_ratio": 0.3,  # 垃圾股比例阈值
         }
 
         logger.info("9指标风格模型初始化")
@@ -72,7 +72,7 @@ class StyleModel9Indicators:
 
         if daily_data:
             self.daily = pd.concat(daily_data, ignore_index=True)
-            self.daily['trade_date'] = pd.to_datetime(self.daily['trade_date'])
+            self.daily["trade_date"] = pd.to_datetime(self.daily["trade_date"])
             logger.info(f"✓ 日线数据总计: {len(self.daily)} 条记录")
         else:
             logger.error("✗ 未找到日线数据")
@@ -83,7 +83,7 @@ class StyleModel9Indicators:
         basic_file = os.path.join(self.data_dir, "daily_basic_all.parquet")
         if os.path.exists(basic_file):
             self.basic = pd.read_parquet(basic_file)
-            self.basic['trade_date'] = pd.to_datetime(self.basic['trade_date'])
+            self.basic["trade_date"] = pd.to_datetime(self.basic["trade_date"])
             logger.info(f"✓ Daily basic: {len(self.basic)} 条记录")
         else:
             logger.error("✗ 未找到daily_basic数据")
@@ -94,7 +94,7 @@ class StyleModel9Indicators:
         index_file = os.path.join(self.data_dir, "index", "index_ohlc_all.parquet")
         if os.path.exists(index_file):
             self.index_data = pd.read_parquet(index_file)
-            self.index_data['trade_date'] = pd.to_datetime(self.index_data['date'])
+            self.index_data["trade_date"] = pd.to_datetime(self.index_data["date"])
             logger.info(f"✓ 指数数据: {len(self.index_data)} 条记录")
         else:
             logger.error("✗ 未找到指数数据")
@@ -105,31 +105,27 @@ class StyleModel9Indicators:
     def calc_A_factors(self, date_data, window=20):
         """计算A类指标：筹码行为"""
         # A1: 换手-涨幅耦合度
-        ret = date_data['pct_chg'] / 100
-        turnover = date_data['turnover_rate']
+        ret = date_data["pct_chg"] / 100
+        turnover = date_data["turnover_rate"]
 
         # 计算滚动相关性
         coupling = ret.rolling(window).corr(turnover)
 
         # A2: 回调成交枯竭率
         drawdown_days = ret < -0.01
-        volume_mean = date_data['vol'].rolling(5).mean()
-        liquidity_dry = np.where(drawdown_days, date_data['vol'] / volume_mean, np.nan)
+        volume_mean = date_data["vol"].rolling(5).mean()
+        liquidity_dry = np.where(drawdown_days, date_data["vol"] / volume_mean, np.nan)
 
         # A3: 高位修复效率
         # 找到局部高点
-        peaks = self._find_peaks(date_data['close'], distance=5)
-        recovery_days = self._calc_recovery_days(date_data['close'], peaks, window)
+        peaks = self._find_peaks(date_data["close"], distance=5)
+        recovery_days = self._calc_recovery_days(date_data["close"], peaks, window)
 
-        return {
-            "A1_coupling": coupling,
-            "A2_liquidity_dry": liquidity_dry,
-            "A3_recovery_days": recovery_days
-        }
+        return {"A1_coupling": coupling, "A2_liquidity_dry": liquidity_dry, "A3_recovery_days": recovery_days}
 
     def calc_B_factors(self, date_data, sector_data=None):
         """计算B类指标：定价逻辑"""
-        ret = date_data['pct_chg'] / 100
+        ret = date_data["pct_chg"] / 100
 
         # B1: 龙头-跟风背离
         # 简化：使用前10%的股票作为龙头
@@ -144,38 +140,30 @@ class StyleModel9Indicators:
         # B3: 叙事一致性（简化版：收益分散度）
         dispersion = ret.rolling(20).std()
 
-        return {
-            "B1_spread": spread,
-            "B2_impact_decay": impact_decay,
-            "B3_dispersion": dispersion
-        }
+        return {"B1_spread": spread, "B2_impact_decay": impact_decay, "B3_dispersion": dispersion}
 
     def calc_C_factors(self, date_data, window=20):
         """计算C类指标：群体博弈"""
-        ret = date_data['pct_chg'] / 100
+        ret = date_data["pct_chg"] / 100
 
         # C1: 情绪-价格背离（简化版：波动率/收益）
         vol = ret.rolling(window).std()
         emotion_diverge = vol / (ret.abs().rolling(window).mean() + 0.001)
 
         # C2: 失败反弹次数
-        failed_rebounds = self._count_failed_rebounds(date_data['close'], window)
+        failed_rebounds = self._count_failed_rebounds(date_data["close"], window)
 
         # C3: 非理性扩散（简化版：小市值股票表现）
         # 这里简化为：收益分布的右偏程度
         skewness = ret.rolling(window).skew()
 
-        return {
-            "C1_diverge": emotion_diverge,
-            "C2_failed_count": failed_rebounds,
-            "C3_junk_ratio": skewness
-        }
+        return {"C1_diverge": emotion_diverge, "C2_failed_count": failed_rebounds, "C3_junk_ratio": skewness}
 
     def _find_peaks(self, prices, distance=5):
         """找到局部高点"""
         peaks = []
         for i in range(distance, len(prices) - distance):
-            if prices[i] == max(prices[i-distance:i+distance+1]):
+            if prices[i] == max(prices[i - distance : i + distance + 1]):
                 peaks.append(i)
         return peaks
 
@@ -199,7 +187,7 @@ class StyleModel9Indicators:
 
         for i in range(window, len(prices)):
             # 检查过去window天内的反弹是否失败
-            local_prices = prices[i-window:i]
+            local_prices = prices[i - window : i]
             if len(local_prices) < 5:
                 continue
 
@@ -227,26 +215,20 @@ class StyleModel9Indicators:
 
         # 状态1: 健康扩张（牛市）
         if (
-            A["A1_coupling"] > self.thresholds["A1_coupling"] and
-            A["A2_liquidity_dry"] < self.thresholds["A2_liquidity_dry"] and
-            A["A3_recovery_days"] < self.thresholds["A3_recovery_days"] and
-            B["B3_dispersion"] < 0.05
+            A["A1_coupling"] > self.thresholds["A1_coupling"]
+            and A["A2_liquidity_dry"] < self.thresholds["A2_liquidity_dry"]
+            and A["A3_recovery_days"] < self.thresholds["A3_recovery_days"]
+            and B["B3_dispersion"] < 0.05
         ):
             return self.STATES[1]
 
         # 状态3: 逻辑失效（EXIT）
-        if (
-            A["A1_coupling"] < 0 or
-            A["A2_liquidity_dry"] > 1.1
-        ):
+        if A["A1_coupling"] < 0 or A["A2_liquidity_dry"] > 1.1:
             if C["C3_junk_ratio"] > 1.0:  # 高偏度（非理性扩散）
                 return self.STATES[3]
 
         # 状态2: 风险转移（DISTRIBUTION）
-        if (
-            A["A1_coupling"] > 0 and
-            B["B3_dispersion"] > 0.05
-        ):
+        if A["A1_coupling"] > 0 and B["B3_dispersion"] > 0.05:
             return self.STATES[2]
 
         # 默认：积累期
@@ -255,32 +237,16 @@ class StyleModel9Indicators:
     def decision_engine(self, market_state, confidence):
         """决策引擎"""
         if market_state == "EXIT":
-            return {
-                "position": 0.0,
-                "action": "CLEAR",
-                "risk": "HIGH"
-            }
+            return {"position": 0.0, "action": "CLEAR", "risk": "HIGH"}
 
         if market_state == "DISTRIBUTION":
-            return {
-                "position": 0.3,
-                "action": "REDUCE",
-                "risk": "MEDIUM"
-            }
+            return {"position": 0.3, "action": "REDUCE", "risk": "MEDIUM"}
 
         if market_state == "HEALTHY_UP":
-            return {
-                "position": min(1.0, confidence),
-                "action": "PARTICIPATE",
-                "risk": "LOW"
-            }
+            return {"position": min(1.0, confidence), "action": "PARTICIPATE", "risk": "LOW"}
 
         # ACCUMULATION
-        return {
-            "position": 0.5,
-            "action": "NEUTRAL",
-            "risk": "MEDIUM"
-        }
+        return {"position": 0.5, "action": "NEUTRAL", "risk": "MEDIUM"}
 
     def run(self):
         """执行完整的分析流程"""
@@ -294,11 +260,11 @@ class StyleModel9Indicators:
 
         # 计算市场层面的指标（使用沪深300作为代理）
         logger.info("计算市场层面指标...")
-        hs300 = self.index_data[self.index_data['code'] == '000300.SH'].copy()
-        hs300 = hs300.sort_values('trade_date')
+        hs300 = self.index_data[self.index_data["code"] == "000300.SH"].copy()
+        hs300 = hs300.sort_values("trade_date")
 
         # 计算收益率
-        hs300['pct_chg'] = hs300['close'].pct_change() * 100
+        hs300["pct_chg"] = hs300["close"].pct_change() * 100
 
         # 计算A类指标
         A_factors = self.calc_A_factors(hs300)
@@ -315,12 +281,7 @@ class StyleModel9Indicators:
         C_zscore = {k: self.zscore(v) for k, v in C_factors.items()}
 
         # 构建结果DataFrame
-        results = pd.DataFrame({
-            'trade_date': hs300['trade_date'],
-            **A_zscore,
-            **B_zscore,
-            **C_zscore
-        })
+        results = pd.DataFrame({"trade_date": hs300["trade_date"], **A_zscore, **B_zscore, **C_zscore})
 
         # 为每个日期判定市场状态
         logger.info("判定市场状态...")
@@ -332,7 +293,7 @@ class StyleModel9Indicators:
             factors = {
                 "A": {k: v.iloc[i] for k, v in A_factors.items()},
                 "B": {k: v.iloc[i] for k, v in B_factors.items()},
-                "C": {k: v.iloc[i] for k, v in C_factors.items()}
+                "C": {k: v.iloc[i] for k, v in C_factors.items()},
             }
 
             state = self.market_state(factors)
@@ -340,12 +301,12 @@ class StyleModel9Indicators:
             decision = self.decision_engine(state, confidence)
 
             states.append(state)
-            decisions.append(decision['action'])
-            confidences.append(decision['position'])
+            decisions.append(decision["action"])
+            confidences.append(decision["position"])
 
-        results['market_state'] = states
-        results['action'] = decisions
-        results['position'] = confidences
+        results["market_state"] = states
+        results["action"] = decisions
+        results["position"] = confidences
 
         # 保存结果
         output_file = os.path.join(self.output_dir, "style_model_9indicators_results.parquet")
@@ -356,7 +317,7 @@ class StyleModel9Indicators:
         logger.info("\n" + "=" * 70)
         logger.info("状态分布统计：")
         logger.info("=" * 70)
-        state_counts = results['market_state'].value_counts()
+        state_counts = results["market_state"].value_counts()
         for state, count in state_counts.items():
             logger.info(f"{state}: {count} ({count/len(results)*100:.1f}%)")
 

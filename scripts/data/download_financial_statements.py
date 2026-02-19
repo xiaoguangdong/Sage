@@ -245,9 +245,7 @@ def main():
     parser = argparse.ArgumentParser(description="下载财务三表数据")
     parser.add_argument("--start-year", type=int, default=2020, help="起始年份")
     parser.add_argument("--end-year", type=int, default=2024, help="结束年份")
-    parser.add_argument(
-        "--sleep-seconds", type=int, default=60, help="请求间隔（秒）"
-    )
+    parser.add_argument("--sleep-seconds", type=int, default=60, help="请求间隔（秒）")
     parser.add_argument("--dry-run", action="store_true", help="干运行模式（不实际下载）")
 
     args = parser.parse_args()

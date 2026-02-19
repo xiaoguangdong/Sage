@@ -13,10 +13,9 @@
 
 from __future__ import annotations
 
-import pandas as pd
-import numpy as np
-from typing import Optional
 from pathlib import Path
+
+import pandas as pd
 
 
 class GrowthStockSelector:
@@ -65,25 +64,25 @@ class GrowthStockSelector:
         filtered = df.copy()
 
         # 1. 营收CAGR > 20%（高增长底线）
-        filtered = filtered[filtered['revenue_cagr_3y'] > self.min_revenue_cagr]
+        filtered = filtered[filtered["revenue_cagr_3y"] > self.min_revenue_cagr]
 
         # 2. 研发费用率 > 5%（创新投入底线）
-        filtered = filtered[filtered['rd_ratio'] > self.min_rd_ratio]
+        filtered = filtered[filtered["rd_ratio"] > self.min_rd_ratio]
 
         # 3. 负债率 < 60%（财务安全底线）
-        filtered = filtered[filtered['debt_ratio'] < self.max_debt_ratio]
+        filtered = filtered[filtered["debt_ratio"] < self.max_debt_ratio]
 
         # 4. 非ST股
-        if 'is_st' in filtered.columns:
-            filtered = filtered[filtered['is_st'] == False]
+        if "is_st" in filtered.columns:
+            filtered = filtered[not filtered["is_st"]]
 
         # 5. 非退市股
-        if 'is_delisted' in filtered.columns:
-            filtered = filtered[filtered['is_delisted'] == False]
+        if "is_delisted" in filtered.columns:
+            filtered = filtered[not filtered["is_delisted"]]
 
         # 6. 利润正增长（盈利能力底线）
-        if 'profit_cagr_3y' in filtered.columns:
-            filtered = filtered[filtered['profit_cagr_3y'] > 0]
+        if "profit_cagr_3y" in filtered.columns:
+            filtered = filtered[filtered["profit_cagr_3y"] > 0]
 
         return filtered
 
@@ -104,68 +103,68 @@ class GrowthStockSelector:
             带有评分的DataFrame
         """
         scored = df.copy()
-        scored['score'] = 0.0
+        scored["score"] = 0.0
 
         # 1. 增长速度（35%）
-        if 'revenue_cagr_3y' in scored.columns:
+        if "revenue_cagr_3y" in scored.columns:
             # 营收CAGR标准化（20%-50%映射到0-100）
-            revenue_growth_score = (scored['revenue_cagr_3y'] - 0.20) / 0.30 * 100
+            revenue_growth_score = (scored["revenue_cagr_3y"] - 0.20) / 0.30 * 100
             revenue_growth_score = revenue_growth_score.clip(0, 100)
-            scored['score'] += revenue_growth_score * 0.20
+            scored["score"] += revenue_growth_score * 0.20
 
-        if 'profit_cagr_3y' in scored.columns:
+        if "profit_cagr_3y" in scored.columns:
             # 利润CAGR标准化（0%-50%映射到0-100）
-            profit_growth_score = (scored['profit_cagr_3y']) / 0.50 * 100
+            profit_growth_score = (scored["profit_cagr_3y"]) / 0.50 * 100
             profit_growth_score = profit_growth_score.clip(0, 100)
-            scored['score'] += profit_growth_score * 0.15
+            scored["score"] += profit_growth_score * 0.15
 
         # 2. 增长质量（25%）
-        if 'rd_ratio' in scored.columns:
+        if "rd_ratio" in scored.columns:
             # 研发费用率（10%为满分）
-            rd_score = (scored['rd_ratio'] / 0.10) * 100
+            rd_score = (scored["rd_ratio"] / 0.10) * 100
             rd_score = rd_score.clip(0, 100)
-            scored['score'] += rd_score * 0.15
+            scored["score"] += rd_score * 0.15
 
-        if 'gross_margin_trend' in scored.columns:
+        if "gross_margin_trend" in scored.columns:
             # 毛利率趋势（上升为正分）
-            margin_trend_score = (scored['gross_margin_trend'] / 0.05) * 100
+            margin_trend_score = (scored["gross_margin_trend"] / 0.05) * 100
             margin_trend_score = margin_trend_score.clip(0, 100)
-            scored['score'] += margin_trend_score * 0.10
+            scored["score"] += margin_trend_score * 0.10
 
         # 3. 运营效率（20%）
-        if 'asset_turnover' in scored.columns:
+        if "asset_turnover" in scored.columns:
             # 资产周转率（2为满分）
-            turnover_score = (scored['asset_turnover'] / 2.0) * 100
+            turnover_score = (scored["asset_turnover"] / 2.0) * 100
             turnover_score = turnover_score.clip(0, 100)
-            scored['score'] += turnover_score * 0.10
+            scored["score"] += turnover_score * 0.10
 
-        if 'roe' in scored.columns:
+        if "roe" in scored.columns:
             # ROE（30%为满分）
-            roe_score = (scored['roe'] / 0.30) * 100
+            roe_score = (scored["roe"] / 0.30) * 100
             roe_score = roe_score.clip(0, 100)
-            scored['score'] += roe_score * 0.10
+            scored["score"] += roe_score * 0.10
 
         # 4. 行业地位（10%）
-        if 'industry_rank' in scored.columns:
+        if "industry_rank" in scored.columns:
             # 行业排名（前3名为满分）
-            rank_score = (4 - scored['industry_rank']) / 3 * 100
+            rank_score = (4 - scored["industry_rank"]) / 3 * 100
             rank_score = rank_score.clip(0, 100)
-            scored['score'] += rank_score * 0.10
+            scored["score"] += rank_score * 0.10
 
         # 5. 机构认可（10%）
-        if 'fund_holders' in scored.columns:
+        if "fund_holders" in scored.columns:
             # 基金持仓家数（50家+为满分）
-            fund_score = (scored['fund_holders'] / 50) * 100
+            fund_score = (scored["fund_holders"] / 50) * 100
             fund_score = fund_score.clip(0, 100)
-            scored['score'] += fund_score * 0.05
+            scored["score"] += fund_score * 0.05
 
-        if 'inst_holding_change' in scored.columns:
+        if "inst_holding_change" in scored.columns:
             # 机构增持（>10%为满分）
-            inst_change_score = (scored['inst_holding_change'] / 0.10) * 100
+            inst_change_score = (scored["inst_holding_change"] / 0.10) * 100
             inst_change_score = inst_change_score.clip(0, 100)
-            scored['score'] += inst_change_score * 0.05
+            scored["score"] += inst_change_score * 0.05
 
-        return scored.sort_values('score', ascending=False)
+        return scored.sort_values("score", ascending=False)
 
     def construct_portfolio(
         self,
@@ -196,11 +195,11 @@ class GrowthStockSelector:
 
         for _, stock in scored_df.iterrows():
             # 流动性约束
-            if 'avg_amount' in stock and stock['avg_amount'] < min_avg_amount:
+            if "avg_amount" in stock and stock["avg_amount"] < min_avg_amount:
                 continue
 
             # 行业分散约束
-            industry = stock.get('industry', 'Unknown')
+            industry = stock.get("industry", "Unknown")
             if industry_count.get(industry, 0) >= max_per_industry:
                 continue
 
@@ -214,7 +213,7 @@ class GrowthStockSelector:
 
         # 等权重配置
         if not portfolio_df.empty:
-            portfolio_df['weight'] = 1.0 / len(portfolio_df)
+            portfolio_df["weight"] = 1.0 / len(portfolio_df)
 
         return portfolio_df
 

@@ -1,12 +1,17 @@
 """展示2021-2024区间每期Top5选股"""
-import os, sys, copy, warnings
+
+import copy
+import os
+import sys
+import warnings
+
 import pandas as pd
 
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
-from sage_core.stock_selection.regime_stock_selector import RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
@@ -14,6 +19,7 @@ BT_START, BT_END = "2021-02-01", "2024-02-01"
 TRAIN_YEARS = [2020]
 HOLD_DAYS, TOP_N = 20, 30
 SHOW_TOP = 5  # 只显示Top 5
+
 
 def load_data():
     idx = pd.read_parquet(os.path.join(DATA_ROOT, "index", "index_000300_SH_ohlc.parquet"))
@@ -32,7 +38,11 @@ def load_data():
 
     basic = pd.read_parquet(os.path.join(DATA_ROOT, "daily_basic_all.parquet"))
     basic["trade_date"] = pd.to_datetime(basic["trade_date"], format="%Y%m%d")
-    cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"] if c in basic.columns]
+    cols = [
+        c
+        for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
+        if c in basic.columns
+    ]
     df = stk.merge(basic[cols], on=["ts_code", "trade_date"], how="left")
 
     member_path = os.path.join(DATA_ROOT, "sw_industry", "sw_index_member.parquet")
@@ -42,8 +52,13 @@ def load_data():
         ind = pd.read_parquet(ind_path)
         current = member[member["is_new"] == "Y"][["index_code", "con_code"]].drop_duplicates("con_code")
         current = current.merge(ind[["index_code", "industry_name"]], on="index_code", how="left")
-        df = df.merge(current[["con_code", "industry_name"]].rename(columns={"con_code": "ts_code", "industry_name": "industry_l1"}),
-                      on="ts_code", how="left")
+        df = df.merge(
+            current[["con_code", "industry_name"]].rename(
+                columns={"con_code": "ts_code", "industry_name": "industry_l1"}
+            ),
+            on="ts_code",
+            how="left",
+        )
 
     name_path = os.path.join(DATA_ROOT, "concepts", "ths_member.parquet")
     if os.path.exists(name_path):
@@ -51,6 +66,7 @@ def load_data():
         df = df.merge(names.rename(columns={"con_code": "ts_code", "con_name": "name"}), on="ts_code", how="left")
 
     return idx, df
+
 
 def main():
     print("加载数据...")
@@ -67,8 +83,14 @@ def main():
     d2s = dict(zip(pd.to_datetime(idx_train["date"]).values, res.diagnostics["states"]))
     df_train["regime"] = df_train["trade_date"].map(lambda d: d2s.get(pd.Timestamp(d), 1))
 
-    cfg = SelectionConfig(model_type="lgbm", label_neutralized=True, ic_filter_enabled=True,
-                          ic_threshold=0.02, ic_ir_threshold=0.3, industry_col="industry_l1")
+    cfg = SelectionConfig(
+        model_type="lgbm",
+        label_neutralized=True,
+        ic_filter_enabled=True,
+        ic_threshold=0.02,
+        ic_ir_threshold=0.3,
+        industry_col="industry_l1",
+    )
     print("训练单一模型...")
     single = StockSelector(copy.deepcopy(cfg))
     single.fit(df_train)
@@ -85,7 +107,9 @@ def main():
     res_bt = trend.predict(idx_bt, return_history=True)
     d2s_bt = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
 
-    bt_dates = sorted(df_all[(df_all["trade_date"] >= BT_START) & (df_all["trade_date"] <= BT_END)]["trade_date"].unique())
+    bt_dates = sorted(
+        df_all[(df_all["trade_date"] >= BT_START) & (df_all["trade_date"] <= BT_END)]["trade_date"].unique()
+    )
     rb_dates = bt_dates[::HOLD_DAYS]
 
     print(f"\n{'='*80}")
@@ -107,6 +131,7 @@ def main():
             top_r = pred_r.nlargest(TOP_N, "score")
 
             hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]
+
             def calc_ret(codes):
                 rets = {}
                 for c in codes:
@@ -122,22 +147,33 @@ def main():
             print(f"  单一模型 Top{SHOW_TOP}:")
             for _, r in top_s.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
-                if nm == "nan": nm = ""
+                nm = (
+                    str(df_day[df_day["ts_code"] == c]["name"].iloc[0])
+                    if has_name and c in df_day["ts_code"].values
+                    else ""
+                )
+                if nm == "nan":
+                    nm = ""
                 ret = rets_s.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
 
             print(f"  Regime模型 Top{SHOW_TOP}:")
             for _, r in top_r.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
-                if nm == "nan": nm = ""
+                nm = (
+                    str(df_day[df_day["ts_code"] == c]["name"].iloc[0])
+                    if has_name and c in df_day["ts_code"].values
+                    else ""
+                )
+                if nm == "nan":
+                    nm = ""
                 ret = rets_r.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
             print()
 
         except Exception as e:
             print(f"  {str(rb)[:10]} 失败: {e}\n")
+
 
 if __name__ == "__main__":
     main()

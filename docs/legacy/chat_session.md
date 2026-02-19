@@ -153,7 +153,7 @@
   ```bash
   # 方式1：普通接口（按股票）
   python ml_stock_forecast/scripts/download_fina_indicator.py
-  
+
   # 方式2：VIP接口（按季度，需要5000积分）
   python ml_stock_forecast/scripts/download_fina_indicator_vip.py
   ```

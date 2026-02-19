@@ -24,6 +24,7 @@ def load_yaml(path: Path) -> Dict:
         return {}
     try:
         import yaml  # type: ignore
+
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}

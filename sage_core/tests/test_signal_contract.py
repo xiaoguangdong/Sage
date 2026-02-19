@@ -66,12 +66,48 @@ def test_apply_industry_overlay_changes_score():
 
     industry_snapshot = pd.DataFrame(
         [
-            {"trade_date": trade_date, "sw_industry": "电子", "signal_name": "policy_score", "score": 0.8, "confidence": 0.9},
-            {"trade_date": trade_date, "sw_industry": "电子", "signal_name": "concept_bias", "score": 0.7, "confidence": 0.8},
-            {"trade_date": trade_date, "sw_industry": "电子", "signal_name": "northbound_ratio", "score": 0.6, "confidence": 0.7},
-            {"trade_date": trade_date, "sw_industry": "煤炭", "signal_name": "policy_score", "score": -0.6, "confidence": 0.8},
-            {"trade_date": trade_date, "sw_industry": "煤炭", "signal_name": "concept_bias", "score": -0.4, "confidence": 0.7},
-            {"trade_date": trade_date, "sw_industry": "煤炭", "signal_name": "northbound_ratio", "score": -0.5, "confidence": 0.9},
+            {
+                "trade_date": trade_date,
+                "sw_industry": "电子",
+                "signal_name": "policy_score",
+                "score": 0.8,
+                "confidence": 0.9,
+            },
+            {
+                "trade_date": trade_date,
+                "sw_industry": "电子",
+                "signal_name": "concept_bias",
+                "score": 0.7,
+                "confidence": 0.8,
+            },
+            {
+                "trade_date": trade_date,
+                "sw_industry": "电子",
+                "signal_name": "northbound_ratio",
+                "score": 0.6,
+                "confidence": 0.7,
+            },
+            {
+                "trade_date": trade_date,
+                "sw_industry": "煤炭",
+                "signal_name": "policy_score",
+                "score": -0.6,
+                "confidence": 0.8,
+            },
+            {
+                "trade_date": trade_date,
+                "sw_industry": "煤炭",
+                "signal_name": "concept_bias",
+                "score": -0.4,
+                "confidence": 0.7,
+            },
+            {
+                "trade_date": trade_date,
+                "sw_industry": "煤炭",
+                "signal_name": "northbound_ratio",
+                "score": -0.5,
+                "confidence": 0.9,
+            },
         ]
     )
 
@@ -106,8 +142,22 @@ def test_apply_industry_overlay_supports_zero_one_score_with_direction():
 
     industry_snapshot = pd.DataFrame(
         [
-            {"trade_date": trade_date, "sw_industry": "电子", "signal_name": "policy_score", "score": 0.9, "confidence": 1.0, "direction": 1},
-            {"trade_date": trade_date, "sw_industry": "煤炭", "signal_name": "policy_score", "score": 0.1, "confidence": 1.0, "direction": -1},
+            {
+                "trade_date": trade_date,
+                "sw_industry": "电子",
+                "signal_name": "policy_score",
+                "score": 0.9,
+                "confidence": 1.0,
+                "direction": 1,
+            },
+            {
+                "trade_date": trade_date,
+                "sw_industry": "煤炭",
+                "signal_name": "policy_score",
+                "score": 0.1,
+                "confidence": 1.0,
+                "direction": -1,
+            },
         ]
     )
     out = apply_industry_overlay(

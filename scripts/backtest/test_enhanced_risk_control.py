@@ -11,13 +11,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
-from sage_core.portfolio.enhanced_risk_control import (
-    EnhancedRiskControl,
-    RiskControlConfig,
-)
+from sage_core.portfolio.enhanced_risk_control import EnhancedRiskControl, RiskControlConfig
 
 
 def test_dynamic_position():
@@ -93,17 +90,19 @@ def test_atr_stop_loss():
         change = np.random.normal(0, 0.02)
         prices.append(prices[-1] * (1 + change))
 
-    df = pd.DataFrame({
-        'close': prices,
-        'high': [p * 1.01 for p in prices],
-        'low': [p * 0.99 for p in prices],
-    })
+    df = pd.DataFrame(
+        {
+            "close": prices,
+            "high": [p * 1.01 for p in prices],
+            "low": [p * 0.99 for p in prices],
+        }
+    )
 
     entry_price = prices[0]
     stop_price = risk_control.compute_atr_stop_loss(
-        df['close'],
-        df['high'],
-        df['low'],
+        df["close"],
+        df["high"],
+        df["low"],
         entry_price,
     )
 
@@ -136,29 +135,28 @@ def test_industry_stop_loss():
     risk_control = EnhancedRiskControl(config)
 
     # 模拟行业收益率
-    industries = ['电子', '医药', '消费', '金融']
 
     print("\n【场景1】行业正常波动")
     industry_returns_1 = {
-        '电子': 0.05,
-        '医药': -0.08,
-        '消费': 0.02,
-        '金融': -0.10,
+        "电子": 0.05,
+        "医药": -0.08,
+        "消费": 0.02,
+        "金融": -0.10,
     }
 
     stop_industries_1 = risk_control.check_industry_stop_loss(industry_returns_1)
     print(f"{'行业':<10} | {'累计收益':<12} | {'状态':<10}")
     print("-" * 40)
     for ind, ret in industry_returns_1.items():
-        status = '✗ 清仓' if ind in stop_industries_1 else '持有'
+        status = "✗ 清仓" if ind in stop_industries_1 else "持有"
         print(f"{ind:<10} | {ret:<12.2%} | {status:<10}")
 
     print("\n【场景2】行业大幅回撤")
     industry_returns_2 = {
-        '电子': -0.18,  # 触发止损
-        '医药': -0.12,
-        '消费': -0.16,  # 触发止损
-        '金融': -0.08,
+        "电子": -0.18,  # 触发止损
+        "医药": -0.12,
+        "消费": -0.16,  # 触发止损
+        "金融": -0.08,
     }
 
     # 重置风控状态
@@ -168,7 +166,7 @@ def test_industry_stop_loss():
     print(f"{'行业':<10} | {'累计收益':<12} | {'状态':<10}")
     print("-" * 40)
     for ind, ret in industry_returns_2.items():
-        status = '✗ 清仓' if ind in stop_industries_2 else '持有'
+        status = "✗ 清仓" if ind in stop_industries_2 else "持有"
         print(f"{ind:<10} | {ret:<12.2%} | {status:<10}")
 
 
@@ -187,8 +185,7 @@ def test_position_limits():
     # 创建测试权重
     stocks = [f"stock_{i}" for i in range(10)]
     industries = pd.Series(
-        ['电子', '电子', '电子', '电子', '医药', '医药', '消费', '消费', '金融', '金融'],
-        index=stocks
+        ["电子", "电子", "电子", "电子", "医药", "医药", "消费", "消费", "金融", "金融"], index=stocks
     )
 
     # 原始权重（有些超限）
@@ -201,7 +198,7 @@ def test_position_limits():
         ind = industries[stock]
         print(f"{stock:<10} | {ind:<10} | {weight:<10.2%}")
 
-    print(f"\n行业暴露:")
+    print("\n行业暴露:")
     for ind in industries.unique():
         ind_weight = original_weights[industries == ind].sum()
         print(f"  {ind}: {ind_weight:.2%}")
@@ -218,7 +215,7 @@ def test_position_limits():
         adj = adjusted_weights[stock]
         print(f"{stock:<10} | {ind:<10} | {orig:<10.2%} | {adj:<10.2%}")
 
-    print(f"\n调整后行业暴露:")
+    print("\n调整后行业暴露:")
     for ind in industries.unique():
         ind_weight = adjusted_weights[industries == ind].sum()
         print(f"  {ind}: {ind_weight:.2%}")
@@ -239,13 +236,13 @@ def test_comprehensive_scenario():
 
     # 模拟一个完整的交易周期
     scenarios = [
-        {'day': 1, 'confidence': 0.8, 'drawdown': 0.0, 'daily_ret': 0.01, 'desc': '牛市初期'},
-        {'day': 5, 'confidence': 0.9, 'drawdown': 0.05, 'daily_ret': 0.02, 'desc': '牛市加速'},
-        {'day': 10, 'confidence': 0.7, 'drawdown': 0.03, 'daily_ret': -0.01, 'desc': '震荡调整'},
-        {'day': 15, 'confidence': 0.5, 'drawdown': -0.05, 'daily_ret': -0.02, 'desc': '回调'},
-        {'day': 20, 'confidence': 0.4, 'drawdown': -0.11, 'daily_ret': -0.03, 'desc': '深度回调'},
-        {'day': 25, 'confidence': 0.3, 'drawdown': -0.13, 'daily_ret': -0.01, 'desc': '触发分档降仓'},
-        {'day': 30, 'confidence': 0.6, 'drawdown': -0.08, 'daily_ret': 0.02, 'desc': '反弹'},
+        {"day": 1, "confidence": 0.8, "drawdown": 0.0, "daily_ret": 0.01, "desc": "牛市初期"},
+        {"day": 5, "confidence": 0.9, "drawdown": 0.05, "daily_ret": 0.02, "desc": "牛市加速"},
+        {"day": 10, "confidence": 0.7, "drawdown": 0.03, "daily_ret": -0.01, "desc": "震荡调整"},
+        {"day": 15, "confidence": 0.5, "drawdown": -0.05, "daily_ret": -0.02, "desc": "回调"},
+        {"day": 20, "confidence": 0.4, "drawdown": -0.11, "daily_ret": -0.03, "desc": "深度回调"},
+        {"day": 25, "confidence": 0.3, "drawdown": -0.13, "daily_ret": -0.01, "desc": "触发分档降仓"},
+        {"day": 30, "confidence": 0.6, "drawdown": -0.08, "daily_ret": 0.02, "desc": "反弹"},
     ]
 
     print(f"\n{'日期':<6} | {'Conf':<6} | {'回撤':<8} | {'日收益':<8} | {'目标仓位':<10} | {'说明':<15}")
@@ -253,9 +250,9 @@ def test_comprehensive_scenario():
 
     for scenario in scenarios:
         position = risk_control.compute_dynamic_position(
-            confidence=scenario['confidence'],
-            current_drawdown=scenario['drawdown'],
-            daily_return=scenario['daily_ret'],
+            confidence=scenario["confidence"],
+            current_drawdown=scenario["drawdown"],
+            daily_return=scenario["daily_ret"],
         )
         print(
             f"{scenario['day']:<6} | {scenario['confidence']:<6.1f} | "

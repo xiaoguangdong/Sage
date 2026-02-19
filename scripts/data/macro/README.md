@@ -138,7 +138,7 @@ industry_code,industry_name,trade_date,vol,ratio,industry_ratio,is_proxy
 
 ## 三、统一下载入口（理想版）
 
-统一入口：`scripts/data/tushare_downloader.py`  
+统一入口：`scripts/data/tushare_downloader.py`
 任务清单：`config/tushare_tasks.yaml`
 
 示例：

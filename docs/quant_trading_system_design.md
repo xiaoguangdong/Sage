@@ -240,13 +240,13 @@ def make_trend_label(df_index, window=20):
 trend_model:
   # 是否启用趋势模型
   enabled: true
-  
+
   # 模型类型：rule（规则） / lgbm（LightGBM） / hmm（HMM）
   model_type: rule
-  
+
   # 是否使用20个特征（rule模式下为false）
   use_all_features: false
-  
+
   # 数据源配置
   data_sources:
     index: "000300.SH"  # 沪深300指数
@@ -269,7 +269,7 @@ trend_model:
 def make_rank_label(df, horizon=4):
     """
     构造排序标签
-    
+
     标签：未来4周收益的排名
     """
     future_ret = df.groupby("stock")["close"].pct_change(horizon).shift(-horizon)
@@ -340,7 +340,7 @@ model = lgb.LGBMRanker(
 def walk_forward_train(df, model, train_weeks=130):
     """
     Walk-forward训练
-    
+
     参数：
     - train_weeks: 130周（约2.5年）
     - 测试窗口：26周（约半年）
@@ -366,10 +366,10 @@ def walk_forward_train(df, model, train_weeks=130):
 rank_model:
   # 是否启用IC动态权重
   enable_ic_weight: false
-  
+
   # IC窗口大小
   ic_window: 20
-  
+
   # IC权重平滑
   ic_smooth: false
 ```
@@ -388,7 +388,7 @@ rank_model:
 def entry_label(df):
     """
     构造买卖点标签
-    
+
     标签：是否存在安全的正期望窗口
     """
     future_max = df["close"].rolling(4).max().shift(-4)
@@ -479,7 +479,7 @@ AND volatility < 0.05:  # 波动率小于5%
 entry_model:
   # 模型类型：lr（Logistic Regression） / lgbm（LightGBM）
   model_type: lr
-  
+
   # 触发规则参数
   rules:
     prob_threshold: 0.6  # 概率阈值
@@ -735,8 +735,8 @@ trend_fallback_mode = 'empty_portfolio'
 
 ---
 
-**文档版本**：v2.0  
-**更新日期**：2026-02-08  
-**基于文档**：docs/chatgpt_qa.md  
-**项目**：deep_final_kp  
+**文档版本**：v2.0
+**更新日期**：2026-02-08
+**基于文档**：docs/chatgpt_qa.md
+**项目**：deep_final_kp
 **评审文档**：docs/quant_trading_system_design_review.md

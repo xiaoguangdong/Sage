@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
-import logging
 
 import numpy as np
 import pandas as pd
 
-from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from sage_core.stock_selection.multi_alpha_selector import MultiAlphaStockSelector
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 
 logger = logging.getLogger(__name__)
 
@@ -213,14 +213,16 @@ def decide_auto_promotion(
             best_periods = len(recent)
 
     if best_candidate and best_diff > 0:
-        decision.update({
-            "next_champion": best_candidate,
-            "promoted": True,
-            "reason": "challenger_outperformed",
-            "candidate": best_candidate,
-            "score_diff": round(best_diff, 6),
-            "periods_checked": int(best_periods),
-        })
+        decision.update(
+            {
+                "next_champion": best_candidate,
+                "promoted": True,
+                "reason": "challenger_outperformed",
+                "candidate": best_candidate,
+                "score_diff": round(best_diff, 6),
+                "periods_checked": int(best_periods),
+            }
+        )
     else:
         decision["reason"] = "no_eligible_challenger"
     return decision
@@ -351,10 +353,7 @@ def switch_champion_manually(
         manual_reason=reason,
     )
 
-    logger.info(
-        f"Champion 切换: {previous_champion} -> {new_champion}, "
-        f"生效日期: {effective_date}, 原因: {reason}"
-    )
+    logger.info(f"Champion 切换: {previous_champion} -> {new_champion}, " f"生效日期: {effective_date}, 原因: {reason}")
 
     return updated_config, audit
 
@@ -380,6 +379,7 @@ def save_audit_log(
 
     # 文件名: champion_switch_YYYYMMDD_HHMMSS.json
     from datetime import datetime
+
     ts = datetime.fromisoformat(audit.timestamp)
     filename = f"champion_switch_{ts.strftime('%Y%m%d_%H%M%S')}.json"
     filepath = audit_dir / filename
@@ -405,8 +405,8 @@ def load_audit_history(
     Returns:
         审计历史 DataFrame
     """
-    import json
     import glob
+    import json
 
     audit_dir = Path(audit_dir)
     if not audit_dir.exists():
@@ -484,55 +484,55 @@ class BaselineConservativeStrategy:
             return pd.DataFrame(columns=SIGNAL_SCHEMA)
 
         # 标准化日期
-        if 'trade_date' in data.columns:
-            data = data.rename(columns={'trade_date': 'date'})
+        if "trade_date" in data.columns:
+            data = data.rename(columns={"trade_date": "date"})
 
         # 筛选日期
         date_norm = _normalize_trade_date(trade_date)
-        if 'date' in data.columns:
-            data = data[data['date'].astype(str) == date_norm]
+        if "date" in data.columns:
+            data = data[data["date"].astype(str) == date_norm]
 
         # 保守筛选
         filtered = data.copy()
 
         # 市值筛选
-        if 'total_mv' in filtered.columns:
-            filtered = filtered[filtered['total_mv'] >= self.selection_criteria['min_market_cap']]
+        if "total_mv" in filtered.columns:
+            filtered = filtered[filtered["total_mv"] >= self.selection_criteria["min_market_cap"]]
 
         # 波动率筛选（如果有）
-        if 'volatility_20d' in filtered.columns:
-            filtered = filtered[filtered['volatility_20d'] <= self.selection_criteria['max_volatility']]
+        if "volatility_20d" in filtered.columns:
+            filtered = filtered[filtered["volatility_20d"] <= self.selection_criteria["max_volatility"]]
 
         # 股息率筛选（如果有）
-        if 'dv_ttm' in filtered.columns:
-            filtered = filtered[filtered['dv_ttm'] >= self.selection_criteria['min_dividend_yield']]
+        if "dv_ttm" in filtered.columns:
+            filtered = filtered[filtered["dv_ttm"] >= self.selection_criteria["min_dividend_yield"]]
 
         # 计算保守评分
         score = pd.Series(0.0, index=filtered.index)
 
         # 市值越大越好（流动性）
-        if 'total_mv' in filtered.columns:
-            score += (filtered['total_mv'] / filtered['total_mv'].max()).fillna(0) * 0.4
+        if "total_mv" in filtered.columns:
+            score += (filtered["total_mv"] / filtered["total_mv"].max()).fillna(0) * 0.4
 
         # 波动率越低越好
-        if 'volatility_20d' in filtered.columns:
-            vol_score = 1 - (filtered['volatility_20d'] / filtered['volatility_20d'].max()).fillna(0)
+        if "volatility_20d" in filtered.columns:
+            vol_score = 1 - (filtered["volatility_20d"] / filtered["volatility_20d"].max()).fillna(0)
             score += vol_score * 0.3
 
         # 股息率越高越好
-        if 'dv_ttm' in filtered.columns:
-            div_score = (filtered['dv_ttm'] / filtered['dv_ttm'].max()).fillna(0)
+        if "dv_ttm" in filtered.columns:
+            div_score = (filtered["dv_ttm"] / filtered["dv_ttm"].max()).fillna(0)
             score += div_score * 0.3
 
         # 排序选择
         filtered = filtered.copy()
-        filtered['score'] = score
-        filtered = filtered.sort_values('score', ascending=False).head(top_n)
+        filtered["score"] = score
+        filtered = filtered.sort_values("score", ascending=False).head(top_n)
 
         return _format_signal_frame(
             raw=filtered,
-            score_col='score',
-            ts_code_col='ts_code' if 'ts_code' in filtered.columns else 'code',
+            score_col="score",
+            ts_code_col="ts_code" if "ts_code" in filtered.columns else "code",
             trade_date=date_norm,
             model_version=self.model_version,
             top_n=top_n,
@@ -557,7 +557,6 @@ def check_downgrade_conditions(
     Returns:
         降级决策结果
     """
-    from datetime import datetime
 
     thresholds = thresholds or DEFAULT_DOWNGRADE_THRESHOLDS
     current_champion = normalize_strategy_id(current_champion)
@@ -593,41 +592,49 @@ def check_downgrade_conditions(
     if "max_drawdown" in champion_data.columns:
         max_dd = champion_data["max_drawdown"].min()
         if max_dd < thresholds["max_drawdown_limit"]:
-            triggered.append({
-                "metric": "max_drawdown",
-                "value": float(max_dd),
-                "threshold": thresholds["max_drawdown_limit"],
-            })
+            triggered.append(
+                {
+                    "metric": "max_drawdown",
+                    "value": float(max_dd),
+                    "threshold": thresholds["max_drawdown_limit"],
+                }
+            )
 
     # 2. 夏普比率检查
     if "sharpe" in champion_data.columns:
         min_sharpe = champion_data["sharpe"].min()
         if min_sharpe < thresholds["min_sharpe"]:
-            triggered.append({
-                "metric": "sharpe",
-                "value": float(min_sharpe),
-                "threshold": thresholds["min_sharpe"],
-            })
+            triggered.append(
+                {
+                    "metric": "sharpe",
+                    "value": float(min_sharpe),
+                    "threshold": thresholds["min_sharpe"],
+                }
+            )
 
     # 3. 成本后收益检查
     if "cost_return" in champion_data.columns:
         min_cost_return = champion_data["cost_return"].min()
         if min_cost_return < thresholds["min_cost_return"]:
-            triggered.append({
-                "metric": "cost_return",
-                "value": float(min_cost_return),
-                "threshold": thresholds["min_cost_return"],
-            })
+            triggered.append(
+                {
+                    "metric": "cost_return",
+                    "value": float(min_cost_return),
+                    "threshold": thresholds["min_cost_return"],
+                }
+            )
 
     # 4. 连续亏损检查
     if "cost_return" in champion_data.columns:
         consecutive_loss = (champion_data["cost_return"] < 0).sum()
         if consecutive_loss >= thresholds["consecutive_loss_periods"]:
-            triggered.append({
-                "metric": "consecutive_loss",
-                "value": int(consecutive_loss),
-                "threshold": thresholds["consecutive_loss_periods"],
-            })
+            triggered.append(
+                {
+                    "metric": "consecutive_loss",
+                    "value": int(consecutive_loss),
+                    "threshold": thresholds["consecutive_loss_periods"],
+                }
+            )
 
     # 判断是否降级
     if triggered:
@@ -635,9 +642,13 @@ def check_downgrade_conditions(
         result["reason"] = "thresholds_breached"
         result["triggered_thresholds"] = triggered
         result["metrics_snapshot"] = {
-            "max_drawdown": float(champion_data["max_drawdown"].min()) if "max_drawdown" in champion_data.columns else None,
+            "max_drawdown": (
+                float(champion_data["max_drawdown"].min()) if "max_drawdown" in champion_data.columns else None
+            ),
             "sharpe": float(champion_data["sharpe"].mean()) if "sharpe" in champion_data.columns else None,
-            "cost_return": float(champion_data["cost_return"].mean()) if "cost_return" in champion_data.columns else None,
+            "cost_return": (
+                float(champion_data["cost_return"].mean()) if "cost_return" in champion_data.columns else None
+            ),
             "turnover": float(champion_data["turnover"].mean()) if "turnover" in champion_data.columns else None,
         }
 
@@ -714,6 +725,7 @@ def execute_auto_downgrade(
 
 # ==================== Challenger 评估报表 ====================
 
+
 @dataclass
 class EvaluationMetrics:
     """评估指标"""
@@ -770,29 +782,31 @@ def calculate_strategy_metrics(
         return EvaluationMetrics(strategy_id="unknown", trade_date=trade_date)
 
     # 获取 TopN 信号
-    top_signals = signals.nsmallest(top_n, 'rank') if 'rank' in signals.columns else signals.head(top_n)
+    top_signals = signals.nsmallest(top_n, "rank") if "rank" in signals.columns else signals.head(top_n)
 
     # 合并收益
-    merged = top_signals.merge(returns, on='ts_code', how='left')
+    merged = top_signals.merge(returns, on="ts_code", how="left")
 
-    if merged.empty or 'return' not in merged.columns:
+    if merged.empty or "return" not in merged.columns:
         return EvaluationMetrics(
-            strategy_id=signals.get('model_version', ['unknown'])[0] if 'model_version' in signals.columns else 'unknown',
+            strategy_id=(
+                signals.get("model_version", ["unknown"])[0] if "model_version" in signals.columns else "unknown"
+            ),
             trade_date=trade_date,
         )
 
     # 计算指标
-    total_return = merged['return'].mean()
+    total_return = merged["return"].mean()
     cost_return = total_return - cost_rate * 2  # 买入+卖出成本
-    win_rate = (merged['return'] > 0).mean()
+    win_rate = (merged["return"] > 0).mean()
 
     # 计算 IC（信号得分与收益的相关性）
-    if 'score' in merged.columns and 'return' in merged.columns:
-        ic = merged[['score', 'return']].corr().iloc[0, 1]
+    if "score" in merged.columns and "return" in merged.columns:
+        ic = merged[["score", "return"]].corr().iloc[0, 1]
     else:
         ic = 0.0
 
-    strategy_id = signals['model_version'].iloc[0] if 'model_version' in signals.columns else 'unknown'
+    strategy_id = signals["model_version"].iloc[0] if "model_version" in signals.columns else "unknown"
 
     return EvaluationMetrics(
         strategy_id=strategy_id,
@@ -859,10 +873,10 @@ def generate_challenger_comparison_report(
 
     # 添加相对 Champion 的差异
     if len(df) > 1:
-        champion_row = df[df['strategy_id'] == champion_id].iloc[0]
-        for col in ['total_return', 'cost_return', 'sharpe', 'ic', 'win_rate']:
+        champion_row = df[df["strategy_id"] == champion_id].iloc[0]
+        for col in ["total_return", "cost_return", "sharpe", "ic", "win_rate"]:
             if col in df.columns:
-                df[f'{col}_vs_champion'] = df[col] - champion_row[col]
+                df[f"{col}_vs_champion"] = df[col] - champion_row[col]
 
     return df
 
@@ -887,43 +901,60 @@ def generate_multi_period_report(
         return {"summary": pd.DataFrame(), "trend": pd.DataFrame()}
 
     # 按策略汇总
-    summary = metrics_history.groupby('strategy_id').agg({
-        'total_return': ['mean', 'std', 'sum'],
-        'cost_return': ['mean', 'std', 'sum'],
-        'max_drawdown': ['min', 'max'],
-        'sharpe': ['mean', 'std'],
-        'turnover': ['mean', 'std'],
-        'win_rate': ['mean'],
-        'ic': ['mean', 'std'],
-    }).round(4)
+    summary = (
+        metrics_history.groupby("strategy_id")
+        .agg(
+            {
+                "total_return": ["mean", "std", "sum"],
+                "cost_return": ["mean", "std", "sum"],
+                "max_drawdown": ["min", "max"],
+                "sharpe": ["mean", "std"],
+                "turnover": ["mean", "std"],
+                "win_rate": ["mean"],
+                "ic": ["mean", "std"],
+            }
+        )
+        .round(4)
+    )
 
-    summary.columns = ['_'.join(col).strip() for col in summary.columns.values]
+    summary.columns = ["_".join(col).strip() for col in summary.columns.values]
     summary = summary.reset_index()
 
     # 添加排名
-    summary['return_rank'] = summary['cost_return_mean'].rank(ascending=False)
-    summary['sharpe_rank'] = summary['sharpe_mean'].rank(ascending=False)
-    summary['ic_rank'] = summary['ic_mean'].rank(ascending=False)
-    summary['composite_rank'] = (summary['return_rank'] + summary['sharpe_rank'] + summary['ic_rank']) / 3
+    summary["return_rank"] = summary["cost_return_mean"].rank(ascending=False)
+    summary["sharpe_rank"] = summary["sharpe_mean"].rank(ascending=False)
+    summary["ic_rank"] = summary["ic_mean"].rank(ascending=False)
+    summary["composite_rank"] = (summary["return_rank"] + summary["sharpe_rank"] + summary["ic_rank"]) / 3
 
     # 计算相对 Champion 的表现
-    champion_summary = summary[summary['strategy_id'] == champion_id]
+    champion_summary = summary[summary["strategy_id"] == champion_id]
     if not champion_summary.empty:
-        for col in ['cost_return_mean', 'sharpe_mean', 'ic_mean']:
+        for col in ["cost_return_mean", "sharpe_mean", "ic_mean"]:
             champion_val = champion_summary[col].values[0]
-            summary[f'{col}_vs_champion'] = summary[col] - champion_val
+            summary[f"{col}_vs_champion"] = summary[col] - champion_val
 
     # 趋势分析（最近N期）
-    recent = metrics_history.sort_values('trade_date', ascending=False).head(periods * len(metrics_history['strategy_id'].unique()))
-    trend = recent.groupby('strategy_id').agg({
-        'trade_date': 'count',
-        'cost_return': 'mean',
-        'sharpe': 'mean',
-    }).rename(columns={
-        'trade_date': 'period_count',
-        'cost_return': 'recent_return',
-        'sharpe': 'recent_sharpe',
-    }).round(4)
+    recent = metrics_history.sort_values("trade_date", ascending=False).head(
+        periods * len(metrics_history["strategy_id"].unique())
+    )
+    trend = (
+        recent.groupby("strategy_id")
+        .agg(
+            {
+                "trade_date": "count",
+                "cost_return": "mean",
+                "sharpe": "mean",
+            }
+        )
+        .rename(
+            columns={
+                "trade_date": "period_count",
+                "cost_return": "recent_return",
+                "sharpe": "recent_sharpe",
+            }
+        )
+        .round(4)
+    )
 
     return {
         "summary": summary,
@@ -985,7 +1016,7 @@ def format_report_markdown(
     ]
 
     # 表头
-    cols = ['strategy_id', 'total_return', 'cost_return', 'win_rate', 'ic', 'sharpe']
+    cols = ["strategy_id", "total_return", "cost_return", "win_rate", "ic", "sharpe"]
     cols = [c for c in cols if c in report_df.columns]
 
     header = "| " + " | ".join(cols) + " |"
@@ -1006,14 +1037,16 @@ def format_report_markdown(
         lines.append("| " + " | ".join(values) + " |")
 
     # 相对差异表（如果有）
-    if 'cost_return_vs_champion' in report_df.columns:
-        lines.extend([
-            "",
-            "## 相对 Champion 差异",
-            "",
-        ])
+    if "cost_return_vs_champion" in report_df.columns:
+        lines.extend(
+            [
+                "",
+                "## 相对 Champion 差异",
+                "",
+            ]
+        )
 
-        diff_cols = ['strategy_id', 'cost_return_vs_champion', 'sharpe_vs_champion', 'ic_vs_champion']
+        diff_cols = ["strategy_id", "cost_return_vs_champion", "sharpe_vs_champion", "ic_vs_champion"]
         diff_cols = [c for c in diff_cols if c in report_df.columns]
 
         if len(diff_cols) > 1:
@@ -1051,10 +1084,10 @@ class SeedBalanceStrategy:
 
     # 豆包四因子权重
     DOUBAO_WEIGHTS = {
-        'quality': 0.30,
-        'growth': 0.30,
-        'momentum': 0.20,
-        'low_vol': 0.20,
+        "quality": 0.30,
+        "growth": 0.30,
+        "momentum": 0.20,
+        "low_vol": 0.20,
     }
 
     def __init__(
@@ -1103,24 +1136,24 @@ class SeedBalanceStrategy:
         score = pd.Series(0.0, index=df.index)
 
         # 质量因子（30%）
-        quality_cols = ['quality_score', 'roe_zscore', 'gross_margin_zscore', 'roic_zscore']
+        quality_cols = ["quality_score", "roe_zscore", "gross_margin_zscore", "roic_zscore"]
         quality_score = self._aggregate_zscore(df, quality_cols)
-        score += quality_score * self.DOUBAO_WEIGHTS['quality']
+        score += quality_score * self.DOUBAO_WEIGHTS["quality"]
 
         # 成长因子（30%）
-        growth_cols = ['growth_score', 'revenue_yoy_zscore', 'profit_yoy_zscore', 'profit_yoy_accel_zscore']
+        growth_cols = ["growth_score", "revenue_yoy_zscore", "profit_yoy_zscore", "profit_yoy_accel_zscore"]
         growth_score = self._aggregate_zscore(df, growth_cols)
-        score += growth_score * self.DOUBAO_WEIGHTS['growth']
+        score += growth_score * self.DOUBAO_WEIGHTS["growth"]
 
         # 动量因子（20%）
-        momentum_cols = ['momentum_score', 'excess_return_vs_industry_20d_zscore', 'amt_quantile_zscore']
+        momentum_cols = ["momentum_score", "excess_return_vs_industry_20d_zscore", "amt_quantile_zscore"]
         momentum_score = self._aggregate_zscore(df, momentum_cols)
-        score += momentum_score * self.DOUBAO_WEIGHTS['momentum']
+        score += momentum_score * self.DOUBAO_WEIGHTS["momentum"]
 
         # 低波动因子（20%）
-        low_vol_cols = ['low_vol_score', 'volatility_zscore', 'max_dd_zscore', 'downside_vol_zscore']
+        low_vol_cols = ["low_vol_score", "volatility_zscore", "max_dd_zscore", "downside_vol_zscore"]
         low_vol_score = self._aggregate_zscore(df, low_vol_cols)
-        score += low_vol_score * self.DOUBAO_WEIGHTS['low_vol']
+        score += low_vol_score * self.DOUBAO_WEIGHTS["low_vol"]
 
         return score
 
@@ -1158,14 +1191,14 @@ class SeedBalanceStrategy:
         # 使用豆包四因子评分（如果启用且有相关特征）
         if self.use_doubao_scoring:
             # 检查是否有豆包评分列
-            if 'doubao_champion_score' in predicted.columns:
-                score_col = 'doubao_champion_score'
+            if "doubao_champion_score" in predicted.columns:
+                score_col = "doubao_champion_score"
             else:
                 # 动态计算豆包评分
                 doubao_score = self._calculate_doubao_score(predicted)
                 predicted = predicted.copy()
-                predicted['doubao_score'] = doubao_score
-                score_col = 'doubao_score'
+                predicted["doubao_score"] = doubao_score
+                score_col = "doubao_score"
         else:
             score_col = "score"
 
@@ -1184,10 +1217,10 @@ class ChallengerConfig:
     positive_growth_weight: float = 0.7
     positive_frontier_weight: float = 0.3
     # 卫星策略四因子权重（按文档要求）
-    satellite_growth_factor_weight: float = 0.40    # 景气成长因子（40%）
-    satellite_event_factor_weight: float = 0.30    # 事件驱动因子（30%）
-    satellite_momentum_factor_weight: float = 0.20 # 量价动量因子（20%）
-    satellite_chip_factor_weight: float = 0.10    # 筹码结构因子（10%）
+    satellite_growth_factor_weight: float = 0.40  # 景气成长因子（40%）
+    satellite_event_factor_weight: float = 0.30  # 事件驱动因子（30%）
+    satellite_momentum_factor_weight: float = 0.20  # 量价动量因子（20%）
+    satellite_chip_factor_weight: float = 0.10  # 筹码结构因子（10%）
     # 保留旧权重作为回退（已废弃）
     satellite_growth_weight: float = 0.35
     satellite_frontier_weight: float = 0.25
@@ -1278,10 +1311,10 @@ class MultiAlphaChallengerStrategies:
                 "chip_factor": self.config.satellite_chip_factor_weight,
             },
             {
-                "growth_factor": 0.40,   # 景气成长因子
-                "event_factor": 0.30,    # 事件驱动因子
-                "momentum_factor": 0.20, # 量价动量因子
-                "chip_factor": 0.10,    # 筹码结构因子
+                "growth_factor": 0.40,  # 景气成长因子
+                "event_factor": 0.30,  # 事件驱动因子
+                "momentum_factor": 0.20,  # 量价动量因子
+                "chip_factor": 0.10,  # 筹码结构因子
             },
         )
 
@@ -1296,10 +1329,10 @@ class MultiAlphaChallengerStrategies:
             data["satellite_score"] = (
                 _safe_numeric(data, "growth_score") * satellite_weights["growth_factor"]
                 + _safe_numeric(data, "frontier_score") * satellite_weights["event_factor"]
-                + _safe_numeric(data, "momentum_factor_score", 
-                               _safe_numeric(data, "rps_component")) * satellite_weights["momentum_factor"]
-                + _safe_numeric(data, "chip_factor_score",
-                               _safe_numeric(data, "not_priced_component")) * satellite_weights["chip_factor"]
+                + _safe_numeric(data, "momentum_factor_score", _safe_numeric(data, "rps_component"))
+                * satellite_weights["momentum_factor"]
+                + _safe_numeric(data, "chip_factor_score", _safe_numeric(data, "not_priced_component"))
+                * satellite_weights["chip_factor"]
             )
 
         outputs = {}

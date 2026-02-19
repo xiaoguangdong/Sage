@@ -11,12 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from sage_core.backtest.cost_model import (
-    TradingCostModel,
-    CostModelConfig,
-    create_default_cost_model,
-    create_aggressive_cost_model,
-)
+from sage_core.backtest.cost_model import create_aggressive_cost_model, create_default_cost_model
 
 
 def test_single_trade_cost():
@@ -111,11 +106,21 @@ def test_cost_model_comparison():
 
     print(f"{'成本项':<15} | {'保守模型':>12} | {'激进模型':>12} | {'差异':>10}")
     print("-" * 60)
-    print(f"{'固定成本':<15} | {default_cost['fixed_cost']:>10,.2f} | {aggressive_cost['fixed_cost']:>10,.2f} | {(default_cost['fixed_cost']-aggressive_cost['fixed_cost']):>8,.2f}")
-    print(f"{'滑点成本':<15} | {default_cost['slippage_cost']:>10,.2f} | {aggressive_cost['slippage_cost']:>10,.2f} | {(default_cost['slippage_cost']-aggressive_cost['slippage_cost']):>8,.2f}")
-    print(f"{'市场冲击':<15} | {default_cost['market_impact_cost']:>10,.2f} | {aggressive_cost['market_impact_cost']:>10,.2f} | {(default_cost['market_impact_cost']-aggressive_cost['market_impact_cost']):>8,.2f}")
-    print(f"{'总成本':<15} | {default_cost['total_cost']:>10,.2f} | {aggressive_cost['total_cost']:>10,.2f} | {(default_cost['total_cost']-aggressive_cost['total_cost']):>8,.2f}")
-    print(f"{'成本率':<15} | {default_cost['total_cost_rate']:>11.4%} | {aggressive_cost['total_cost_rate']:>11.4%} | {(default_cost['total_cost_rate']-aggressive_cost['total_cost_rate']):>9.4%}")
+    print(
+        f"{'固定成本':<15} | {default_cost['fixed_cost']:>10,.2f} | {aggressive_cost['fixed_cost']:>10,.2f} | {(default_cost['fixed_cost']-aggressive_cost['fixed_cost']):>8,.2f}"
+    )
+    print(
+        f"{'滑点成本':<15} | {default_cost['slippage_cost']:>10,.2f} | {aggressive_cost['slippage_cost']:>10,.2f} | {(default_cost['slippage_cost']-aggressive_cost['slippage_cost']):>8,.2f}"
+    )
+    print(
+        f"{'市场冲击':<15} | {default_cost['market_impact_cost']:>10,.2f} | {aggressive_cost['market_impact_cost']:>10,.2f} | {(default_cost['market_impact_cost']-aggressive_cost['market_impact_cost']):>8,.2f}"
+    )
+    print(
+        f"{'总成本':<15} | {default_cost['total_cost']:>10,.2f} | {aggressive_cost['total_cost']:>10,.2f} | {(default_cost['total_cost']-aggressive_cost['total_cost']):>8,.2f}"
+    )
+    print(
+        f"{'成本率':<15} | {default_cost['total_cost_rate']:>11.4%} | {aggressive_cost['total_cost_rate']:>11.4%} | {(default_cost['total_cost_rate']-aggressive_cost['total_cost_rate']):>9.4%}"
+    )
 
 
 def test_liquidity_constraint():
@@ -159,10 +164,10 @@ def test_cost_sensitivity():
     print("-" * 60)
 
     for vol in [0.01, 0.02, 0.03, 0.05, 0.10]:
-        cost = model.calculate_total_cost(
-            base_trade_value, is_buy=True, volatility=vol, daily_volume=5_000_000
+        cost = model.calculate_total_cost(base_trade_value, is_buy=True, volatility=vol, daily_volume=5_000_000)
+        print(
+            f"{vol:>6.2%} | {cost['total_cost_rate']:>10.4%} | {cost['slippage_cost']/base_trade_value:>12.4%} | {cost['market_impact_cost']/base_trade_value:>12.4%}"
         )
-        print(f"{vol:>6.2%} | {cost['total_cost_rate']:>10.4%} | {cost['slippage_cost']/base_trade_value:>12.4%} | {cost['market_impact_cost']/base_trade_value:>12.4%}")
 
     # 流动性敏感性
     print("\n【流动性敏感性】（波动率3%）")
@@ -170,11 +175,11 @@ def test_cost_sensitivity():
     print("-" * 60)
 
     for daily_vol in [1_000_000, 2_000_000, 5_000_000, 10_000_000, 20_000_000]:
-        cost = model.calculate_total_cost(
-            base_trade_value, is_buy=True, volatility=0.03, daily_volume=daily_vol
-        )
+        cost = model.calculate_total_cost(base_trade_value, is_buy=True, volatility=0.03, daily_volume=daily_vol)
         participation = base_trade_value / daily_vol
-        print(f"{daily_vol:>10,.0f} | {participation:>6.2%} | {cost['total_cost_rate']:>10.4%} | {cost['market_impact_cost']/base_trade_value:>12.4%}")
+        print(
+            f"{daily_vol:>10,.0f} | {participation:>6.2%} | {cost['total_cost_rate']:>10.4%} | {cost['market_impact_cost']/base_trade_value:>12.4%}"
+        )
 
 
 if __name__ == "__main__":

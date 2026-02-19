@@ -17,10 +17,6 @@ venv*/
 data/
 !scripts/data/
 !scripts/data/**
-!scripts/legacy/
-!scripts/legacy/**
-!scripts/legacy/data/
-!scripts/legacy/data/**
 scripts/data/.DS_Store
 scripts/data/**/__pycache__/
 !sage_core/data/

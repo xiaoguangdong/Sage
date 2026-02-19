@@ -15,13 +15,13 @@ import argparse
 import html as html_lib
 import json
 import re
+import ssl
 import sys
 import time
-import ssl
 import urllib.request
 import xml.etree.ElementTree as ET
-from html.parser import HTMLParser
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urljoin
@@ -32,7 +32,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import disable_proxy, get_data_path, setup_logger
-
 
 logger = setup_logger(Path(__file__).stem, module="data")
 
@@ -63,6 +62,7 @@ def load_yaml(path: Path) -> Dict:
         return {}
     try:
         import yaml  # type: ignore
+
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
@@ -167,11 +167,13 @@ class _AnchorParser(HTMLParser):
         if tag.lower() == "a" and self._in_anchor:
             text = "".join(self._anchor_text).strip()
             if text:
-                self.tokens.append({
-                    "type": "a",
-                    "text": text,
-                    "href": self._anchor_href,
-                })
+                self.tokens.append(
+                    {
+                        "type": "a",
+                        "text": text,
+                        "href": self._anchor_href,
+                    }
+                )
             self._in_anchor = False
             self._anchor_href = ""
             self._anchor_text = []
@@ -183,10 +185,12 @@ class _AnchorParser(HTMLParser):
         if self._in_anchor:
             self._anchor_text.append(text)
         else:
-            self.tokens.append({
-                "type": "text",
-                "text": text,
-            })
+            self.tokens.append(
+                {
+                    "type": "text",
+                    "text": text,
+                }
+            )
 
 
 _DATE_PATTERN = re.compile(r"(20\d{2})[./-](\d{1,2})[./-](\d{1,2})")
@@ -251,14 +255,14 @@ def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, s
         url = urljoin(base_url or "", href) if href else ""
         date_text = _normalize_date(title)
         if not date_text:
-            for next_token in tokens[idx + 1: idx + 8]:
+            for next_token in tokens[idx + 1 : idx + 8]:
                 if next_token.get("type") != "text":
                     continue
                 date_text = _normalize_date(next_token.get("text", ""))
                 if date_text:
                     break
         if not date_text:
-            for prev_token in tokens[max(0, idx - 8): idx]:
+            for prev_token in tokens[max(0, idx - 8) : idx]:
                 if prev_token.get("type") != "text":
                     continue
                 date_text = _normalize_date(prev_token.get("text", ""))
@@ -266,12 +270,14 @@ def parse_html(content: str, base_url: Optional[str] = None) -> List[Dict[str, s
                     break
         if not date_text:
             continue
-        items.append({
-            "title": title,
-            "url": url,
-            "publish_date": date_text,
-            "content": "",
-        })
+        items.append(
+            {
+                "title": title,
+                "url": url,
+                "publish_date": date_text,
+                "content": "",
+            }
+        )
     return items
 
 
@@ -309,12 +315,14 @@ def _parse_blocks(content: str, base_url: Optional[str] = None) -> List[Dict[str
         if not date_text:
             continue
         url = urljoin(base_url or "", info["href"]) if info["href"] else ""
-        items.append({
-            "title": info["title"],
-            "url": url,
-            "publish_date": date_text,
-            "content": "",
-        })
+        items.append(
+            {
+                "title": info["title"],
+                "url": url,
+                "publish_date": date_text,
+                "content": "",
+            }
+        )
     return items
 
 
@@ -358,9 +366,7 @@ def build_config(base: Dict, args: argparse.Namespace) -> FetchConfig:
         sleep_seconds=float(args.sleep_seconds or settings.get("sleep_seconds", 1.0)),
         user_agent=str(args.user_agent or settings.get("user_agent", "SagePolicyBot/0.1")),
         max_items_per_source=(
-            int(args.max_items)
-            if args.max_items is not None
-            else settings.get("max_items_per_source")
+            int(args.max_items) if args.max_items is not None else settings.get("max_items_per_source")
         ),
         dump_html=bool(args.dump_html or settings.get("dump_html", False)),
     )

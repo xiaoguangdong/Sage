@@ -3,9 +3,9 @@
 """
 
 from .catalog import DataCatalog, DatasetSpec
+from .sources.base import SOURCE_REGISTRY, DataSource, DataSourceRegistry, SourceConfig, register_source
 from .store import DataStore
 from .universe import Universe
-from .sources.base import SourceConfig, DataSource, DataSourceRegistry, SOURCE_REGISTRY, register_source
 
 __all__ = [
     "DataCatalog",

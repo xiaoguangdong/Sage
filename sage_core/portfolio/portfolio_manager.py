@@ -13,11 +13,9 @@
 
 from __future__ import annotations
 
+from typing import Dict, Optional
+
 import pandas as pd
-import numpy as np
-from typing import Dict, List, Optional
-from pathlib import Path
-from datetime import datetime
 
 
 class PortfolioManager:
@@ -53,8 +51,7 @@ class PortfolioManager:
         self.min_avg_amount = min_avg_amount
 
         # 验证配比
-        assert abs(long_term_ratio + short_term_ratio - 1.0) < 1e-6, \
-            "长短线资金占比之和必须为1"
+        assert abs(long_term_ratio + short_term_ratio - 1.0) < 1e-6, "长短线资金占比之和必须为1"
 
     def construct_portfolio(
         self,
@@ -81,7 +78,7 @@ class PortfolioManager:
         value_positions = int(long_term_positions * self.value_growth_ratio)
         growth_positions = long_term_positions - value_positions
 
-        print(f"\n组合配置:")
+        print("\n组合配置:")
         print(f"  总持仓: {total_positions} 只")
         print(f"  长线: {long_term_positions} 只 (价值{value_positions} + 成长{growth_positions})")
         print(f"  短线: {short_term_positions} 只")
@@ -94,7 +91,7 @@ class PortfolioManager:
             value_stocks = self._select_from_pool(
                 value_candidates,
                 n_stocks=value_positions,
-                strategy_type='value',
+                strategy_type="value",
             )
             portfolio_parts.append(value_stocks)
             print(f"  价值股选出: {len(value_stocks)} 只")
@@ -104,7 +101,7 @@ class PortfolioManager:
             growth_stocks = self._select_from_pool(
                 growth_candidates,
                 n_stocks=growth_positions,
-                strategy_type='growth',
+                strategy_type="growth",
             )
             portfolio_parts.append(growth_stocks)
             print(f"  成长股选出: {len(growth_stocks)} 只")
@@ -114,7 +111,7 @@ class PortfolioManager:
             momentum_stocks = self._select_from_pool(
                 momentum_candidates,
                 n_stocks=short_term_positions,
-                strategy_type='momentum',
+                strategy_type="momentum",
             )
             portfolio_parts.append(momentum_stocks)
             print(f"  动量股选出: {len(momentum_stocks)} 只")
@@ -156,17 +153,17 @@ class PortfolioManager:
 
         for _, stock in candidates.iterrows():
             # 流动性约束
-            if 'avg_amount' in stock and stock['avg_amount'] < self.min_avg_amount:
+            if "avg_amount" in stock and stock["avg_amount"] < self.min_avg_amount:
                 continue
 
             # 行业分散约束
-            industry = stock.get('industry', 'Unknown')
+            industry = stock.get("industry", "Unknown")
             if industry_count.get(industry, 0) >= max_per_industry:
                 continue
 
             # 添加策略类型标签
             stock_dict = stock.to_dict()
-            stock_dict['strategy_type'] = strategy_type
+            stock_dict["strategy_type"] = strategy_type
             selected.append(stock_dict)
 
             industry_count[industry] = industry_count.get(industry, 0) + 1
@@ -193,32 +190,32 @@ class PortfolioManager:
         portfolio = portfolio.copy()
 
         # 统计各策略股票数量
-        strategy_counts = portfolio['strategy_type'].value_counts()
+        strategy_counts = portfolio["strategy_type"].value_counts()
 
         # 计算每只股票的权重
         weights = []
         for _, stock in portfolio.iterrows():
-            strategy = stock['strategy_type']
+            strategy = stock["strategy_type"]
 
-            if strategy in ['value', 'growth']:
+            if strategy in ["value", "growth"]:
                 # 长线策略：70%资金 / 长线股票数量
-                long_term_stocks = strategy_counts.get('value', 0) + strategy_counts.get('growth', 0)
+                long_term_stocks = strategy_counts.get("value", 0) + strategy_counts.get("growth", 0)
                 weight = self.long_term_ratio / long_term_stocks if long_term_stocks > 0 else 0
-            elif strategy == 'momentum':
+            elif strategy == "momentum":
                 # 短线策略：30%资金 / 短线股票数量
-                short_term_stocks = strategy_counts.get('momentum', 0)
+                short_term_stocks = strategy_counts.get("momentum", 0)
                 weight = self.short_term_ratio / short_term_stocks if short_term_stocks > 0 else 0
             else:
                 weight = 0
 
             weights.append(weight)
 
-        portfolio['weight'] = weights
+        portfolio["weight"] = weights
 
         # 归一化（确保权重和为1）
-        total_weight = portfolio['weight'].sum()
+        total_weight = portfolio["weight"].sum()
         if total_weight > 0:
-            portfolio['weight'] = portfolio['weight'] / total_weight
+            portfolio["weight"] = portfolio["weight"] / total_weight
 
         return portfolio
 
@@ -228,26 +225,28 @@ class PortfolioManager:
         Args:
             portfolio: 组合DataFrame
         """
-        if 'industry' not in portfolio.columns:
+        if "industry" not in portfolio.columns:
             return
 
-        industry_weights = portfolio.groupby('industry')['weight'].sum().sort_values(ascending=False)
+        industry_weights = portfolio.groupby("industry")["weight"].sum().sort_values(ascending=False)
 
-        print(f"\n行业分布:")
+        print("\n行业分布:")
         for industry, weight in industry_weights.items():
             print(f"  {industry}: {weight:.1%}")
 
         # 警告：单行业占比过高
         max_concentration = industry_weights.max()
         if max_concentration > self.max_industry_ratio:
-            print(f"\n⚠️  警告: {industry_weights.idxmax()} 行业占比 {max_concentration:.1%} "
-                  f"超过阈值 {self.max_industry_ratio:.1%}")
+            print(
+                f"\n⚠️  警告: {industry_weights.idxmax()} 行业占比 {max_concentration:.1%} "
+                f"超过阈值 {self.max_industry_ratio:.1%}"
+            )
 
     def rebalance(
         self,
         current_portfolio: pd.DataFrame,
         new_candidates: Dict[str, pd.DataFrame],
-        rebalance_type: str = 'full',
+        rebalance_type: str = "full",
     ) -> pd.DataFrame:
         """调仓逻辑
 
@@ -262,30 +261,28 @@ class PortfolioManager:
         Returns:
             新的投资组合
         """
-        if rebalance_type == 'full':
+        if rebalance_type == "full":
             # 全部重新构建
             return self.construct_portfolio(
-                value_candidates=new_candidates.get('value', pd.DataFrame()),
-                growth_candidates=new_candidates.get('growth', pd.DataFrame()),
-                momentum_candidates=new_candidates.get('momentum', pd.DataFrame()),
+                value_candidates=new_candidates.get("value", pd.DataFrame()),
+                growth_candidates=new_candidates.get("growth", pd.DataFrame()),
+                momentum_candidates=new_candidates.get("momentum", pd.DataFrame()),
                 total_positions=len(current_portfolio),
             )
 
-        elif rebalance_type == 'short_only':
+        elif rebalance_type == "short_only":
             # 保留长线持仓，只调仓短线
-            long_term_holdings = current_portfolio[
-                current_portfolio['strategy_type'].isin(['value', 'growth'])
-            ].copy()
+            long_term_holdings = current_portfolio[current_portfolio["strategy_type"].isin(["value", "growth"])].copy()
 
             # 重新选短线股票
             short_term_positions = len(current_portfolio) - len(long_term_holdings)
-            momentum_candidates = new_candidates.get('momentum', pd.DataFrame())
+            momentum_candidates = new_candidates.get("momentum", pd.DataFrame())
 
             if not momentum_candidates.empty:
                 new_momentum = self._select_from_pool(
                     momentum_candidates,
                     n_stocks=short_term_positions,
-                    strategy_type='momentum',
+                    strategy_type="momentum",
                 )
                 portfolio = pd.concat([long_term_holdings, new_momentum], ignore_index=True)
             else:
@@ -295,11 +292,9 @@ class PortfolioManager:
             portfolio = self._calculate_weights(portfolio)
             return portfolio
 
-        elif rebalance_type == 'long_only':
+        elif rebalance_type == "long_only":
             # 保留短线持仓，只调仓长线
-            short_term_holdings = current_portfolio[
-                current_portfolio['strategy_type'] == 'momentum'
-            ].copy()
+            short_term_holdings = current_portfolio[current_portfolio["strategy_type"] == "momentum"].copy()
 
             # 重新选长线股票
             long_term_positions = len(current_portfolio) - len(short_term_holdings)
@@ -308,21 +303,21 @@ class PortfolioManager:
 
             portfolio_parts = [short_term_holdings]
 
-            value_candidates = new_candidates.get('value', pd.DataFrame())
+            value_candidates = new_candidates.get("value", pd.DataFrame())
             if not value_candidates.empty:
                 new_value = self._select_from_pool(
                     value_candidates,
                     n_stocks=value_positions,
-                    strategy_type='value',
+                    strategy_type="value",
                 )
                 portfolio_parts.append(new_value)
 
-            growth_candidates = new_candidates.get('growth', pd.DataFrame())
+            growth_candidates = new_candidates.get("growth", pd.DataFrame())
             if not growth_candidates.empty:
                 new_growth = self._select_from_pool(
                     growth_candidates,
                     n_stocks=growth_positions,
-                    strategy_type='growth',
+                    strategy_type="growth",
                 )
                 portfolio_parts.append(new_growth)
 
@@ -358,11 +353,11 @@ class PortfolioManager:
         if current_drawdown <= -0.25:
             # 清仓
             print(f"⚠️  回撤 {current_drawdown:.1%} 触发清仓")
-            portfolio['weight'] = 0
+            portfolio["weight"] = 0
         elif current_drawdown <= -0.15:
             # 减仓50%
             print(f"⚠️  回撤 {current_drawdown:.1%} 触发减仓50%")
-            portfolio['weight'] = portfolio['weight'] * 0.5
+            portfolio["weight"] = portfolio["weight"] * 0.5
         else:
             # 正常持仓
             pass

@@ -109,7 +109,11 @@ def _load_northbound_signal(path: Path) -> pd.DataFrame:
     df["trade_date"] = pd.to_datetime(df["trade_date"]).dt.floor("D")
     if "ratio_signal" in df.columns:
         score = ((pd.to_numeric(df["ratio_signal"], errors="coerce").fillna(0.0) + 1.0) / 2.0).clip(0.0, 1.0)
-        direction = pd.to_numeric(df["ratio_signal"], errors="coerce").fillna(0.0).apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+        direction = (
+            pd.to_numeric(df["ratio_signal"], errors="coerce")
+            .fillna(0.0)
+            .apply(lambda x: 1 if x > 0 else (-1 if x < 0 else 0))
+        )
     else:
         ratio = pd.to_numeric(df.get("industry_ratio", 0.0), errors="coerce").fillna(0.0)
         score = ratio.rank(pct=True).clip(0.0, 1.0)
@@ -147,11 +151,7 @@ def _to_snapshot(contract: pd.DataFrame) -> pd.DataFrame:
             return float(group["score"].mean())
         return float((group["score"] * group["confidence"]).sum() / total)
 
-    snapshot = (
-        contract.groupby(["trade_date", "sw_industry"])
-        .apply(_weighted_score)
-        .reset_index(name="combined_score")
-    )
+    snapshot = contract.groupby(["trade_date", "sw_industry"]).apply(_weighted_score).reset_index(name="combined_score")
     snapshot["rank"] = snapshot.groupby("trade_date")["combined_score"].rank(ascending=False, method="first")
     return snapshot.sort_values(["trade_date", "combined_score"], ascending=[True, False]).reset_index(drop=True)
 
@@ -210,9 +210,7 @@ def _build_aligned_signal_snapshot(
     if source.empty:
         return pd.DataFrame()
 
-    source["max_stale_days"] = (
-        source["signal_name"].map(lookback_days).fillna(int(default_lookback_days)).astype(int)
-    )
+    source["max_stale_days"] = source["signal_name"].map(lookback_days).fillna(int(default_lookback_days)).astype(int)
     source["stale_days"] = (as_of_date - source["trade_date"]).dt.days
     source = source[(source["stale_days"] >= 0) & (source["stale_days"] <= source["max_stale_days"])].copy()
     if source.empty:
@@ -231,25 +229,29 @@ def _build_aligned_signal_snapshot(
     latest["confidence"] = (latest["confidence_raw"] * latest["confidence_decay"]).clip(0.0, 1.0)
     latest["source_trade_date"] = latest["trade_date"]
     latest["trade_date"] = as_of_date
-    return latest[
-        [
-            "trade_date",
-            "source_trade_date",
-            "stale_days",
-            "max_stale_days",
-            "confidence_raw",
-            "confidence_half_life_days",
-            "confidence_decay",
-            "sw_industry",
-            "signal_name",
-            "score",
-            "confidence",
-            "direction",
-            "source",
-            "model_version",
-            "meta",
+    return (
+        latest[
+            [
+                "trade_date",
+                "source_trade_date",
+                "stale_days",
+                "max_stale_days",
+                "confidence_raw",
+                "confidence_half_life_days",
+                "confidence_decay",
+                "sw_industry",
+                "signal_name",
+                "score",
+                "confidence",
+                "direction",
+                "source",
+                "model_version",
+                "meta",
+            ]
         ]
-    ].sort_values(["signal_name", "sw_industry"]).reset_index(drop=True)
+        .sort_values(["signal_name", "sw_industry"])
+        .reset_index(drop=True)
+    )
 
 
 def _normalize_contract(contract: pd.DataFrame) -> pd.DataFrame:
@@ -264,7 +266,9 @@ def _normalize_contract(contract: pd.DataFrame) -> pd.DataFrame:
     contract["direction"] = pd.to_numeric(contract["direction"], errors="coerce").fillna(0).astype(int)
     contract["source"] = contract["source"].astype(str)
     contract["model_version"] = contract["model_version"].astype(str)
-    contract["meta"] = contract["meta"].apply(lambda x: json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x)
+    contract["meta"] = contract["meta"].apply(
+        lambda x: json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x
+    )
     return contract[
         [
             "trade_date",
@@ -396,9 +400,7 @@ def build_industry_signal_contract_artifacts(
     }
 
     summary_path = output_dir / "industry_signal_contract_summary.json"
-    summary_path.write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
+    summary_path.write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
 
     return {
         "generated": True,
@@ -419,7 +421,9 @@ def main() -> None:
     parser.add_argument("--concept-bias-path", type=str, default=None)
     parser.add_argument("--northbound-path", type=str, default=None)
     parser.add_argument("--output-dir", type=str, default=None)
-    parser.add_argument("--as-of-date", type=str, default=None, help="决策日，格式 YYYYMMDD 或 YYYY-MM-DD，默认使用契约最大日期")
+    parser.add_argument(
+        "--as-of-date", type=str, default=None, help="决策日，格式 YYYYMMDD 或 YYYY-MM-DD，默认使用契约最大日期"
+    )
     parser.add_argument(
         "--signal-lookback-days",
         type=str,

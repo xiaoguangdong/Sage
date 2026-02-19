@@ -77,8 +77,10 @@ def _run_monthly_job(args, logger) -> None:
     command = [
         sys.executable,
         str(PROJECT_ROOT / "scripts/stock/run_stock_selector_monthly.py"),
-        "--train-lookback-days", str(args.train_lookback_days),
-        "--top-n", str(args.top_n),
+        "--train-lookback-days",
+        str(args.train_lookback_days),
+        "--top-n",
+        str(args.top_n),
     ]
     if args.allow_rule_fallback:
         command.append("--allow-rule-fallback")
@@ -93,8 +95,10 @@ def _run_weekly_job(args, logger) -> None:
     command = [
         sys.executable,
         str(PROJECT_ROOT / "scripts/stock/run_stock_selector_weekly_signal.py"),
-        "--feature-lookback-days", str(args.feature_lookback_days),
-        "--top-n", str(args.top_n),
+        "--feature-lookback-days",
+        str(args.feature_lookback_days),
+        "--top-n",
+        str(args.top_n),
     ]
     if args.data_dir:
         command.extend(["--data-dir", args.data_dir])
@@ -149,8 +153,11 @@ def main() -> None:
     )
     logger.info(
         "调度启动: monthly=1-7工作日 %02d:%02d, weekly=%s %02d:%02d",
-        args.monthly_hour, args.monthly_minute,
-        args.weekly_day_of_week, args.weekly_hour, args.weekly_minute,
+        args.monthly_hour,
+        args.monthly_minute,
+        args.weekly_day_of_week,
+        args.weekly_hour,
+        args.weekly_minute,
     )
     scheduler.start()
 

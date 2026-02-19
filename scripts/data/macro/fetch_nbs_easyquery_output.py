@@ -18,15 +18,16 @@ import argparse
 import json
 import time
 from pathlib import Path
-from typing import Optional, List
+from typing import List, Optional
 
 import requests
 
 from scripts.data.macro.paths import MACRO_DIR
 
 
-def build_params(zb_code: str, sj_code: Optional[str] = None, dbcode: str = "hgyd",
-                 rowcode: str = "zb", colcode: str = "sj") -> dict:
+def build_params(
+    zb_code: str, sj_code: Optional[str] = None, dbcode: str = "hgyd", rowcode: str = "zb", colcode: str = "sj"
+) -> dict:
     dfwds = [{"wdcode": "zb", "valuecode": zb_code}]
     if sj_code:
         dfwds.append({"wdcode": "sj", "valuecode": sj_code})

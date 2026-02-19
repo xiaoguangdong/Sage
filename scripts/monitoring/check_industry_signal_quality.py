@@ -6,7 +6,6 @@ import json
 import sys
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -63,7 +62,11 @@ def main() -> None:
         },
     }
 
-    output_path = Path(args.output) if args.output else get_data_path("signals", "industry", "industry_signal_quality_report.json")
+    output_path = (
+        Path(args.output)
+        if args.output
+        else get_data_path("signals", "industry", "industry_signal_quality_report.json")
+    )
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"质量报告已保存: {output_path}")

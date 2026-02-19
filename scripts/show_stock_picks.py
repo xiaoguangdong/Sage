@@ -1,14 +1,19 @@
 """展示回测期间每期选股结果（单一模型 vs Regime模型）"""
-import os, sys, copy, logging, warnings
-import numpy as np, pandas as pd
+
+import copy
+import logging
+import os
+import sys
+import warnings
+
+import numpy as np
+import pandas as pd
 
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
-from sage_core.stock_selection.regime_stock_selector import (
-    RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
-)
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
 
 logging.basicConfig(level=logging.WARNING)
@@ -39,7 +44,11 @@ def load_data():
     basic["trade_date"] = pd.to_datetime(basic["trade_date"], format="%Y%m%d")
 
     # merge
-    cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"] if c in basic.columns]
+    cols = [
+        c
+        for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
+        if c in basic.columns
+    ]
     df = stk.merge(basic[cols], on=["ts_code", "trade_date"], how="left")
 
     member_path = os.path.join(DATA_ROOT, "sw_industry", "sw_index_member.parquet")
@@ -49,8 +58,13 @@ def load_data():
         ind = pd.read_parquet(ind_path)
         current = member[member["is_new"] == "Y"][["index_code", "con_code"]].drop_duplicates("con_code")
         current = current.merge(ind[["index_code", "industry_name"]], on="index_code", how="left")
-        df = df.merge(current[["con_code", "industry_name"]].rename(columns={"con_code": "ts_code", "industry_name": "industry_l1"}),
-                      on="ts_code", how="left")
+        df = df.merge(
+            current[["con_code", "industry_name"]].rename(
+                columns={"con_code": "ts_code", "industry_name": "industry_l1"}
+            ),
+            on="ts_code",
+            how="left",
+        )
 
     # 股票名称（从同花顺概念成员表获取）
     name_path = os.path.join(DATA_ROOT, "concepts", "ths_member.parquet")
@@ -82,9 +96,14 @@ def main():
     df_train["regime"] = df_train["trade_date"].map(lambda d: d2s.get(pd.Timestamp(d), 1))
 
     # train
-    cfg = SelectionConfig(model_type="lgbm", label_neutralized=True,
-                          ic_filter_enabled=True, ic_threshold=0.02,
-                          ic_ir_threshold=0.3, industry_col="industry_l1")
+    cfg = SelectionConfig(
+        model_type="lgbm",
+        label_neutralized=True,
+        ic_filter_enabled=True,
+        ic_threshold=0.02,
+        ic_ir_threshold=0.3,
+        industry_col="industry_l1",
+    )
     print("训练单一模型...")
     single = StockSelector(copy.deepcopy(cfg))
     single.fit(df_train)
@@ -102,7 +121,9 @@ def main():
     res_bt = trend.predict(idx_bt, return_history=True)
     d2s_bt = dict(zip(pd.to_datetime(idx_bt["date"]).values, res_bt.diagnostics["states"]))
 
-    bt_dates = sorted(df_all[(df_all["trade_date"] >= BT_START) & (df_all["trade_date"] <= BT_END)]["trade_date"].unique())
+    bt_dates = sorted(
+        df_all[(df_all["trade_date"] >= BT_START) & (df_all["trade_date"] <= BT_END)]["trade_date"].unique()
+    )
     rb_dates = bt_dates[::HOLD_DAYS]
 
     all_picks = []
@@ -124,6 +145,7 @@ def main():
 
             # 计算持仓期收益
             hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]
+
             def calc_ret(codes):
                 rets = {}
                 for c in codes:
@@ -137,23 +159,51 @@ def main():
 
             # 记录
             for code, row in top_s.set_index("ts_code").iterrows():
-                name = df_day[df_day["ts_code"] == code]["name"].iloc[0] if has_name and code in df_day["ts_code"].values else ""
-                ind = df_day[df_day["ts_code"] == code]["industry_l1"].iloc[0] if "industry_l1" in df_day.columns and code in df_day["ts_code"].values else ""
-                all_picks.append({
-                    "调仓日": str(rb)[:10], "模型": "单一", "regime": rname,
-                    "ts_code": code, "名称": name, "行业": ind,
-                    "score": round(row["score"], 4),
-                    "持仓收益": round(rets_s.get(code, 0), 4),
-                })
+                name = (
+                    df_day[df_day["ts_code"] == code]["name"].iloc[0]
+                    if has_name and code in df_day["ts_code"].values
+                    else ""
+                )
+                ind = (
+                    df_day[df_day["ts_code"] == code]["industry_l1"].iloc[0]
+                    if "industry_l1" in df_day.columns and code in df_day["ts_code"].values
+                    else ""
+                )
+                all_picks.append(
+                    {
+                        "调仓日": str(rb)[:10],
+                        "模型": "单一",
+                        "regime": rname,
+                        "ts_code": code,
+                        "名称": name,
+                        "行业": ind,
+                        "score": round(row["score"], 4),
+                        "持仓收益": round(rets_s.get(code, 0), 4),
+                    }
+                )
             for code, row in top_r.set_index("ts_code").iterrows():
-                name = df_day[df_day["ts_code"] == code]["name"].iloc[0] if has_name and code in df_day["ts_code"].values else ""
-                ind = df_day[df_day["ts_code"] == code]["industry_l1"].iloc[0] if "industry_l1" in df_day.columns and code in df_day["ts_code"].values else ""
-                all_picks.append({
-                    "调仓日": str(rb)[:10], "模型": "Regime", "regime": rname,
-                    "ts_code": code, "名称": name, "行业": ind,
-                    "score": round(row["score"], 4),
-                    "持仓收益": round(rets_r.get(code, 0), 4),
-                })
+                name = (
+                    df_day[df_day["ts_code"] == code]["name"].iloc[0]
+                    if has_name and code in df_day["ts_code"].values
+                    else ""
+                )
+                ind = (
+                    df_day[df_day["ts_code"] == code]["industry_l1"].iloc[0]
+                    if "industry_l1" in df_day.columns and code in df_day["ts_code"].values
+                    else ""
+                )
+                all_picks.append(
+                    {
+                        "调仓日": str(rb)[:10],
+                        "模型": "Regime",
+                        "regime": rname,
+                        "ts_code": code,
+                        "名称": name,
+                        "行业": ind,
+                        "score": round(row["score"], 4),
+                        "持仓收益": round(rets_r.get(code, 0), 4),
+                    }
+                )
 
             # 打印摘要
             overlap = set(top_s["ts_code"]) & set(top_r["ts_code"])
@@ -167,16 +217,26 @@ def main():
             print(f"  --- 单一模型 Top{SHOW_TOP} ---")
             for _, r in top_s.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
-                if nm == "nan": nm = ""
+                nm = (
+                    str(df_day[df_day["ts_code"] == c]["name"].iloc[0])
+                    if has_name and c in df_day["ts_code"].values
+                    else ""
+                )
+                if nm == "nan":
+                    nm = ""
                 ret = rets_s.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
 
             print(f"  --- Regime模型 Top{SHOW_TOP} ---")
             for _, r in top_r.head(SHOW_TOP).iterrows():
                 c = r["ts_code"]
-                nm = str(df_day[df_day["ts_code"]==c]["name"].iloc[0]) if has_name and c in df_day["ts_code"].values else ""
-                if nm == "nan": nm = ""
+                nm = (
+                    str(df_day[df_day["ts_code"] == c]["name"].iloc[0])
+                    if has_name and c in df_day["ts_code"].values
+                    else ""
+                )
+                if nm == "nan":
+                    nm = ""
                 ret = rets_r.get(c, 0)
                 print(f"    {c} {nm:6s} score={r['score']:.4f} ret={ret:+.2%}")
 

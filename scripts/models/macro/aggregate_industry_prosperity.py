@@ -15,13 +15,14 @@ processed/industry_prosperity_sw_l1.parquet
 import argparse
 import sys
 from pathlib import Path
+
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_tushare_root, get_data_path
 from sage_core.industry.signal_indicators import IndustryProsperity
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 
 def load_constituents(tushare_root: Path) -> pd.DataFrame:
@@ -54,19 +55,21 @@ def aggregate_prosperity(
         on="ts_code",
         how="left",
     )
-    valid = merged[
-        (merged["end_date"] >= merged["in_date"]) & (merged["end_date"] <= merged["out_date"])
-    ].copy()
+    valid = merged[(merged["end_date"] >= merged["in_date"]) & (merged["end_date"] <= merged["out_date"])].copy()
 
     if valid.empty:
         raise RuntimeError("无法匹配行业成分（无有效记录）")
 
-    agg = valid.groupby(["industry_name", "end_date"]).agg(
-        prosperity_ratio=("prosperity_signal", "mean"),
-        revenue_acceleration_mean=("revenue_acceleration", "mean"),
-        gross_margin_change_mean=("margin_change", "mean"),
-        sample_count=("ts_code", "count"),
-    ).reset_index()
+    agg = (
+        valid.groupby(["industry_name", "end_date"])
+        .agg(
+            prosperity_ratio=("prosperity_signal", "mean"),
+            revenue_acceleration_mean=("revenue_acceleration", "mean"),
+            gross_margin_change_mean=("margin_change", "mean"),
+            sample_count=("ts_code", "count"),
+        )
+        .reset_index()
+    )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / "industry_prosperity_sw_l1.parquet"

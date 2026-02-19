@@ -2,10 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from sage_core.execution.unified_signal_contract import (
-    UNIFIED_SIGNAL_COLUMNS,
-    build_unified_signal_contract,
-)
+from sage_core.execution.unified_signal_contract import UNIFIED_SIGNAL_COLUMNS, build_unified_signal_contract
 
 
 def test_build_unified_signal_contract_includes_stock_industry_trend():

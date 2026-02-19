@@ -8,4 +8,3 @@ git config core.hooksPath .githooks
 echo "Configured git hooks path: $(git config core.hooksPath)"
 echo "Hooks installed:"
 ls -1 .githooks
-

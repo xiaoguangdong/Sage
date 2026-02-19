@@ -14,14 +14,13 @@ from __future__ import annotations
 import argparse
 import json
 import random
-import re
 import sys
 import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -29,7 +28,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.data._shared.runtime import disable_proxy, get_data_path, setup_logger
-
 
 logger = setup_logger(Path(__file__).stem, module="data")
 
@@ -53,7 +51,7 @@ def _jsonp_to_json(text: str) -> Dict:
     if text.endswith(")"):
         left = text.find("(")
         if left != -1:
-            text = text[left + 1:-1]
+            text = text[left + 1 : -1]
     return json.loads(text)
 
 
@@ -167,13 +165,7 @@ def _normalize_rows(rows: List[Dict]) -> pd.DataFrame:
     df["source_name"] = "东方财富行业研报"
     df["source_type"] = "research_report"
     df["content"] = (
-        df.get("title", "")
-        + " "
-        + df.get("industry", "")
-        + " "
-        + df.get("org", "")
-        + " "
-        + df.get("rating", "")
+        df.get("title", "") + " " + df.get("industry", "") + " " + df.get("org", "") + " " + df.get("rating", "")
     )
     df = df.dropna(subset=["publish_date", "title"])
     keep_cols = [

@@ -33,10 +33,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.data._shared.runtime import (
-    get_tushare_root,
-    get_tushare_token,
-)
+from scripts.data._shared.runtime import get_tushare_root, get_tushare_token
 
 try:
     import tushare as ts
@@ -93,12 +90,9 @@ class HistoricalDataBackfiller:
         # 配置日志格式
         logging.basicConfig(
             level=logging.INFO,
-            format='%(asctime)s [%(levelname)s] %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            handlers=[
-                logging.FileHandler(log_file, encoding='utf-8'),
-                logging.StreamHandler(sys.stdout)
-            ]
+            format="%(asctime)s [%(levelname)s] %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
+            handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)],
         )
 
         self.logger = logging.getLogger(__name__)
@@ -152,11 +146,12 @@ class HistoricalDataBackfiller:
             except Exception as e:
                 self.log(f"{name} 补充失败: {e}", "ERROR")
                 import traceback
+
                 self.logger.error(traceback.format_exc())
 
                 if not self.dry_run:
                     user_input = input("是否继续下一个任务？(y/n): ")
-                    if user_input.lower() != 'y':
+                    if user_input.lower() != "y":
                         raise
 
             # 任务间休息，避免限流

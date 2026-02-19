@@ -1,10 +1,10 @@
 """
 统一字段规范工具
 """
+
 from __future__ import annotations
 
 import pandas as pd
-
 
 CODE_CANDIDATES = ("ts_code", "code", "stock")
 DATE_CANDIDATES = ("trade_date", "date", "datetime")

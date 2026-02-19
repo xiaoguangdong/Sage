@@ -382,8 +382,8 @@ LSTM / Transformer / RL 常见问题：
 #### 标签设计（关键）
 
 ```text
-label = 1  
-if max_return(t+1 ~ t+K) > threshold  
+label = 1
+if max_return(t+1 ~ t+K) > threshold
 and max_drawdown < limit
 ```
 
@@ -691,7 +691,7 @@ and max_drawdown < limit
 ##### 标签设计（核心）
 
 ```text
-label = 1  
+label = 1
 if forward_return(t+1 ~ t+K) > threshold
 AND max_drawdown < limit
 ```
@@ -904,8 +904,8 @@ AND volatility < threshold:
 ### ✅ 正确目标
 
 ```text
-在当前时刻 t  
-未来 K 天内  
+在当前时刻 t
+未来 K 天内
 是否出现“可接受回撤下的正收益窗口”
 ```
 
@@ -2730,7 +2730,7 @@ weight_i ∝ score_i / volatility_i
 然后构造：
 
 ```text
-growth_strong = IC_growth(t) > IC_value(t) AND IC_growth(t) > IC_mom(t)  
+growth_strong = IC_growth(t) > IC_value(t) AND IC_growth(t) > IC_mom(t)
 value_strong  = IC_value(t) > IC_growth(t) AND IC_value(t) > IC_mom(t)
 momentum_strong = IC_mom(t) > IC_growth(t) AND IC_mom(t) > IC_value(t)
 ```
@@ -2773,7 +2773,7 @@ A 股风格切换往往体现在大盘 vs 小盘、成长 vs 价值、红利 vs 
 定义：
 
 ```text
-size_diff = (SmallCap_Index / LargeCap_Index) 
+size_diff = (SmallCap_Index / LargeCap_Index)
 value_diff = (Value_Index / Growth_Index)
 ```
 
@@ -7327,7 +7327,7 @@ junk_ratio = count(junk_up) / count(all_up)
 
 
 
-# AI / 算力（2023–2024） 
+# AI / 算力（2023–2024）
 
 好，这一段 **AI / 算力（2023–2024）** 我会**非常贴近你真实经历的节奏来拆**，而且我会明确标出：
 
@@ -8656,7 +8656,7 @@ raw = np.array([
 
 
 # 关于风格状态机的疑问
- 
+
 
  疑问1：这些指标真的能区分"牛市启动"和"诱多反弹"吗？
 
@@ -8680,7 +8680,7 @@ raw = np.array([
   这已经是"事后确认"，不是"事前预警"！
   等你判定EXIT时，可能已经跌了10-20%了。
 
-  
+
 
   疑问3：9个指标缺乏"市场环境"维度
   文档中的9个指标都是微观层面（个股/板块），完全忽略了：
@@ -10686,7 +10686,7 @@ def theme_score(prices: pd.DataFrame,  # columns: tickers, index: date, close
 
         # leader strength: top q momentum
         mom = ret_w[mem].iloc[-1].dropna()
-        if mom.empty: 
+        if mom.empty:
             continue
         topn = max(1, int(len(mom) * top_q))
         ls = mom.sort_values(ascending=False).head(topn).mean()
@@ -10800,42 +10800,42 @@ import talib
 def detect_market_theme(price_data, fundamental_data, window=60):
     """
     识别市场主线逻辑的函数
-    
+
     参数:
     price_data: DataFrame, 包含各板块指数的收盘价
     fundamental_data: DataFrame, 包含各板块的盈利预测变动(ROE Forecast Change)
-    
+
     返回:
     ranked_sectors: Series, 按照主线强度排名的板块
     """
-    
+
     # 1. 计算动量因子 (RPS)
     # 计算过去window日的涨跌幅
     momentum = price_data.iloc[-1] / price_data.iloc[-window] - 1
-    
+
     # 2. 计算波动率 (风险控制，低波动在牛市中期往往更稳)
     returns = price_data.pct_change()
     volatility = returns.iloc[-window:].std() * np.sqrt(252)
-    
+
     # 3. 基本面改善 (预期修正)
     # 假设fundamental_data是近期分析师上调预期的比例
     fund_score = fundamental_data['Forecast_Up_Ratio']
-    
+
     # 4. 综合评分
     # 逻辑：主线 = 高动量 + 基本面改善 + 相对较低的波动(避免纯投机)
     # 权重分配可以根据市场环境微调
     weights = {'momentum': 0.5, 'fund': 0.4, 'vol': -0.1}
-    
+
     # 标准化处理
     def normalize(s):
         return (s - s.mean()) / s.std()
-    
-    score = (normalize(momentum) * weights['momentum'] + 
-             normalize(fund_score) * weights['fund'] + 
+
+    score = (normalize(momentum) * weights['momentum'] +
+             normalize(fund_score) * weights['fund'] +
              normalize(1/volatility) * abs(weights['vol']))
-    
+
     ranked_sectors = score.sort_values(ascending=False)
-    
+
     return ranked_sectors
 # 模拟数据生成 (实盘时需接入Wind/同花顺接口)
 sectors = ['Liquor', 'NewEnergy', 'AI', 'Coal', 'Bank']
@@ -13210,12 +13210,12 @@ TuShare 的 `hk_hold` 文档明确写：交易所从 **2024-08-20** 起停止发
 
 
 
-#### 1. 宏观与产业生命周期映射 
+#### 1. 宏观与产业生命周期映射
 * **核心逻辑**：任何板块的爆发都有其宏观背景。我们利用美林时钟和产业渗透率（S型曲线）模型来定位。
 * **数据**：PPI/CPI（通胀）、10年期国债收益率（贴现率）、行业资本开支（CAPEX）增速。
 * **指标**：当一个行业的CAPEX连续3个季度环比增长，且PPI分项中该 category 价格回升，说明进入复苏期。
 
-#### 2. 主线识别的核心量化指标：RPS与预期修正 
+#### 2. 主线识别的核心量化指标：RPS与预期修正
 * **RPS (Relative Price Strength)**：这是欧奈尔（CAN SLIM）法则的核心。我计算每只股票过去半年（120日）和一年（250日）相对于市场整体的涨幅排名。
 * **公式**：$RPS = \frac{Count(R_i > R_{market})}{N} \times 100$
 * **信号**：如果某一板块内超过40%的股票 RPS > 85，该板块极大概率成为牛市主线。
@@ -15679,7 +15679,3 @@ Value Alpha
 * 绩效分析
 
 你改 token 就能跑全系统。
-
-
-
-

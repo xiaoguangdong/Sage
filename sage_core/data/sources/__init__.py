@@ -1,6 +1,6 @@
-from .base import DataSource, DataSourceRegistry, SourceConfig, SOURCE_REGISTRY, register_source
-from .tushare import TushareSource
+from .base import SOURCE_REGISTRY, DataSource, DataSourceRegistry, SourceConfig, register_source
 from .eastmoney import EastmoneySource
+from .tushare import TushareSource
 
 __all__ = [
     "DataSource",

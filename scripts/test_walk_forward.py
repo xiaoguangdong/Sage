@@ -1,11 +1,11 @@
 """
 Walk-Forward 评估测试 — 验证选股模型真实表现
 """
+
+import logging
 import os
 import sys
-import logging
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -56,7 +56,8 @@ def merge_data(df_stock, df_basic, df_industry):
         if ind_col in df_industry.columns:
             df = df.merge(
                 df_industry[["ts_code", ind_col]].drop_duplicates("ts_code"),
-                on="ts_code", how="left",
+                on="ts_code",
+                how="left",
             )
             df.rename(columns={ind_col: "industry_l1"}, inplace=True)
     return df
@@ -87,13 +88,13 @@ def run_test():
 
     # Walk-Forward 配置
     wf_cfg = WalkForwardConfig(
-        train_days=504,     # 2年训练
-        val_days=63,        # 1季度验证
-        step_days=63,       # 1季度步进
-        purge_days=30,      # 30天 purge（>= 20天标签 × 1.5）
+        train_days=504,  # 2年训练
+        val_days=63,  # 1季度验证
+        step_days=63,  # 1季度步进
+        purge_days=30,  # 30天 purge（>= 20天标签 × 1.5）
         embargo_days=5,
         n_quantiles=5,
-        forward_days=20,    # 20天前瞻收益评估
+        forward_days=20,  # 20天前瞻收益评估
     )
 
     # 运行
@@ -109,16 +110,18 @@ def run_test():
     print(f"\n窗口数: {len(result.window_details)}")
     for w in result.window_details:
         if w.get("status") == "ok":
-            print(f"  Window {w['window_id']}: "
-                  f"{w['train_start']}~{w['train_end']} → {w['val_start']}~{w['val_end']} "
-                  f"({w['n_features']} features)")
+            print(
+                f"  Window {w['window_id']}: "
+                f"{w['train_start']}~{w['train_end']} → {w['val_start']}~{w['val_end']} "
+                f"({w['n_features']} features)"
+            )
         else:
             print(f"  Window {w['window_id']}: {w['status']}")
 
     # 分组收益
     s = result.summary
     if "error" not in s:
-        print(f"\n分组回测 (Quintile Analysis):")
+        print("\n分组回测 (Quintile Analysis):")
         print(f"  评估日期数: {s['n_dates']}")
         print(f"  每日平均股票数: {s['n_stocks_per_date']:.0f}")
         print(f"\n  各组平均 {wf_cfg.forward_days} 日收益:")

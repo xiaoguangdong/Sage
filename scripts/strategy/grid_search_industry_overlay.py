@@ -257,7 +257,8 @@ def main() -> None:
             },
         },
         "delta_best_minus_baseline": {
-            "industry_cost_adjusted_annual_return": float(best["industry_cost_adjusted_annual_return"]) - baseline_cost_ann,
+            "industry_cost_adjusted_annual_return": float(best["industry_cost_adjusted_annual_return"])
+            - baseline_cost_ann,
             "industry_max_drawdown": float(best["industry_max_drawdown"]) - baseline_mdd,
             "industry_hit_rate": float(best["industry_hit_rate"]) - float(baseline["industry_hit_rate"]),
         },

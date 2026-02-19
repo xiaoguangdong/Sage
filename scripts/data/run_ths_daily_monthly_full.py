@@ -8,8 +8,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 def _run(command: list[str]) -> None:
     print("执行:", " ".join(command))
     result = subprocess.run(command, cwd=str(PROJECT_ROOT))

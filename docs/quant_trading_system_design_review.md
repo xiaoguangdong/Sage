@@ -1,8 +1,8 @@
 # 量化交易系统设计文档评审报告
 
-**评审人**：资深AI研究员  
-**评审日期**：2026-02-08  
-**评审对象**：docs/quant_trading_system_design.md  
+**评审人**：资深AI研究员
+**评审日期**：2026-02-08
+**评审对象**：docs/quant_trading_system_design.md
 **需求来源**：docs/chatgpt_qa.md
 
 ---

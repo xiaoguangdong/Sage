@@ -25,7 +25,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_project_root, get_data_root, get_data_path, setup_logger
+from scripts.data._shared.runtime import get_data_path, get_data_root, get_project_root, setup_logger
 
 logger = setup_logger(Path(__file__).stem)
 
@@ -57,6 +57,7 @@ def load_config(config_path: Optional[Path] = None) -> DownloadConfig:
     if path.exists():
         try:
             import yaml  # type: ignore
+
             with open(path, "r", encoding="utf-8") as f:
                 config = yaml.safe_load(f) or {}
         except Exception as exc:
@@ -230,10 +231,13 @@ def download_concept_components(
             df.to_parquet(target_path, index=False)
             logger.info(f"保存成分股: {target_path}")
 
-        _save_state(state_path, {
-            "next_index": idx + 1,
-            "concept_count": len(concepts),
-        })
+        _save_state(
+            state_path,
+            {
+                "next_index": idx + 1,
+                "concept_count": len(concepts),
+            },
+        )
 
         processed += 1
         if max_items and processed >= max_items:
@@ -331,13 +335,16 @@ def download_stock_hist(
             df.to_parquet(target_path, index=False)
             logger.info(f"保存历史数据: {target_path}")
 
-        _save_state(state_path, {
-            "next_index": idx + 1,
-            "symbol_count": len(symbols),
-            "start_date": start,
-            "end_date": end,
-            "adjust": adjust,
-        })
+        _save_state(
+            state_path,
+            {
+                "next_index": idx + 1,
+                "symbol_count": len(symbols),
+                "start_date": start,
+                "end_date": end,
+                "adjust": adjust,
+            },
+        )
 
         processed += 1
         if max_items and processed >= max_items:

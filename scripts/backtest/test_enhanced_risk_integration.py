@@ -11,8 +11,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 from sage_core.backtest.simple_engine import SimpleBacktestEngine
 from sage_core.backtest.types import BacktestConfig
@@ -37,14 +37,16 @@ def generate_test_data(n_days=252, n_stocks=50):
             close = 10.0 * (1 + np.random.normal(0, 0.1))
             high = close * 1.01
             low = close * 0.99
-            returns_data.append({
-                "trade_date": date,
-                "ts_code": stock,
-                "ret": ret,
-                "close": close,
-                "high": high,
-                "low": low,
-            })
+            returns_data.append(
+                {
+                    "trade_date": date,
+                    "ts_code": stock,
+                    "ret": ret,
+                    "close": close,
+                    "high": high,
+                    "low": low,
+                }
+            )
 
     returns_df = pd.DataFrame(returns_data)
 
@@ -67,13 +69,15 @@ def generate_test_data(n_days=252, n_stocks=50):
         for stock in selected_stocks:
             industry = np.random.choice(industries)
             score = np.random.uniform(0, 1)
-            signals_data.append({
-                "trade_date": date,
-                "ts_code": stock,
-                "score": score,
-                "industry": industry,
-                "confidence": confidence,
-            })
+            signals_data.append(
+                {
+                    "trade_date": date,
+                    "ts_code": stock,
+                    "score": score,
+                    "industry": industry,
+                    "confidence": confidence,
+                }
+            )
 
     signals_df = pd.DataFrame(signals_data)
 
@@ -104,7 +108,7 @@ def test_basic_backtest():
 
     print(f"\n初始资金: {config.initial_capital:,.0f}")
     print(f"最终资金: {result.values[-1]:,.0f}")
-    print(f"\n绩效指标:")
+    print("\n绩效指标:")
     print(f"  总收益率: {result.metrics['total_return']:.2%}")
     print(f"  年化收益: {result.metrics['annual_return']:.2%}")
     print(f"  年化波动: {result.metrics['annual_volatility']:.2%}")
@@ -113,7 +117,7 @@ def test_basic_backtest():
 
     # 分析交易
     trades_df = pd.DataFrame(result.trades)
-    print(f"\n交易统计:")
+    print("\n交易统计:")
     print(f"  平均持仓数: {trades_df['positions'].mean():.1f}")
     print(f"  平均换手率: {trades_df['turnover'].mean():.2%}")
     print(f"  平均成本: {trades_df['cost'].mean():.4%}")
@@ -158,7 +162,7 @@ def test_enhanced_risk_control_backtest():
 
     print(f"\n初始资金: {config.initial_capital:,.0f}")
     print(f"最终资金: {result.values[-1]:,.0f}")
-    print(f"\n绩效指标:")
+    print("\n绩效指标:")
     print(f"  总收益率: {result.metrics['total_return']:.2%}")
     print(f"  年化收益: {result.metrics['annual_return']:.2%}")
     print(f"  年化波动: {result.metrics['annual_volatility']:.2%}")
@@ -168,14 +172,14 @@ def test_enhanced_risk_control_backtest():
 
     # 分析交易
     trades_df = pd.DataFrame(result.trades)
-    print(f"\n交易统计:")
+    print("\n交易统计:")
     print(f"  平均持仓数: {trades_df['positions'].mean():.1f}")
     print(f"  平均换手率: {trades_df['turnover'].mean():.2%}")
     print(f"  平均成本: {trades_df['cost'].mean():.4%}")
 
     # 分析confidence和止损
     if "confidence" in trades_df.columns:
-        print(f"\n风控统计:")
+        print("\n风控统计:")
         print(f"  平均confidence: {trades_df['confidence'].mean():.2f}")
         print(f"  个股止损次数: {trades_df['stop_stocks'].sum()}")
         print(f"  行业止损次数: {trades_df['stop_industries'].sum()}")
@@ -241,9 +245,11 @@ def test_comparison():
         else:
             print(f"{name:<20} | {basic_val:<15.2f} | {enhanced_val:<15.2f} | {diff:+.2f}")
 
-    print(f"\n结论:")
+    print("\n结论:")
     if result_enhanced.metrics["max_drawdown"] < result_basic.metrics["max_drawdown"]:
-        print(f"  ✓ 增强风控降低了最大回撤 {(result_basic.metrics['max_drawdown'] - result_enhanced.metrics['max_drawdown']):.2%}")
+        print(
+            f"  ✓ 增强风控降低了最大回撤 {(result_basic.metrics['max_drawdown'] - result_enhanced.metrics['max_drawdown']):.2%}"
+        )
     if result_enhanced.metrics["sharpe"] > result_basic.metrics["sharpe"]:
         print(f"  ✓ 增强风控提高了夏普比率 {(result_enhanced.metrics['sharpe'] - result_basic.metrics['sharpe']):.2f}")
 

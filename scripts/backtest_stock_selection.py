@@ -3,26 +3,24 @@
 对比：单一模型 / 分Regime模型 / 沪深300基准
 持仓周期：20个交易日
 """
-import os
-import sys
+
 import copy
 import logging
+import os
+import sys
 import warnings
 
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
 
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", message=".*ConstantInput.*")
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
-from sage_core.stock_selection.regime_stock_selector import (
-    RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
-)
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
@@ -84,7 +82,8 @@ def merge_data(df_stock, df_basic, df_industry):
         if ind_col in df_industry.columns:
             df = df.merge(
                 df_industry[["ts_code", ind_col]].drop_duplicates("ts_code"),
-                on="ts_code", how="left",
+                on="ts_code",
+                how="left",
             )
             df.rename(columns={ind_col: "industry_l1"}, inplace=True)
     return df
@@ -99,9 +98,7 @@ def compute_portfolio_return(df_all, selected_codes, start_date, end_date):
     ].copy()
     if port.empty:
         return pd.DataFrame()
-    daily_ret = port.groupby("trade_date").apply(
-        lambda g: g["close"].values / g.groupby("ts_code")["close"].shift(1).values - 1
-    )
+    port.groupby("trade_date").apply(lambda g: g["close"].values / g.groupby("ts_code")["close"].shift(1).values - 1)
     # 简化：用每日截面平均收益
     port["ret"] = port.groupby("ts_code")["close"].pct_change()
     daily_avg = port.groupby("trade_date")["ret"].mean().dropna()
@@ -163,9 +160,9 @@ def run_backtest():
 
     # ── 回测 ──
     print(f"\n开始回测 {BT_START} ~ {BT_END}...")
-    bt_dates = sorted(df_all[
-        (df_all["trade_date"] >= BT_START) & (df_all["trade_date"] <= BT_END)
-    ]["trade_date"].unique())
+    bt_dates = sorted(
+        df_all[(df_all["trade_date"] >= BT_START) & (df_all["trade_date"] <= BT_END)]["trade_date"].unique()
+    )
 
     # 每 HOLD_DAYS 天调仓
     rebalance_dates = bt_dates[::HOLD_DAYS]
@@ -197,15 +194,11 @@ def run_backtest():
             top_r = pred_r.nlargest(TOP_N, "score")["ts_code"].tolist()
 
             # 计算持仓期收益
-            hold_data = df_all[
-                (df_all["trade_date"] > rb_date) & (df_all["trade_date"] <= hold_end)
-            ]
+            hold_data = df_all[(df_all["trade_date"] > rb_date) & (df_all["trade_date"] <= hold_end)]
 
             for code_list, records in [(top_s, records_single), (top_r, records_regime)]:
                 port = hold_data[hold_data["ts_code"].isin(code_list)]
-                daily_ret = port.groupby("trade_date")["close"].apply(
-                    lambda s: s.pct_change().mean() if len(s) > 1 else 0
-                )
+                port.groupby("trade_date")["close"].apply(lambda s: s.pct_change().mean() if len(s) > 1 else 0)
                 # 用更准确的方式：每只股票的持仓期收益
                 stock_rets = []
                 for code in code_list:
@@ -214,17 +207,21 @@ def run_backtest():
                         ret = stk["close"].iloc[-1] / stk["close"].iloc[0] - 1
                         stock_rets.append(ret)
                 period_ret = np.mean(stock_rets) if stock_rets else 0
-                records.append({
-                    "rebalance_date": rb_date,
-                    "hold_end": hold_end,
-                    "regime": regime_name,
-                    "period_return": period_ret,
-                    "n_stocks": len(stock_rets),
-                })
+                records.append(
+                    {
+                        "rebalance_date": rb_date,
+                        "hold_end": hold_end,
+                        "regime": regime_name,
+                        "period_return": period_ret,
+                        "n_stocks": len(stock_rets),
+                    }
+                )
 
-            print(f"  {str(rb_date)[:10]} [{regime_name:7s}] "
-                  f"单一={records_single[-1]['period_return']:+.2%}, "
-                  f"Regime={records_regime[-1]['period_return']:+.2%}")
+            print(
+                f"  {str(rb_date)[:10]} [{regime_name:7s}] "
+                f"单一={records_single[-1]['period_return']:+.2%}, "
+                f"Regime={records_regime[-1]['period_return']:+.2%}"
+            )
 
         except Exception as e:
             print(f"  {str(rb_date)[:10]} 失败: {e}")
@@ -234,9 +231,7 @@ def run_backtest():
     df_regime = pd.DataFrame(records_regime)
 
     # 沪深300收益
-    idx_bt_period = df_index[
-        (df_index["date"] >= BT_START) & (df_index["date"] <= BT_END)
-    ].sort_values("date")
+    idx_bt_period = df_index[(df_index["date"] >= BT_START) & (df_index["date"] <= BT_END)].sort_values("date")
 
     # 计算累计净值
     def cum_nav(period_returns):
@@ -249,7 +244,7 @@ def run_backtest():
     nav_regime = cum_nav(df_regime["period_return"].tolist())
 
     idx_start_price = idx_bt_period["close"].iloc[0]
-    idx_nav = (idx_bt_period["close"] / idx_start_price).values
+    (idx_bt_period["close"] / idx_start_price).values
 
     # 在调仓日对齐指数净值
     nav_dates = [pd.Timestamp(BT_START)] + df_single["hold_end"].tolist()
@@ -266,8 +261,7 @@ def run_backtest():
     print("回测结果汇总")
     print("=" * 60)
 
-    for name, df_r, nav in [("单一模型", df_single, nav_single),
-                             ("Regime模型", df_regime, nav_regime)]:
+    for name, df_r, nav in [("单一模型", df_single, nav_single), ("Regime模型", df_regime, nav_regime)]:
         total_ret = nav[-1] - 1
         n_periods = len(df_r)
         win_rate = (df_r["period_return"] > 0).mean()
@@ -284,7 +278,7 @@ def run_backtest():
         print(f"  平均每期收益: {avg_ret:+.2%}")
 
     idx_total = idx_nav_at_rb[-1] - 1
-    print(f"\n沪深300:")
+    print("\n沪深300:")
     print(f"  累计收益: {idx_total:+.2%}")
 
     # 按 regime 分析
@@ -294,9 +288,11 @@ def run_backtest():
         mask_s = df_single["regime"] == regime_name
         mask_r = df_regime["regime"] == regime_name
         if mask_s.sum() > 0:
-            print(f"  [{regime_name:7s}] 单一={df_single[mask_s]['period_return'].mean():+.2%}, "
-                  f"Regime={df_regime[mask_r]['period_return'].mean():+.2%}, "
-                  f"期数={mask_s.sum()}")
+            print(
+                f"  [{regime_name:7s}] 单一={df_single[mask_s]['period_return'].mean():+.2%}, "
+                f"Regime={df_regime[mask_r]['period_return'].mean():+.2%}, "
+                f"期数={mask_s.sum()}"
+            )
 
     # ── 可视化 ──
     fig, axes = plt.subplots(2, 1, figsize=(14, 10), gridspec_kw={"height_ratios": [3, 1]})
@@ -321,15 +317,27 @@ def run_backtest():
     # 每期超额收益
     ax2 = axes[1]
     x = range(len(df_single))
-    excess_single = df_single["period_return"].values - np.diff([1.0] + idx_nav_at_rb[1:])
-    excess_regime = df_regime["period_return"].values - np.diff([1.0] + idx_nav_at_rb[1:])
+    df_single["period_return"].values - np.diff([1.0] + idx_nav_at_rb[1:])
+    df_regime["period_return"].values - np.diff([1.0] + idx_nav_at_rb[1:])
 
     # 简化：直接用绝对收益柱状图
     width = 0.35
-    ax2.bar([i - width/2 for i in x], df_single["period_return"].values * 100, width,
-            label="单一模型", color="steelblue", alpha=0.7)
-    ax2.bar([i + width/2 for i in x], df_regime["period_return"].values * 100, width,
-            label="Regime模型", color="indianred", alpha=0.7)
+    ax2.bar(
+        [i - width / 2 for i in x],
+        df_single["period_return"].values * 100,
+        width,
+        label="单一模型",
+        color="steelblue",
+        alpha=0.7,
+    )
+    ax2.bar(
+        [i + width / 2 for i in x],
+        df_regime["period_return"].values * 100,
+        width,
+        label="Regime模型",
+        color="indianred",
+        alpha=0.7,
+    )
     ax2.axhline(y=0, color="black", linewidth=0.5)
     ax2.set_ylabel("每期收益 (%)", fontsize=11)
     ax2.set_xlabel("调仓期", fontsize=11)
@@ -338,8 +346,7 @@ def run_backtest():
 
     # 添加 regime 标签
     for i, row in df_single.iterrows():
-        ax2.text(i, ax2.get_ylim()[0] * 0.9, row["regime"][:1].upper(),
-                 ha="center", fontsize=7, color="gray")
+        ax2.text(i, ax2.get_ylim()[0] * 0.9, row["regime"][:1].upper(), ha="center", fontsize=7, color="gray")
 
     plt.tight_layout()
     output_dir = "images/backtest"

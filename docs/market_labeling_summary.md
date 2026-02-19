@@ -1,7 +1,7 @@
 # 沪深300指数市场状态打标系统 - 总结报告
 
-**日期**: 2026-02-09  
-**项目**: 深度学习量化交易系统  
+**日期**: 2026-02-09
+**项目**: 深度学习量化交易系统
 **模块**: 市场状态识别与标签生成
 
 ---
@@ -534,14 +534,14 @@ labels = pd.read_csv('images/label/hs300_weekly_labels.csv')
 
 for _, row in labels.iterrows():
     label = row['label']
-    
+
     if label == 2:  # 牛市
         target_position = 1.0  # 满仓
     elif label == 1:  # 震荡
         target_position = 0.5  # 半仓
     else:  # 熊市
         target_position = 0.2  # 低仓位
-    
+
     print(f"{row['date']}: {target_position}")
 ```
 
@@ -691,7 +691,7 @@ reverse_threshold = 0.7  # 反向阈值
 
 ---
 
-**文档版本**: v1.0  
-**最后更新**: 2026-02-09  
+**文档版本**: v1.0
+**最后更新**: 2026-02-09
 **作者**: iFlow CLI & 用户
 **项目**: 深度学习量化交易系统

@@ -120,14 +120,18 @@ def test_build_industry_signal_contract_artifacts(tmp_path):
     )
     concept = pd.DataFrame(
         [
-            {"trade_date": "2026-02-13", "sw_industry": "电子", "concept_bias_strength": 0.4, "concept_signal_confidence": 0.8, "concept_count": 1, "mean_heat_score": 1.2, "overheat_rate": 0.0}
+            {
+                "trade_date": "2026-02-13",
+                "sw_industry": "电子",
+                "concept_bias_strength": 0.4,
+                "concept_signal_confidence": 0.8,
+                "concept_count": 1,
+                "mean_heat_score": 1.2,
+                "overheat_rate": 0.0,
+            }
         ]
     )
-    northbound = pd.DataFrame(
-        [
-            {"trade_date": "2026-01-20", "industry_name": "电子", "ratio_signal": 0.2}
-        ]
-    )
+    northbound = pd.DataFrame([{"trade_date": "2026-01-20", "industry_name": "电子", "ratio_signal": 0.2}])
     policy_path = tmp_path / "policy.parquet"
     concept_path = tmp_path / "concept.parquet"
     northbound_path = tmp_path / "northbound.parquet"

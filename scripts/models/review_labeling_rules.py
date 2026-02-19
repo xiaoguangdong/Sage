@@ -3,9 +3,9 @@
 复核市场状态标签规则（针对沪深300指数）
 分析文档中的12状态和3状态定义，并评估其可操作性
 """
-import pandas as pd
+
 import numpy as np
-from datetime import datetime
+import pandas as pd
 
 from scripts.data._shared.runtime import get_tushare_root
 
@@ -20,48 +20,48 @@ print(f"时间范围: {df['date'].min()} 至 {df['date'].max()}")
 print(f"列名: {df.columns.tolist()}")
 
 # 按日期排序
-df = df.sort_values('date').reset_index(drop=True)
-df['date'] = pd.to_datetime(df['date'])
+df = df.sort_values("date").reset_index(drop=True)
+df["date"] = pd.to_datetime(df["date"])
 
 print("\n" + "=" * 80)
 print("计算技术指标")
 print("=" * 80)
 
 # 计算移动平均
-df['ma20'] = df['close'].rolling(window=20).mean()
-df['ma60'] = df['close'].rolling(window=60).mean()
-df['ma250'] = df['close'].rolling(window=250).mean()
+df["ma20"] = df["close"].rolling(window=20).mean()
+df["ma60"] = df["close"].rolling(window=60).mean()
+df["ma250"] = df["close"].rolling(window=250).mean()
 
 # 计算MACD
-df['ema12'] = df['close'].ewm(span=12, adjust=False).mean()
-df['ema26'] = df['close'].ewm(span=26, adjust=False).mean()
-df['dif'] = df['ema12'] - df['ema26']
-df['dea'] = df['dif'].ewm(span=9, adjust=False).mean()
-df['macd'] = 2 * (df['dif'] - df['dea'])
+df["ema12"] = df["close"].ewm(span=12, adjust=False).mean()
+df["ema26"] = df["close"].ewm(span=26, adjust=False).mean()
+df["dif"] = df["ema12"] - df["ema26"]
+df["dea"] = df["dif"].ewm(span=9, adjust=False).mean()
+df["macd"] = 2 * (df["dif"] - df["dea"])
 
 # 计算RSI
-delta = df['close'].diff()
+delta = df["close"].diff()
 gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
 loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
 rs = gain / loss
-df['rsi'] = 100 - (100 / (1 + rs))
+df["rsi"] = 100 - (100 / (1 + rs))
 
 # 计算布林带
-df['bb_middle'] = df['close'].rolling(window=20).mean()
-df['bb_std'] = df['close'].rolling(window=20).std()
-df['bb_upper'] = df['bb_middle'] + 2 * df['bb_std']
-df['bb_lower'] = df['bb_middle'] - 2 * df['bb_std']
+df["bb_middle"] = df["close"].rolling(window=20).mean()
+df["bb_std"] = df["close"].rolling(window=20).std()
+df["bb_upper"] = df["bb_middle"] + 2 * df["bb_std"]
+df["bb_lower"] = df["bb_middle"] - 2 * df["bb_std"]
 
 # 计算ATR
-high_low = df['high'] - df['low']
-high_close = np.abs(df['high'] - df['close'].shift())
-low_close = np.abs(df['low'] - df['close'].shift())
+high_low = df["high"] - df["low"]
+high_close = np.abs(df["high"] - df["close"].shift())
+low_close = np.abs(df["low"] - df["close"].shift())
 tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
-df['atr'] = tr.rolling(window=14).mean()
+df["atr"] = tr.rolling(window=14).mean()
 
 # 计算成交量MA
-df['vol_ma20'] = df['vol'].rolling(window=20).mean()
-df['vol_ma250'] = df['vol'].rolling(window=250).mean()
+df["vol_ma20"] = df["vol"].rolling(window=20).mean()
+df["vol_ma250"] = df["vol"].rolling(window=250).mean()
 
 print("✓ 技术指标计算完成")
 

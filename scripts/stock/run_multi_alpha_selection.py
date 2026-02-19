@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
-import sys
 import logging
+import sys
+from pathlib import Path
 
 import pandas as pd
 
@@ -18,10 +18,9 @@ sys.path.insert(0, str(ROOT))
 from sage_core.stock_selection.multi_alpha_selector import MultiAlphaStockSelector
 from scripts.data._shared.runtime import get_tushare_root
 
-
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("multi_alpha_selection")
 

@@ -22,7 +22,6 @@ from sage_core.backtest.types import BacktestConfig
 from scripts.data._shared.runtime import get_data_path
 from scripts.data.macro.clean_macro_data import MacroDataProcessor
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -103,12 +102,14 @@ def build_stock_signals(
         if merged.empty:
             continue
         for _, row in merged.iterrows():
-            signals.append({
-                "trade_date": date_str,
-                "ts_code": row["ts_code"],
-                "score": row["policy_score"],
-                "industry": row["industry"],
-            })
+            signals.append(
+                {
+                    "trade_date": date_str,
+                    "ts_code": row["ts_code"],
+                    "score": row["policy_score"],
+                    "industry": row["industry"],
+                }
+            )
     return pd.DataFrame(signals)
 
 

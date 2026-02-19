@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pandas as pd
 
-
 SUPPORTED_EXTS = {".csv", ".parquet"}
 DATE_COLUMNS = {"trade_date", "date", "month", "ann_date", "end_date", "cal_date"}
 KEY_CANDIDATES = [
@@ -62,11 +61,7 @@ def summarize_df(df: pd.DataFrame) -> dict:
         if all(k in df.columns for k in keys):
             duplicate_summary["+".join(keys)] = int(df.duplicated(subset=list(keys)).sum())
 
-    missing_by_col = (
-        df.isna().mean().sort_values(ascending=False).head(10).to_dict()
-        if n_cols > 0
-        else {}
-    )
+    missing_by_col = df.isna().mean().sort_values(ascending=False).head(10).to_dict() if n_cols > 0 else {}
 
     return {
         "rows": n_rows,
@@ -102,12 +97,8 @@ def render_report(summary: dict, output_path: Path) -> None:
     lines.append("| 文件 | 行数 | 列数 | 缺失率 | 日期范围 | 重复键 | 读取状态 |")
     lines.append("| --- | ---: | ---: | ---: | --- | --- | --- |")
     for item in summary["files"]:
-        date_str = ", ".join(
-            f"{k}: {v['min']}~{v['max']}" for k, v in item.get("dates", {}).items()
-        ) or "-"
-        dup_str = ", ".join(
-            f"{k}: {v}" for k, v in item.get("duplicates", {}).items()
-        ) or "-"
+        date_str = ", ".join(f"{k}: {v['min']}~{v['max']}" for k, v in item.get("dates", {}).items()) or "-"
+        dup_str = ", ".join(f"{k}: {v}" for k, v in item.get("duplicates", {}).items()) or "-"
         lines.append(
             f"| {item['path']} | {item['rows']} | {item['cols']} | "
             f"{item['missing_ratio']} | {date_str} | {dup_str} | {item['status']} |"

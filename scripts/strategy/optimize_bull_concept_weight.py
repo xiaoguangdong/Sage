@@ -45,7 +45,9 @@ def _parse_float_list(raw: str) -> List[float]:
     return values
 
 
-def _segment_metrics(detail: pd.DataFrame, dominant_state: pd.DataFrame, state_name: str, hold_days: int) -> Dict[str, float]:
+def _segment_metrics(
+    detail: pd.DataFrame, dominant_state: pd.DataFrame, state_name: str, hold_days: int
+) -> Dict[str, float]:
     if detail.empty:
         return {
             "periods": 0,
@@ -220,17 +222,26 @@ def main() -> None:
                 "bull_net_excess_annual_return": float(bull["net_excess_annual"]),
                 "bull_net_excess_total_return": float(bull["net_excess_total"]),
                 "bull_net_excess_hit_rate": float(bull["net_excess_hit_rate"]),
-                "delta_full_annual_vs_prosperity": float(summary["industry_cost_adjusted_annual_return"] - base_summary["industry_cost_adjusted_annual_return"]),
-                "delta_full_mdd_vs_prosperity": float(summary["industry_max_drawdown"] - base_summary["industry_max_drawdown"]),
+                "delta_full_annual_vs_prosperity": float(
+                    summary["industry_cost_adjusted_annual_return"]
+                    - base_summary["industry_cost_adjusted_annual_return"]
+                ),
+                "delta_full_mdd_vs_prosperity": float(
+                    summary["industry_max_drawdown"] - base_summary["industry_max_drawdown"]
+                ),
                 "delta_bull_annual_vs_prosperity": float(bull["net_excess_annual"] - base_bull["net_excess_annual"]),
                 "delta_bull_total_vs_prosperity": float(bull["net_excess_total"] - base_bull["net_excess_total"]),
             }
         )
 
-    results = pd.DataFrame(rows).sort_values(
-        ["delta_bull_annual_vs_prosperity", "delta_full_annual_vs_prosperity"],
-        ascending=False,
-    ).reset_index(drop=True)
+    results = (
+        pd.DataFrame(rows)
+        .sort_values(
+            ["delta_bull_annual_vs_prosperity", "delta_full_annual_vs_prosperity"],
+            ascending=False,
+        )
+        .reset_index(drop=True)
+    )
     if results.empty:
         feasible = pd.DataFrame()
     else:
@@ -243,7 +254,9 @@ def main() -> None:
             ["delta_bull_annual_vs_prosperity", "delta_full_annual_vs_prosperity", "delta_full_mdd_vs_prosperity"],
             ascending=[False, False, True],
         ).reset_index(drop=True)
-    best = feasible.iloc[0].to_dict() if not feasible.empty else (results.iloc[0].to_dict() if not results.empty else {})
+    best = (
+        feasible.iloc[0].to_dict() if not feasible.empty else (results.iloc[0].to_dict() if not results.empty else {})
+    )
 
     report = {
         "baseline_prosperity_only": {

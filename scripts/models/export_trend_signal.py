@@ -10,6 +10,7 @@
 import argparse
 import sys
 from pathlib import Path
+
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -60,11 +61,7 @@ def summarize(output_file: Path) -> None:
         n = int(counts.get(state, 0))
         pct = n / total * 100 if total else 0
         print(f"{state}: {n} ({pct:.1f}%)")
-    print(
-        f"置信度: mean={conf.mean():.3f}, "
-        f"p50={conf.quantile(0.5):.3f}, "
-        f"p90={conf.quantile(0.9):.3f}"
-    )
+    print(f"置信度: mean={conf.mean():.3f}, " f"p50={conf.quantile(0.5):.3f}, " f"p90={conf.quantile(0.9):.3f}")
 
 
 def main():

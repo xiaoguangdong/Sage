@@ -1,12 +1,13 @@
-import unittest
-import pandas as pd
-import numpy as np
 import sys
+import unittest
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
-from sage_core.stock_selection.stock_selector import StockSelector, SelectionConfig
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 
 
 class TestStockSelector(unittest.TestCase):
@@ -25,23 +26,25 @@ class TestStockSelector(unittest.TestCase):
             price = 10 + np.cumsum(np.random.randn(len(dates)) * 0.2)
             turnover = np.random.uniform(0.01, 0.1, len(dates))
             for i, date in enumerate(dates):
-                rows.append({
-                    "trade_date": date.strftime("%Y%m%d"),
-                    "ts_code": code,
-                    "close": price[i],
-                    "turnover": turnover[i],
-                    "amount": float(price[i] * 1e6),
-                    "pe_ttm": 15.0 + i * 0.02,
-                    "pb": 1.2 + i * 0.005,
-                    "roe_dt": 8.0 + (i % 20) * 0.1,
-                    "grossprofit_margin": 25.0 + (i % 15) * 0.2,
-                    "netprofit_yoy": 10.0 + (i % 12),
-                    "debt_to_assets": 45.0 + (i % 8),
-                    "ocfps": 1.0 + (i % 10) * 0.05,
-                    "northbound_hold_ratio": 0.02 + (i % 5) * 0.001,
-                    "northbound_net_flow": 1_000_000 + i * 1000,
-                    "industry_l1": industries[code],
-                })
+                rows.append(
+                    {
+                        "trade_date": date.strftime("%Y%m%d"),
+                        "ts_code": code,
+                        "close": price[i],
+                        "turnover": turnover[i],
+                        "amount": float(price[i] * 1e6),
+                        "pe_ttm": 15.0 + i * 0.02,
+                        "pb": 1.2 + i * 0.005,
+                        "roe_dt": 8.0 + (i % 20) * 0.1,
+                        "grossprofit_margin": 25.0 + (i % 15) * 0.2,
+                        "netprofit_yoy": 10.0 + (i % 12),
+                        "debt_to_assets": 45.0 + (i % 8),
+                        "ocfps": 1.0 + (i % 10) * 0.05,
+                        "northbound_hold_ratio": 0.02 + (i % 5) * 0.001,
+                        "northbound_net_flow": 1_000_000 + i * 1000,
+                        "industry_l1": industries[code],
+                    }
+                )
 
         self.df = pd.DataFrame(rows)
 

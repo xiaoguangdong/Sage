@@ -37,7 +37,7 @@ class DataCatalog:
 
     def __init__(self, specs: Optional[Iterable[DatasetSpec]] = None):
         self._specs: Dict[str, DatasetSpec] = {}
-        for spec in (specs or self._default_specs()):
+        for spec in specs or self._default_specs():
             self.register(spec)
 
     def register(self, spec: DatasetSpec) -> None:

@@ -15,18 +15,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import pandas as pd
 import numpy as np
+import pandas as pd
 
+from sage_core.backtest.cost_model import create_default_cost_model
 from sage_core.backtest.simple_engine import SimpleBacktestEngine
 from sage_core.backtest.types import BacktestConfig
-from sage_core.backtest.cost_model import create_default_cost_model
 
 
 def generate_monthly_signals(n_months: int = 12, n_stocks: int = 50) -> pd.DataFrame:
     """生成月度调仓信号"""
-    dates = pd.date_range('2023-01-01', periods=n_months*21, freq='D')  # 每月21个交易日
-    dates = [d.strftime('%Y%m%d') for d in dates]
+    dates = pd.date_range("2023-01-01", periods=n_months * 21, freq="D")  # 每月21个交易日
+    dates = [d.strftime("%Y%m%d") for d in dates]
 
     signals = []
     current_stocks = []
@@ -43,26 +43,28 @@ def generate_monthly_signals(n_months: int = 12, n_stocks: int = 50) -> pd.DataF
             else:
                 keep_stocks = []
 
-            available = [f"{j:06d}.SZ" for j in range(1, n_stocks+1) if f"{j:06d}.SZ" not in keep_stocks]
+            available = [f"{j:06d}.SZ" for j in range(1, n_stocks + 1) if f"{j:06d}.SZ" not in keep_stocks]
             n_select = n_keep + n_new - len(keep_stocks)
             new_stocks = np.random.choice(available, n_select, replace=False).tolist()
 
             current_stocks = keep_stocks + new_stocks
 
             for stock in current_stocks:
-                signals.append({
-                    'trade_date': date,
-                    'ts_code': stock,
-                    'score': np.random.random(),
-                })
+                signals.append(
+                    {
+                        "trade_date": date,
+                        "ts_code": stock,
+                        "score": np.random.random(),
+                    }
+                )
 
     return pd.DataFrame(signals)
 
 
 def generate_weekly_signals(n_weeks: int = 52, n_stocks: int = 50) -> pd.DataFrame:
     """生成周度调仓信号"""
-    dates = pd.date_range('2023-01-01', periods=n_weeks*5, freq='D')  # 每周5个交易日
-    dates = [d.strftime('%Y%m%d') for d in dates]
+    dates = pd.date_range("2023-01-01", periods=n_weeks * 5, freq="D")  # 每周5个交易日
+    dates = [d.strftime("%Y%m%d") for d in dates]
 
     signals = []
     current_stocks = []
@@ -79,39 +81,43 @@ def generate_weekly_signals(n_weeks: int = 52, n_stocks: int = 50) -> pd.DataFra
             else:
                 keep_stocks = []
 
-            available = [f"{j:06d}.SZ" for j in range(1, n_stocks+1) if f"{j:06d}.SZ" not in keep_stocks]
+            available = [f"{j:06d}.SZ" for j in range(1, n_stocks + 1) if f"{j:06d}.SZ" not in keep_stocks]
             n_select = n_keep + n_new - len(keep_stocks)
             new_stocks = np.random.choice(available, n_select, replace=False).tolist()
 
             current_stocks = keep_stocks + new_stocks
 
             for stock in current_stocks:
-                signals.append({
-                    'trade_date': date,
-                    'ts_code': stock,
-                    'score': np.random.random(),
-                })
+                signals.append(
+                    {
+                        "trade_date": date,
+                        "ts_code": stock,
+                        "score": np.random.random(),
+                    }
+                )
 
     return pd.DataFrame(signals)
 
 
 def generate_returns(signals: pd.DataFrame) -> pd.DataFrame:
     """生成收益率数据"""
-    dates = signals['trade_date'].unique()
-    stocks = signals['ts_code'].unique()
+    dates = signals["trade_date"].unique()
+    stocks = signals["ts_code"].unique()
 
     returns = []
     for date in dates:
         for stock in stocks:
             ret = np.random.normal(0.0005, 0.02)
-            returns.append({
-                'trade_date': date,
-                'ts_code': stock,
-                'ret': ret,
-                'volatility': abs(np.random.normal(0.02, 0.005)),
-                'amount': np.random.uniform(5_000_000, 50_000_000),
-                'close': np.random.uniform(5, 50),
-            })
+            returns.append(
+                {
+                    "trade_date": date,
+                    "ts_code": stock,
+                    "ret": ret,
+                    "volatility": abs(np.random.normal(0.02, 0.005)),
+                    "amount": np.random.uniform(5_000_000, 50_000_000),
+                    "close": np.random.uniform(5, 50),
+                }
+            )
 
     return pd.DataFrame(returns)
 
@@ -153,23 +159,23 @@ def run_realistic_test():
     )
     result2 = engine2.run(signals_monthly, returns_monthly)
 
-    print(f"\n  简单成本模型:")
+    print("\n  简单成本模型:")
     print(f"    总收益: {result1.metrics['total_return']:>8.2%}")
     print(f"    年化收益: {result1.metrics['annual_return']:>8.2%}")
     print(f"    夏普比率: {result1.metrics['sharpe']:>8.2f}")
 
-    avg_turnover1 = np.mean([t['turnover'] for t in result1.trades if t['turnover'] > 0])
-    avg_cost1 = np.mean([t['cost'] for t in result1.trades if t['turnover'] > 0])
+    avg_turnover1 = np.mean([t["turnover"] for t in result1.trades if t["turnover"] > 0])
+    avg_cost1 = np.mean([t["cost"] for t in result1.trades if t["turnover"] > 0])
     print(f"    平均换手: {avg_turnover1:>8.2%}")
     print(f"    平均成本: {avg_cost1:>8.4%}")
 
-    print(f"\n  完整成本模型:")
+    print("\n  完整成本模型:")
     print(f"    总收益: {result2.metrics['total_return']:>8.2%}")
     print(f"    年化收益: {result2.metrics['annual_return']:>8.2%}")
     print(f"    夏普比率: {result2.metrics['sharpe']:>8.2f}")
 
-    avg_turnover2 = np.mean([t['turnover'] for t in result2.trades if t['turnover'] > 0])
-    avg_cost2 = np.mean([t['cost'] for t in result2.trades if t['turnover'] > 0])
+    avg_turnover2 = np.mean([t["turnover"] for t in result2.trades if t["turnover"] > 0])
+    avg_cost2 = np.mean([t["cost"] for t in result2.trades if t["turnover"] > 0])
     print(f"    平均换手: {avg_turnover2:>8.2%}")
     print(f"    平均成本: {avg_cost2:>8.4%}")
 
@@ -199,23 +205,23 @@ def run_realistic_test():
     )
     result4 = engine4.run(signals_weekly, returns_weekly)
 
-    print(f"\n  简单成本模型:")
+    print("\n  简单成本模型:")
     print(f"    总收益: {result3.metrics['total_return']:>8.2%}")
     print(f"    年化收益: {result3.metrics['annual_return']:>8.2%}")
     print(f"    夏普比率: {result3.metrics['sharpe']:>8.2f}")
 
-    avg_turnover3 = np.mean([t['turnover'] for t in result3.trades if t['turnover'] > 0])
-    avg_cost3 = np.mean([t['cost'] for t in result3.trades if t['turnover'] > 0])
+    avg_turnover3 = np.mean([t["turnover"] for t in result3.trades if t["turnover"] > 0])
+    avg_cost3 = np.mean([t["cost"] for t in result3.trades if t["turnover"] > 0])
     print(f"    平均换手: {avg_turnover3:>8.2%}")
     print(f"    平均成本: {avg_cost3:>8.4%}")
 
-    print(f"\n  完整成本模型:")
+    print("\n  完整成本模型:")
     print(f"    总收益: {result4.metrics['total_return']:>8.2%}")
     print(f"    年化收益: {result4.metrics['annual_return']:>8.2%}")
     print(f"    夏普比率: {result4.metrics['sharpe']:>8.2f}")
 
-    avg_turnover4 = np.mean([t['turnover'] for t in result4.trades if t['turnover'] > 0])
-    avg_cost4 = np.mean([t['cost'] for t in result4.trades if t['turnover'] > 0])
+    avg_turnover4 = np.mean([t["turnover"] for t in result4.trades if t["turnover"] > 0])
+    avg_cost4 = np.mean([t["cost"] for t in result4.trades if t["turnover"] > 0])
     print(f"    平均换手: {avg_turnover4:>8.2%}")
     print(f"    平均成本: {avg_cost4:>8.4%}")
 

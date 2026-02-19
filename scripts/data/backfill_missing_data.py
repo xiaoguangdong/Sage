@@ -30,18 +30,14 @@ import argparse
 import sys
 import time
 from pathlib import Path
-from datetime import datetime, timedelta
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import yaml
 import pandas as pd
+import yaml
 
-from scripts.data._shared.runtime import (
-    get_tushare_root,
-    get_tushare_token,
-)
+from scripts.data._shared.runtime import get_tushare_root, get_tushare_token
 
 try:
     import tushare as ts
@@ -78,7 +74,7 @@ class UnifiedDataBackfiller:
         self.config_path = ROOT / "config/tushare_tasks.yaml"
 
         # 加载配置
-        with open(self.config_path, 'r', encoding='utf-8') as f:
+        with open(self.config_path, "r", encoding="utf-8") as f:
             self.config = yaml.safe_load(f)
 
         # 初始化tushare
@@ -98,31 +94,22 @@ class UnifiedDataBackfiller:
 
     def backfill_all(self):
         """补充所有缺失数据"""
-        tasks = self.config.get('tasks', {})
+        tasks = self.config.get("tasks", {})
 
         # 过滤任务
         if self.tasks_filter:
             tasks = {k: v for k, v in tasks.items() if k in self.tasks_filter}
 
         # 根据模式筛选任务
-        if self.mode == 'monthly':
+        if self.mode == "monthly":
             # 财务数据：year_quarters模式
-            filtered_tasks = {
-                k: v for k, v in tasks.items()
-                if v.get('mode') == 'year_quarters'
-            }
-        elif self.mode == 'daily':
+            filtered_tasks = {k: v for k, v in tasks.items() if v.get("mode") == "year_quarters"}
+        elif self.mode == "daily":
             # 日线数据：date_range模式
-            filtered_tasks = {
-                k: v for k, v in tasks.items()
-                if v.get('mode') == 'date_range'
-            }
-        elif self.mode == 'single':
+            filtered_tasks = {k: v for k, v in tasks.items() if v.get("mode") == "date_range"}
+        elif self.mode == "single":
             # 静态数据：single模式
-            filtered_tasks = {
-                k: v for k, v in tasks.items()
-                if v.get('mode') == 'single'
-            }
+            filtered_tasks = {k: v for k, v in tasks.items() if v.get("mode") == "single"}
         else:
             print(f"错误：不支持的模式 '{self.mode}'")
             return
@@ -143,26 +130,27 @@ class UnifiedDataBackfiller:
             print("-" * 80)
 
             try:
-                if self.mode == 'monthly':
+                if self.mode == "monthly":
                     self._backfill_monthly_task(task_name, task_config)
-                elif self.mode == 'daily':
+                elif self.mode == "daily":
                     self._backfill_daily_task(task_name, task_config)
-                elif self.mode == 'single':
+                elif self.mode == "single":
                     self._backfill_single_task(task_name, task_config)
 
             except Exception as e:
                 print(f"❌ 任务失败: {e}")
                 import traceback
+
                 traceback.print_exc()
 
                 if not self.dry_run:
                     user_input = input("是否继续下一个任务？(y/n): ")
-                    if user_input.lower() != 'y':
+                    if user_input.lower() != "y":
                         raise
 
             # 任务间休息
             if i < len(filtered_tasks):
-                print(f"\n休息10秒，避免限流...")
+                print("\n休息10秒，避免限流...")
                 if not self.dry_run:
                     time.sleep(10)
 
@@ -177,9 +165,9 @@ class UnifiedDataBackfiller:
             task_name: 任务名称
             task_config: 任务配置
         """
-        api_name = task_config['api']
-        output_path = self.data_root / task_config['output']
-        quarters = task_config.get('quarters', ['0331', '0630', '0930', '1231'])
+        api_name = task_config["api"]
+        output_path = self.data_root / task_config["output"]
+        quarters = task_config.get("quarters", ["0331", "0630", "0930", "1231"])
 
         # 确保输出目录存在
         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -191,7 +179,7 @@ class UnifiedDataBackfiller:
                 df_existing = pd.read_parquet(output_path)
                 # 查找period字段
                 period_field = None
-                for field in ['end_date', 'period', 'f_ann_date']:
+                for field in ["end_date", "period", "f_ann_date"]:
                     if field in df_existing.columns:
                         period_field = field
                         break
@@ -211,7 +199,7 @@ class UnifiedDataBackfiller:
                     missing_periods.append(period)
 
         if not missing_periods:
-            print(f"  ✅ 无需补充，数据已完整")
+            print("  ✅ 无需补充，数据已完整")
             return
 
         print(f"  需要补充: {len(missing_periods)} 个季度")
@@ -225,7 +213,7 @@ class UnifiedDataBackfiller:
         new_frames = []
         for period in missing_periods:
             try:
-                print(f"  下载 {period}...", end=' ')
+                print(f"  下载 {period}...", end=" ")
 
                 # 调用API
                 api_func = getattr(self.pro, api_name)
@@ -235,7 +223,7 @@ class UnifiedDataBackfiller:
                     new_frames.append(df)
                     print(f"✓ {len(df)} 条记录")
                 else:
-                    print(f"⚠️  无数据")
+                    print("⚠️  无数据")
 
                 time.sleep(self.sleep_seconds)
 
@@ -253,9 +241,9 @@ class UnifiedDataBackfiller:
                 df_all = pd.concat([df_existing, df_new], ignore_index=True)
 
                 # 去重
-                dedup_keys = task_config.get('dedup_keys', [])
+                dedup_keys = task_config.get("dedup_keys", [])
                 if dedup_keys:
-                    df_all = df_all.drop_duplicates(subset=dedup_keys, keep='last')
+                    df_all = df_all.drop_duplicates(subset=dedup_keys, keep="last")
 
                 df_all.to_parquet(output_path, index=False)
                 print(f"  ✅ 合并保存 {len(df_all)} 条记录（新增 {len(df_new)} 条）")
@@ -270,11 +258,11 @@ class UnifiedDataBackfiller:
             task_name: 任务名称
             task_config: 任务配置
         """
-        api_name = task_config['api']
-        output_path = self.data_root / task_config['output']
-        start_field = task_config.get('start_field', 'start_date')
-        end_field = task_config.get('end_field', 'end_date')
-        dedup_keys = task_config.get('dedup_keys', [])
+        api_name = task_config["api"]
+        output_path = self.data_root / task_config["output"]
+        start_field = task_config.get("start_field", "start_date")
+        end_field = task_config.get("end_field", "end_date")
+        dedup_keys = task_config.get("dedup_keys", [])
 
         print(f"  API: {api_name}")
         print(f"  输出: {output_path}")
@@ -297,7 +285,7 @@ class UnifiedDataBackfiller:
         # 按年份下载
         new_frames = []
         for year in range(self.start_year, self.end_year + 1):
-            print(f"  下载 {year} 年数据...", end=' ')
+            print(f"  下载 {year} 年数据...", end=" ")
 
             try:
                 start_date = f"{year}0101"
@@ -308,8 +296,8 @@ class UnifiedDataBackfiller:
                 params = {start_field: start_date, end_field: end_date}
 
                 # 添加额外参数
-                if 'params' in task_config:
-                    params.update(task_config['params'])
+                if "params" in task_config:
+                    params.update(task_config["params"])
 
                 df = api_func(**params)
 
@@ -317,7 +305,7 @@ class UnifiedDataBackfiller:
                     new_frames.append(df)
                     print(f"✓ {len(df)} 条记录")
                 else:
-                    print(f"⚠️  无数据")
+                    print("⚠️  无数据")
 
                 time.sleep(self.sleep_seconds)
 
@@ -336,7 +324,7 @@ class UnifiedDataBackfiller:
                 # 去重
                 if dedup_keys:
                     before_dedup = len(df_all)
-                    df_all = df_all.drop_duplicates(subset=dedup_keys, keep='last')
+                    df_all = df_all.drop_duplicates(subset=dedup_keys, keep="last")
                     after_dedup = len(df_all)
                     removed = before_dedup - after_dedup
                     if removed > 0:
@@ -348,7 +336,7 @@ class UnifiedDataBackfiller:
                 df_new.to_parquet(output_path, index=False)
                 print(f"  ✅ 保存 {len(df_new)} 条记录")
         else:
-            print(f"  ⚠️  无新数据")
+            print("  ⚠️  无新数据")
 
         print(f"  ✅ {task_name} 补充完成")
 
@@ -359,9 +347,9 @@ class UnifiedDataBackfiller:
             task_name: 任务名称
             task_config: 任务配置
         """
-        api_name = task_config['api']
-        output_path = self.data_root / task_config['output']
-        dedup_keys = task_config.get('dedup_keys', [])
+        api_name = task_config["api"]
+        output_path = self.data_root / task_config["output"]
+        dedup_keys = task_config.get("dedup_keys", [])
 
         print(f"  API: {api_name}")
         print(f"  输出: {output_path}")
@@ -369,7 +357,7 @@ class UnifiedDataBackfiller:
             print(f"  去重字段: {dedup_keys}")
 
         if output_path.exists():
-            print(f"  ✅ 文件已存在，跳过")
+            print("  ✅ 文件已存在，跳过")
             return
 
         if self.dry_run:
@@ -377,28 +365,28 @@ class UnifiedDataBackfiller:
             return
 
         try:
-            print(f"  下载数据...", end=' ')
+            print("  下载数据...", end=" ")
 
             # 调用API
             api_func = getattr(self.pro, api_name)
-            params = task_config.get('params', {})
+            params = task_config.get("params", {})
             df = api_func(**params)
 
             if not df.empty:
                 # 去重（如果配置了dedup_keys）
                 if dedup_keys:
                     before_dedup = len(df)
-                    df = df.drop_duplicates(subset=dedup_keys, keep='last')
+                    df = df.drop_duplicates(subset=dedup_keys, keep="last")
                     after_dedup = len(df)
                     removed = before_dedup - after_dedup
                     if removed > 0:
-                        print(f"去重: 删除 {removed} 条重复记录，", end='')
+                        print(f"去重: 删除 {removed} 条重复记录，", end="")
 
                 output_path.parent.mkdir(parents=True, exist_ok=True)
                 df.to_parquet(output_path, index=False)
                 print(f"✓ {len(df)} 条记录")
             else:
-                print(f"⚠️  无数据")
+                print("⚠️  无数据")
 
         except Exception as e:
             print(f"✗ 失败: {e}")
@@ -407,8 +395,13 @@ class UnifiedDataBackfiller:
 
 def main():
     parser = argparse.ArgumentParser(description="统一数据补充脚本")
-    parser.add_argument("--mode", type=str, required=True, choices=['daily', 'monthly', 'single'],
-                        help="补充模式: daily(日线), monthly(财务), single(静态)")
+    parser.add_argument(
+        "--mode",
+        type=str,
+        required=True,
+        choices=["daily", "monthly", "single"],
+        help="补充模式: daily(日线), monthly(财务), single(静态)",
+    )
     parser.add_argument("--start-year", type=int, help="起始年份（daily/monthly模式必需）")
     parser.add_argument("--end-year", type=int, help="结束年份（daily/monthly模式必需）")
     parser.add_argument("--tasks", type=str, help="指定任务（逗号分隔），如: income,balancesheet,cashflow")
@@ -418,11 +411,11 @@ def main():
     args = parser.parse_args()
 
     # 验证参数
-    if args.mode in ['daily', 'monthly']:
+    if args.mode in ["daily", "monthly"]:
         if not args.start_year or not args.end_year:
             parser.error(f"{args.mode} 模式需要指定 --start-year 和 --end-year")
 
-    tasks = args.tasks.split(',') if args.tasks else None
+    tasks = args.tasks.split(",") if args.tasks else None
 
     backfiller = UnifiedDataBackfiller(
         mode=args.mode,

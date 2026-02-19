@@ -123,12 +123,14 @@ def _tushare_candidates(root_kind: str = "primary") -> List[Path]:
     env_key = "SAGE_TUSHARE_ROOT" if root_kind == "primary" else "SAGE_TUSHARE_ROOT_SECONDARY"
     cfg_key = "tushare" if root_kind == "primary" else "tushare_secondary"
 
-    candidates = _dedupe_paths([
-        _resolve_path(os.getenv(env_key)),
-        _resolve_path(paths_cfg.get(cfg_key)),
-        get_data_root(root_kind) / "tushare",
-        get_data_path("raw", "tushare", root_kind=root_kind),
-    ])
+    candidates = _dedupe_paths(
+        [
+            _resolve_path(os.getenv(env_key)),
+            _resolve_path(paths_cfg.get(cfg_key)),
+            get_data_root(root_kind) / "tushare",
+            get_data_path("raw", "tushare", root_kind=root_kind),
+        ]
+    )
     if candidates:
         return candidates
     return [get_data_root(root_kind) / "tushare"]

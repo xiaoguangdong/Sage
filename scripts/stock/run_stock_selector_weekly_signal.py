@@ -6,13 +6,14 @@ import json
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from scripts.data._shared.runtime import get_data_root
 from scripts.stock.run_stock_selector_monthly import (
     _build_training_panel,
@@ -22,7 +23,6 @@ from scripts.stock.run_stock_selector_monthly import (
     _resolve_tushare_root,
     _to_yyyymmdd,
 )
-from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 
 
 def _load_json(path: Path) -> Dict[str, Any]:
@@ -70,9 +70,11 @@ def _load_selector_from_metadata(metadata_path: Path) -> tuple[StockSelector, Di
         selector.rule_weights = dict(metadata.get("rule_weights", {}))
     elif model_type == "lgbm":
         import lightgbm as lgb  # type: ignore
+
         selector.model = lgb.Booster(model_file=str(model_path))
     elif model_type == "xgb":
         import xgboost as xgb  # type: ignore
+
         model = xgb.XGBRegressor()
         model.load_model(str(model_path))
         selector.model = model
@@ -94,7 +96,9 @@ def main() -> None:
     args = parser.parse_args()
 
     data_root = _resolve_tushare_root(args.data_dir)
-    output_root = Path(args.output_root) if args.output_root else (get_data_root() / "signals" / "stock_selector" / "monthly")
+    output_root = (
+        Path(args.output_root) if args.output_root else (get_data_root() / "signals" / "stock_selector" / "monthly")
+    )
     if not output_root.is_absolute():
         output_root = ROOT / output_root
     output_root.mkdir(parents=True, exist_ok=True)
@@ -109,7 +113,9 @@ def main() -> None:
     selector, metadata = _load_selector_from_metadata(metadata_path)
 
     latest_trade_date = _find_latest_trade_date(data_root / "daily", args.as_of_date)
-    start_date = (pd.to_datetime(latest_trade_date) - timedelta(days=int(args.feature_lookback_days))).strftime("%Y%m%d")
+    start_date = (pd.to_datetime(latest_trade_date) - timedelta(days=int(args.feature_lookback_days))).strftime(
+        "%Y%m%d"
+    )
     universe = _load_hs300_universe(data_root, latest_trade_date)
     panel = _build_training_panel(data_root, start_date, latest_trade_date, universe)
     if panel.empty:

@@ -1,20 +1,16 @@
 """
 测试分 Regime 选股模型 — 使用真实沪深300成分股数据
 """
+
+import logging
 import os
 import sys
-import logging
 
-import numpy as np
 import pandas as pd
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from sage_core.stock_selection.regime_stock_selector import (
-    RegimeSelectionConfig,
-    RegimeStockSelector,
-    REGIME_NAMES,
-)
+from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
 
@@ -175,9 +171,11 @@ def run_test():
         try:
             pred_regime = regime_selector.predict_prepared(df_day, regime)
             pred_single = single_selector.predict_prepared(df_day)
-            print(f"  {str(date)[:10]} [{regime_name}] "
-                  f"regime_top10_score={pred_regime['score'].nlargest(10).mean():.4f}, "
-                  f"single_top10_score={pred_single['score'].nlargest(10).mean():.4f}")
+            print(
+                f"  {str(date)[:10]} [{regime_name}] "
+                f"regime_top10_score={pred_regime['score'].nlargest(10).mean():.4f}, "
+                f"single_top10_score={pred_single['score'].nlargest(10).mean():.4f}"
+            )
         except Exception as e:
             print(f"  {str(date)[:10]} [{regime_name}] 预测失败: {e}")
 

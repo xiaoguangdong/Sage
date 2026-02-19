@@ -6,7 +6,7 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Any, Dict, List, Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _ENV_LOADED = False
@@ -35,6 +35,7 @@ def _load_base_config() -> Dict[str, Any]:
 
     try:
         import yaml  # type: ignore
+
         with config_path.open("r", encoding="utf-8") as f:
             _BASE_CONFIG = yaml.safe_load(f) or {}
     except Exception:
@@ -134,12 +135,14 @@ def get_tushare_root(root_kind: str = "primary", ensure: bool = False) -> Path:
     env_key = "SAGE_TUSHARE_ROOT" if root_kind == "primary" else "SAGE_TUSHARE_ROOT_SECONDARY"
     cfg_key = "tushare" if root_kind == "primary" else "tushare_secondary"
 
-    candidates = _dedupe_paths([
-        _resolve_root_path(os.getenv(env_key)),
-        _resolve_root_path(paths_cfg.get(cfg_key)),
-        get_data_root(root_kind) / "tushare",
-        get_data_path("raw", "tushare", root_kind=root_kind, ensure=False),
-    ])
+    candidates = _dedupe_paths(
+        [
+            _resolve_root_path(os.getenv(env_key)),
+            _resolve_root_path(paths_cfg.get(cfg_key)),
+            get_data_root(root_kind) / "tushare",
+            get_data_path("raw", "tushare", root_kind=root_kind, ensure=False),
+        ]
+    )
     if not candidates:
         candidates = [get_data_root(root_kind) / "tushare"]
 
@@ -218,9 +221,7 @@ def get_tushare_token(explicit: Optional[str] = None) -> str:
     token = (explicit or os.getenv("TUSHARE_TOKEN") or os.getenv("TS_TOKEN") or "").strip()
     if token:
         return token
-    raise RuntimeError(
-        "Missing Tushare token. Set env var TUSHARE_TOKEN (recommended) or TS_TOKEN."
-    )
+    raise RuntimeError("Missing Tushare token. Set env var TUSHARE_TOKEN (recommended) or TS_TOKEN.")
 
 
 def load_env_file(path: Optional[Path] = None) -> None:

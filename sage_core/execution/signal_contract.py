@@ -5,7 +5,6 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 
-
 BASE_SIGNAL_COLUMNS = [
     "trade_date",
     "ts_code",
@@ -75,7 +74,7 @@ def select_champion_signals(contract_df: pd.DataFrame, champion_id: str, min_con
 
     selected = contract_df[
         (contract_df["strategy_id"] == champion_id)
-        & (contract_df["is_champion"] == True)
+        & (contract_df["is_champion"])
         & (contract_df["confidence"] >= float(min_confidence))
     ].copy()
     return selected.sort_values("rank").reset_index(drop=True)
@@ -119,7 +118,9 @@ def apply_industry_overlay(
     tilt_strength: float = 0.0,
 ) -> pd.DataFrame:
     if stock_signals is None or stock_signals.empty:
-        return pd.DataFrame(columns=list(stock_signals.columns) + ["industry_l1", "industry_overlay", "score_raw", "score_final"])
+        return pd.DataFrame(
+            columns=list(stock_signals.columns) + ["industry_l1", "industry_overlay", "score_raw", "score_final"]
+        )
 
     out = stock_signals.copy()
     out["score_raw"] = pd.to_numeric(out["score"], errors="coerce").fillna(0.0)
@@ -153,7 +154,9 @@ def apply_industry_overlay(
             snapshot = snapshot[snapshot["signal_name"].isin(weights.keys())].copy()
             if not snapshot.empty:
                 snapshot["score"] = signed_score.loc[snapshot.index].clip(-1.0, 1.0)
-                snapshot["confidence"] = pd.to_numeric(snapshot["confidence"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
+                snapshot["confidence"] = (
+                    pd.to_numeric(snapshot["confidence"], errors="coerce").fillna(0.5).clip(0.0, 1.0)
+                )
                 snapshot["signal_weight"] = snapshot["signal_name"].map(weights).astype(float)
                 snapshot["weighted"] = snapshot["score"] * snapshot["confidence"] * snapshot["signal_weight"]
 
@@ -178,10 +181,22 @@ def apply_industry_overlay(
     mainline = industry_score_snapshot.copy() if industry_score_snapshot is not None else pd.DataFrame()
     mainline_col = "mainline_overlay"
     if not mainline.empty:
-        industry_col = "sw_industry" if "sw_industry" in mainline.columns else ("industry_l1" if "industry_l1" in mainline.columns else None)
-        score_col = "combined_score" if "combined_score" in mainline.columns else ("score" if "score" in mainline.columns else None)
+        industry_col = (
+            "sw_industry"
+            if "sw_industry" in mainline.columns
+            else ("industry_l1" if "industry_l1" in mainline.columns else None)
+        )
+        score_col = (
+            "combined_score"
+            if "combined_score" in mainline.columns
+            else ("score" if "score" in mainline.columns else None)
+        )
         if industry_col and score_col:
-            mainline = mainline[[industry_col, score_col]].copy().rename(columns={industry_col: "industry_l1", score_col: "mainline_score"})
+            mainline = (
+                mainline[[industry_col, score_col]]
+                .copy()
+                .rename(columns={industry_col: "industry_l1", score_col: "mainline_score"})
+            )
             mainline["mainline_score"] = pd.to_numeric(mainline["mainline_score"], errors="coerce").fillna(0.5)
             if mainline["mainline_score"].between(0.0, 1.0).all():
                 mainline[mainline_col] = (2.0 * (mainline["mainline_score"] - 0.5)).clip(-1.0, 1.0)

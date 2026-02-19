@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 DEFAULT_SIGNAL_WEIGHTS = {
     "policy_score": 0.4,
     "concept_bias": 0.3,
@@ -66,7 +65,9 @@ def resolve_industry_overlay_config(industry_cfg: dict | None, trend_state: int)
     overlay_strength = _safe_float(regime_cfg.get("overlay_strength", overlay_cfg.get("overlay_strength", 0.20)), 0.20)
     overlay_strength = max(0.0, overlay_strength)
 
-    mainline_strength = _safe_float(regime_cfg.get("mainline_strength", overlay_cfg.get("mainline_strength", 0.35)), 0.35)
+    mainline_strength = _safe_float(
+        regime_cfg.get("mainline_strength", overlay_cfg.get("mainline_strength", 0.35)), 0.35
+    )
     mainline_strength = min(1.0, max(0.0, mainline_strength))
 
     base_weights = overlay_cfg.get("signal_weights")

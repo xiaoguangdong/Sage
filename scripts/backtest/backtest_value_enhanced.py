@@ -4,17 +4,14 @@
 基于之前的因子数据，加入价值约束，测试胜率是否提升
 """
 
-import pandas as pd
-import numpy as np
-from pathlib import Path
 import logging
 
-from scripts.data._shared.runtime import get_tushare_root, get_data_path
+import numpy as np
+import pandas as pd
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -27,20 +24,20 @@ def backtest_with_value_filter():
     # 读取因子数据
     logger.info("加载因子数据...")
     factors = pd.read_parquet(str(get_data_path("processed", "factors", "stock_factors_with_score.parquet")))
-    factors['trade_date'] = pd.to_datetime(factors['trade_date'])
+    factors["trade_date"] = pd.to_datetime(factors["trade_date"])
     logger.info(f"✓ 因子数据: {len(factors)} 条记录")
 
     # 读取日线数据用于计算未来收益
     logger.info("加载日线数据...")
-    daily_files = list((get_tushare_root() / "daily").glob('daily_*.parquet'))
+    daily_files = list((get_tushare_root() / "daily").glob("daily_*.parquet"))
     daily = pd.concat([pd.read_parquet(f) for f in daily_files])
-    daily['trade_date'] = pd.to_datetime(daily['trade_date'])
+    daily["trade_date"] = pd.to_datetime(daily["trade_date"])
     logger.info(f"✓ 日线数据: {len(daily)} 条记录")
 
     # 选择测试日期（按月）
-    all_dates = sorted(factors['trade_date'].unique())
+    all_dates = sorted(factors["trade_date"].unique())
     test_dates = [d for i, d in enumerate(all_dates) if i >= 60 and i % 20 == 0]
-    latest_date = daily['trade_date'].max()
+    latest_date = daily["trade_date"].max()
     valid_dates = [d for d in test_dates if (latest_date - d).days >= 70]
 
     logger.info(f"选择 {len(valid_dates)} 个测试日期")
@@ -51,31 +48,27 @@ def backtest_with_value_filter():
         if (i + 1) % 10 == 0:
             logger.info(f"进度: {i+1}/{len(valid_dates)}")
 
-        date_factors = factors[factors['trade_date'] == test_date].copy()
+        date_factors = factors[factors["trade_date"] == test_date].copy()
 
         if len(date_factors) == 0:
             continue
 
         # ========== 无价值约束 ==========
         # 选择Top 30高分股票
-        top30_no_filter = date_factors.nlargest(30, 'score')['ts_code'].tolist()
+        top30_no_filter = date_factors.nlargest(30, "score")["ts_code"].tolist()
 
         # ========== 有价值约束 ==========
         # 1. 市值 > 50亿（500000万元）
-        date_factors_mv = date_factors[date_factors['total_mv'] > 500000].copy()
+        date_factors_mv = date_factors[date_factors["total_mv"] > 500000].copy()
 
         # 2. PE > 0 且 < 50
-        date_factors_pe = date_factors_mv[
-            (date_factors_mv['pe_ttm'] > 0) & (date_factors_mv['pe_ttm'] < 50)
-        ].copy()
+        date_factors_pe = date_factors_mv[(date_factors_mv["pe_ttm"] > 0) & (date_factors_mv["pe_ttm"] < 50)].copy()
 
         # 3. PB > 0 且 < 10
-        date_factors_pb = date_factors_pe[
-            (date_factors_pe['pb'] > 0) & (date_factors_pe['pb'] < 10)
-        ].copy()
+        date_factors_pb = date_factors_pe[(date_factors_pe["pb"] > 0) & (date_factors_pe["pb"] < 10)].copy()
 
         if len(date_factors_pb) > 0:
-            top30_with_filter = date_factors_pb.nlargest(30, 'score')['ts_code'].tolist()
+            top30_with_filter = date_factors_pb.nlargest(30, "score")["ts_code"].tolist()
         else:
             top30_with_filter = []
 
@@ -83,13 +76,13 @@ def backtest_with_value_filter():
         def calc_future_return(stocks, days):
             returns = []
             for stock in stocks:
-                stock_data = daily[
-                    (daily['ts_code'] == stock) & (daily['trade_date'] > test_date)
-                ].sort_values('trade_date')
+                stock_data = daily[(daily["ts_code"] == stock) & (daily["trade_date"] > test_date)].sort_values(
+                    "trade_date"
+                )
 
                 if len(stock_data) > days:
-                    start_price = stock_data.iloc[0]['close']
-                    end_price = stock_data.iloc[days]['close']
+                    start_price = stock_data.iloc[0]["close"]
+                    end_price = stock_data.iloc[days]["close"]
                     ret = (end_price - start_price) / start_price * 100
                     returns.append(ret)
 
@@ -109,17 +102,19 @@ def backtest_with_value_filter():
             ret_4w_with_filter = np.nan
             ret_12w_with_filter = np.nan
 
-        results.append({
-            "trade_date": test_date,
-            "no_filter_count": len(top30_no_filter),
-            "with_filter_count": len(top30_with_filter),
-            "ret_1w_no_filter": ret_1w_no_filter,
-            "ret_4w_no_filter": ret_4w_no_filter,
-            "ret_12w_no_filter": ret_12w_no_filter,
-            "ret_1w_with_filter": ret_1w_with_filter,
-            "ret_4w_with_filter": ret_4w_with_filter,
-            "ret_12w_with_filter": ret_12w_with_filter,
-        })
+        results.append(
+            {
+                "trade_date": test_date,
+                "no_filter_count": len(top30_no_filter),
+                "with_filter_count": len(top30_with_filter),
+                "ret_1w_no_filter": ret_1w_no_filter,
+                "ret_4w_no_filter": ret_4w_no_filter,
+                "ret_12w_no_filter": ret_12w_no_filter,
+                "ret_1w_with_filter": ret_1w_with_filter,
+                "ret_4w_with_filter": ret_4w_with_filter,
+                "ret_12w_with_filter": ret_12w_with_filter,
+            }
+        )
 
     results_df = pd.DataFrame(results)
 
@@ -129,14 +124,16 @@ def backtest_with_value_filter():
     logger.info("=" * 70)
 
     # 无价值约束
-    no_filter_win_1w = (results_df['ret_1w_no_filter'] > 0).sum() / results_df['ret_1w_no_filter'].notna().sum()
-    no_filter_win_4w = (results_df['ret_4w_no_filter'] > 0).sum() / results_df['ret_4w_no_filter'].notna().sum()
-    no_filter_win_12w = (results_df['ret_12w_no_filter'] > 0).sum() / results_df['ret_12w_no_filter'].notna().sum()
+    no_filter_win_1w = (results_df["ret_1w_no_filter"] > 0).sum() / results_df["ret_1w_no_filter"].notna().sum()
+    no_filter_win_4w = (results_df["ret_4w_no_filter"] > 0).sum() / results_df["ret_4w_no_filter"].notna().sum()
+    no_filter_win_12w = (results_df["ret_12w_no_filter"] > 0).sum() / results_df["ret_12w_no_filter"].notna().sum()
 
     # 有价值约束
-    with_filter_win_1w = (results_df['ret_1w_with_filter'] > 0).sum() / results_df['ret_1w_with_filter'].notna().sum()
-    with_filter_win_4w = (results_df['ret_4w_with_filter'] > 0).sum() / results_df['ret_4w_with_filter'].notna().sum()
-    with_filter_win_12w = (results_df['ret_12w_with_filter'] > 0).sum() / results_df['ret_12w_with_filter'].notna().sum()
+    with_filter_win_1w = (results_df["ret_1w_with_filter"] > 0).sum() / results_df["ret_1w_with_filter"].notna().sum()
+    with_filter_win_4w = (results_df["ret_4w_with_filter"] > 0).sum() / results_df["ret_4w_with_filter"].notna().sum()
+    with_filter_win_12w = (results_df["ret_12w_with_filter"] > 0).sum() / results_df[
+        "ret_12w_with_filter"
+    ].notna().sum()
 
     logger.info("\n无价值约束：")
     logger.info(f"  1周胜率: {no_filter_win_1w:.2%}")

@@ -5,23 +5,22 @@
 基于观察资金流向，逆向推导市场逻辑，动态调整因子权重
 """
 
+import logging
 import os
 import sys
-import pandas as pd
-import numpy as np
-from typing import Dict, List, Tuple
-import logging
-from collections import defaultdict
 
-from scripts.data._shared.runtime import get_tushare_root, get_data_path
+import numpy as np
+import pandas as pd
+
+from scripts.data._shared.runtime import get_data_path, get_tushare_root
 
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-    ]
+    ],
 )
 logger = logging.getLogger(__name__)
 
@@ -38,14 +37,14 @@ class StyleModelObservation:
             "momentum": "动量驱动",
             "fundamental": "基本面驱动",
             "small_cap": "小盘投机",
-            "institution": "机构抱团"
+            "institution": "机构抱团",
         }
 
         # 警告级别
         self.WARNING_LEVELS = {
             "GREEN": "逻辑健康，继续执行",
             "YELLOW": "逻辑弱化，建议降仓",
-            "RED": "逻辑失效，建议清仓"
+            "RED": "逻辑失效，建议清仓",
         }
 
         logger.info("观察推导风格模型初始化")
@@ -67,7 +66,7 @@ class StyleModelObservation:
 
         if daily_data:
             self.daily = pd.concat(daily_data, ignore_index=True)
-            self.daily['trade_date'] = pd.to_datetime(self.daily['trade_date'])
+            self.daily["trade_date"] = pd.to_datetime(self.daily["trade_date"])
             logger.info(f"✓ 日线数据总计: {len(self.daily)} 条记录")
         else:
             logger.error("✗ 未找到日线数据")
@@ -78,7 +77,7 @@ class StyleModelObservation:
         basic_file = os.path.join(self.data_dir, "daily_basic_all.parquet")
         if os.path.exists(basic_file):
             self.basic = pd.read_parquet(basic_file)
-            self.basic['trade_date'] = pd.to_datetime(self.basic['trade_date'])
+            self.basic["trade_date"] = pd.to_datetime(self.basic["trade_date"])
             logger.info(f"✓ Daily basic: {len(self.basic)} 条记录")
         else:
             logger.error("✗ 未找到daily_basic数据")
@@ -95,7 +94,7 @@ class StyleModelObservation:
 
         if fina_data:
             self.fina = pd.concat(fina_data, ignore_index=True)
-            self.fina['end_date'] = pd.to_datetime(self.fina['end_date'])
+            self.fina["end_date"] = pd.to_datetime(self.fina["end_date"])
             logger.info(f"✓ 财务数据总计: {len(self.fina)} 条记录")
         else:
             logger.error("✗ 未找到财务数据")
@@ -106,7 +105,7 @@ class StyleModelObservation:
         index_file = os.path.join(self.data_dir, "index", "index_ohlc_all.parquet")
         if os.path.exists(index_file):
             self.index_data = pd.read_parquet(index_file)
-            self.index_data['trade_date'] = pd.to_datetime(self.index_data['date'])
+            self.index_data["trade_date"] = pd.to_datetime(self.index_data["date"])
             logger.info(f"✓ 指数数据: {len(self.index_data)} 条记录")
         else:
             logger.error("✗ 未找到指数数据")
@@ -117,15 +116,15 @@ class StyleModelObservation:
     def find_hot_sectors(self, date_data, window=20):
         """找到热门板块"""
         # 简化版：使用成交额最大的股票作为代理
-        date_data_sorted = date_data.sort_values('amount', ascending=False)
+        date_data_sorted = date_data.sort_values("amount", ascending=False)
         top_stocks = date_data_sorted.head(100)
 
         # 计算这些股票的特征
         hot_features = {
-            "avg_ret_20d": top_stocks['pct_chg'].mean(),
-            "avg_turnover": top_stocks['turnover_rate'].mean(),
-            "avg_vol": top_stocks['vol'].mean(),
-            "stock_count": len(top_stocks)
+            "avg_ret_20d": top_stocks["pct_chg"].mean(),
+            "avg_turnover": top_stocks["turnover_rate"].mean(),
+            "avg_vol": top_stocks["vol"].mean(),
+            "stock_count": len(top_stocks),
         }
 
         return hot_features
@@ -133,7 +132,7 @@ class StyleModelObservation:
     def analyze_winners(self, hot_features, date_data):
         """分析热门股票的特征"""
         # 获取赢家股票（涨幅前20%）
-        date_data_sorted = date_data.sort_values('pct_chg', ascending=False)
+        date_data_sorted = date_data.sort_values("pct_chg", ascending=False)
         top_20pct_count = int(len(date_data_sorted) * 0.2)
         winners = date_data_sorted.head(top_20pct_count)
 
@@ -142,29 +141,25 @@ class StyleModelObservation:
 
         # 特征维度1：基本面特征
         fundamental_features = {
-            "winners_roe": winners.get('roe', np.nan).mean(),
-            "winners_pe": winners.get('pe', np.nan).mean(),
-            "winners_market_cap": winners.get('total_mv', np.nan).median(),
-            "losers_roe": losers.get('roe', np.nan).mean(),
-            "losers_pe": losers.get('pe', np.nan).mean(),
-            "losers_market_cap": losers.get('total_mv', np.nan).median(),
+            "winners_roe": winners.get("roe", np.nan).mean(),
+            "winners_pe": winners.get("pe", np.nan).mean(),
+            "winners_market_cap": winners.get("total_mv", np.nan).median(),
+            "losers_roe": losers.get("roe", np.nan).mean(),
+            "losers_pe": losers.get("pe", np.nan).mean(),
+            "losers_market_cap": losers.get("total_mv", np.nan).median(),
         }
 
         # 特征维度2：技术特征
         technical_features = {
-            "winners_momentum": winners['pct_chg'].mean(),
-            "winners_volatility": winners['pct_chg'].std(),
-            "winners_turnover": winners['turnover_rate'].mean(),
-            "losers_momentum": losers['pct_chg'].mean(),
-            "losers_volatility": losers['pct_chg'].std(),
-            "losers_turnover": losers['turnover_rate'].mean(),
+            "winners_momentum": winners["pct_chg"].mean(),
+            "winners_volatility": winners["pct_chg"].std(),
+            "winners_turnover": winners["turnover_rate"].mean(),
+            "losers_momentum": losers["pct_chg"].mean(),
+            "losers_volatility": losers["pct_chg"].std(),
+            "losers_turnover": losers["turnover_rate"].mean(),
         }
 
-        return {
-            "fundamental": fundamental_features,
-            "technical": technical_features,
-            "hot_features": hot_features
-        }
+        return {"fundamental": fundamental_features, "technical": technical_features, "hot_features": hot_features}
 
     def infer_logic_from_features(self, winners_features):
         """推断当前市场逻辑"""
@@ -202,20 +197,11 @@ class StyleModelObservation:
         # 选择主导逻辑
         dominant_logic = max(logic_scores, key=logic_scores.get)
 
-        return {
-            "logic_type": dominant_logic,
-            "logic_score": logic_scores,
-            "confidence": logic_scores[dominant_logic]
-        }
+        return {"logic_type": dominant_logic, "logic_score": logic_scores, "confidence": logic_scores[dominant_logic]}
 
     def dynamic_factor_weights(self, market_logic):
         """根据当前市场逻辑，动态调整因子权重"""
-        base_weights = {
-            "momentum": 0.25,
-            "quality": 0.25,
-            "liquidity": 0.25,
-            "risk": 0.25
-        }
+        base_weights = {"momentum": 0.25, "quality": 0.25, "liquidity": 0.25, "risk": 0.25}
 
         logic_type = market_logic["logic_type"]
 
@@ -252,22 +238,17 @@ class StyleModelObservation:
     def monitor_logic_validity(self, historical_logics, current_logic, window=20):
         """监控逻辑有效性"""
         if len(historical_logics) < 5:
-            return {
-                "validity_score": 0.7,
-                "logic_return_decay": 0.0,
-                "logic_drift": 0.0,
-                "logic_consistency": 0.7
-            }
+            return {"validity_score": 0.7, "logic_return_decay": 0.0, "logic_drift": 0.0, "logic_consistency": 0.7}
 
         # 计算逻辑收益衰减（简化版：使用逻辑置信度的变化）
-        recent_confidences = [l["confidence"] for l in historical_logics[-10:]]
+        recent_confidences = [lg["confidence"] for lg in historical_logics[-10:]]
         if len(recent_confidences) > 0:
             logic_return_decay = max(0, recent_confidences[0] - current_logic["confidence"])
         else:
             logic_return_decay = 0.0
 
         # 计算逻辑漂移（简化版：逻辑类型的变化）
-        logic_types = [l["logic_type"] for l in historical_logics[-5:]]
+        logic_types = [lg["logic_type"] for lg in historical_logics[-5:]]
         current_type = current_logic["logic_type"]
         logic_drift = 1.0 - (logic_types.count(current_type) / len(logic_types))
 
@@ -276,17 +257,14 @@ class StyleModelObservation:
 
         # 综合评分
         validity_score = (
-            (1 - logic_return_decay) * 0.3 +
-            (1 - logic_drift) * 0.3 +
-            logic_consistency * 0.2 +
-            0.2  # 基础分
+            (1 - logic_return_decay) * 0.3 + (1 - logic_drift) * 0.3 + logic_consistency * 0.2 + 0.2  # 基础分
         )
 
         return {
             "validity_score": validity_score,
             "logic_return_decay": logic_return_decay,
             "logic_drift": logic_drift,
-            "logic_consistency": logic_consistency
+            "logic_consistency": logic_consistency,
         }
 
     def logic_failure_warning(self, validity_metrics):
@@ -296,7 +274,7 @@ class StyleModelObservation:
                 "warning_level": "GREEN",
                 "action": "CONTINUE",
                 "message": self.WARNING_LEVELS["GREEN"],
-                "position_adjustment": 0.0
+                "position_adjustment": 0.0,
             }
 
         elif validity_metrics["validity_score"] > 0.5:
@@ -304,7 +282,7 @@ class StyleModelObservation:
                 "warning_level": "YELLOW",
                 "action": "REDUCE",
                 "message": self.WARNING_LEVELS["YELLOW"],
-                "position_adjustment": -0.3
+                "position_adjustment": -0.3,
             }
 
         else:
@@ -312,7 +290,7 @@ class StyleModelObservation:
                 "warning_level": "RED",
                 "action": "EXIT",
                 "message": self.WARNING_LEVELS["RED"],
-                "position_adjustment": -1.0
+                "position_adjustment": -1.0,
             }
 
     def decision_engine(self, current_logic, validity_metrics, market_state):
@@ -321,11 +299,7 @@ class StyleModelObservation:
 
         if warning["warning_level"] == "RED":
             # 逻辑失效，清仓
-            return {
-                "position": 0.0,
-                "action": "CLEAR_POSITION",
-                "reason": warning["message"]
-            }
+            return {"position": 0.0, "action": "CLEAR_POSITION", "reason": warning["message"]}
 
         elif warning["warning_level"] == "YELLOW":
             # 逻辑弱化，降仓
@@ -340,7 +314,7 @@ class StyleModelObservation:
                 "action": "REDUCE_POSITION",
                 "reason": warning["message"],
                 "current_logic": current_logic["logic_type"],
-                "validity_score": validity_metrics["validity_score"]
+                "validity_score": validity_metrics["validity_score"],
             }
 
         else:
@@ -356,7 +330,7 @@ class StyleModelObservation:
                 "action": "PARTICIPATE",
                 "current_logic": current_logic["logic_type"],
                 "validity_score": validity_metrics["validity_score"],
-                "confidence": current_logic["confidence"]
+                "confidence": current_logic["confidence"],
             }
 
     def run(self):
@@ -371,23 +345,27 @@ class StyleModelObservation:
 
         # 计算市场层面的指标（使用沪深300作为代理）
         logger.info("计算市场层面指标...")
-        hs300 = self.index_data[self.index_data['code'] == '000300.SH'].copy()
-        hs300 = hs300.sort_values('trade_date')
+        hs300 = self.index_data[self.index_data["code"] == "000300.SH"].copy()
+        hs300 = hs300.sort_values("trade_date")
 
         # 合并daily_basic数据
-        hs300_basic = self.basic[self.basic['ts_code'] == '000300.SH'].copy()
-        hs300_basic = hs300_basic.sort_values('trade_date')
-        hs300 = hs300.merge(hs300_basic[['trade_date', 'turnover_rate', 'pe', 'total_mv']], on='trade_date', how='left')
+        hs300_basic = self.basic[self.basic["ts_code"] == "000300.SH"].copy()
+        hs300_basic = hs300_basic.sort_values("trade_date")
+        hs300 = hs300.merge(hs300_basic[["trade_date", "turnover_rate", "pe", "total_mv"]], on="trade_date", how="left")
 
         # 使用全市场数据
         market_daily = self.daily.copy()
-        market_daily = market_daily.merge(self.basic[['ts_code', 'trade_date', 'turnover_rate', 'pe', 'total_mv']], on=['ts_code', 'trade_date'], how='left')
+        market_daily = market_daily.merge(
+            self.basic[["ts_code", "trade_date", "turnover_rate", "pe", "total_mv"]],
+            on=["ts_code", "trade_date"],
+            how="left",
+        )
 
         results = []
         historical_logics = []
 
         # 按日期处理
-        all_dates = sorted(market_daily['trade_date'].unique())
+        all_dates = sorted(market_daily["trade_date"].unique())
         weekly_dates = [d for i, d in enumerate(all_dates) if i % 5 == 0 and i >= 20]
 
         logger.info(f"处理 {len(weekly_dates)} 个交易日期...")
@@ -397,7 +375,7 @@ class StyleModelObservation:
                 logger.info(f"进度: {i+1}/{len(weekly_dates)}")
 
             # 获取当日数据
-            date_data = market_daily[market_daily['trade_date'] == trade_date].copy()
+            date_data = market_daily[market_daily["trade_date"] == trade_date].copy()
 
             if len(date_data) < 100:
                 continue
@@ -415,21 +393,23 @@ class StyleModelObservation:
             decision = self.decision_engine(current_logic, validity_metrics, market_state)
 
             # 记录结果
-            results.append({
-                "trade_date": trade_date,
-                "logic_type": current_logic["logic_type"],
-                "logic_momentum": current_logic["logic_score"]["momentum"],
-                "logic_fundamental": current_logic["logic_score"]["fundamental"],
-                "logic_small_cap": current_logic["logic_score"]["small_cap"],
-                "logic_institution": current_logic["logic_score"]["institution"],
-                "confidence": current_logic["confidence"],
-                "validity_score": validity_metrics["validity_score"],
-                "logic_return_decay": validity_metrics["logic_return_decay"],
-                "logic_drift": validity_metrics["logic_drift"],
-                "logic_consistency": validity_metrics["logic_consistency"],
-                "action": decision["action"],
-                "position": decision["position"]
-            })
+            results.append(
+                {
+                    "trade_date": trade_date,
+                    "logic_type": current_logic["logic_type"],
+                    "logic_momentum": current_logic["logic_score"]["momentum"],
+                    "logic_fundamental": current_logic["logic_score"]["fundamental"],
+                    "logic_small_cap": current_logic["logic_score"]["small_cap"],
+                    "logic_institution": current_logic["logic_score"]["institution"],
+                    "confidence": current_logic["confidence"],
+                    "validity_score": validity_metrics["validity_score"],
+                    "logic_return_decay": validity_metrics["logic_return_decay"],
+                    "logic_drift": validity_metrics["logic_drift"],
+                    "logic_consistency": validity_metrics["logic_consistency"],
+                    "action": decision["action"],
+                    "position": decision["position"],
+                }
+            )
 
             # 保存历史逻辑
             historical_logics.append(current_logic)
@@ -446,7 +426,7 @@ class StyleModelObservation:
         logger.info("\n" + "=" * 70)
         logger.info("逻辑分布统计：")
         logger.info("=" * 70)
-        logic_counts = results_df['logic_type'].value_counts()
+        logic_counts = results_df["logic_type"].value_counts()
         for logic, count in logic_counts.items():
             logger.info(f"{logic}: {count} ({count/len(results_df)*100:.1f}%)")
 

@@ -1,7 +1,9 @@
 """分析Regime样本分布"""
-import os, sys
+
+import os
+import sys
+
 import pandas as pd
-import numpy as np
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -9,6 +11,7 @@ from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
 TRAIN_YEARS = [2020, 2021, 2022, 2023, 2024]
+
 
 def load_data():
     idx = pd.read_parquet(os.path.join(DATA_ROOT, "index", "index_000300_SH_ohlc.parquet"))
@@ -24,6 +27,7 @@ def load_data():
     stk["trade_date"] = pd.to_datetime(stk["trade_date"], format="%Y%m%d")
 
     return idx, stk
+
 
 def main():
     print("加载数据...")
@@ -100,6 +104,7 @@ def main():
         print(f"bear={'✓' if bear*3000>min_samples else '✗'}, ", end="")
         print(f"neutral={'✓' if neutral*3000>min_samples else '✗'}, ", end="")
         print(f"bull={'✓' if bull*3000>min_samples else '✗'}")
+
 
 if __name__ == "__main__":
     main()

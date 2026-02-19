@@ -12,5 +12,4 @@ class BacktestEngine(Protocol):
     回测引擎协议
     """
 
-    def run(self, df: pd.DataFrame, config: BacktestConfig) -> BacktestResult:
-        ...
+    def run(self, df: pd.DataFrame, config: BacktestConfig) -> BacktestResult: ...

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from sage_core.data import DataCatalog, DataStore, DatasetSpec
+from sage_core.data import DataCatalog, DatasetSpec, DataStore
 from sage_core.features import FeaturePipeline, PriceFeatures
 from sage_core.utils import runtime_paths
 
@@ -23,11 +23,13 @@ def test_feature_pipeline_run(tmp_path, monkeypatch):
     monkeypatch.setenv("SAGE_DATA_ROOT_SECONDARY", str(secondary))
     runtime_paths.reset_runtime_cache()
 
-    df = pd.DataFrame({
-        "date": pd.date_range("2024-01-01", periods=10, freq="D"),
-        "stock": ["sh.600000"] * 10,
-        "close": list(range(10, 20)),
-    })
+    df = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=10, freq="D"),
+            "stock": ["sh.600000"] * 10,
+            "close": list(range(10, 20)),
+        }
+    )
 
     spec = DatasetSpec(
         name="feature_demo",

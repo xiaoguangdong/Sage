@@ -25,6 +25,7 @@ def load_yaml(path: Path) -> Dict:
         return {}
     try:
         import yaml  # type: ignore
+
         return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
     except Exception:
         return {}
@@ -116,24 +117,32 @@ def build_report_factors(reports_path: Path, alias_map: Dict[str, str]) -> pd.Da
         if not industries:
             continue
         for ind in industries:
-            mapped.append({
-                "trade_date": row["publish_date"].normalize(),
-                "sw_industry": ind,
-                "rating_change": str(row.get("rating_change", "")).strip(),
-            })
+            mapped.append(
+                {
+                    "trade_date": row["publish_date"].normalize(),
+                    "sw_industry": ind,
+                    "rating_change": str(row.get("rating_change", "")).strip(),
+                }
+            )
     if not mapped:
         return pd.DataFrame()
 
     mdf = pd.DataFrame(mapped)
     mdf["trade_date"] = pd.to_datetime(mdf["trade_date"])
-    mdf["rc_score"] = mdf["rating_change"].map({
-        "上调": 1,
-        "下调": -1,
-        "维持": 0,
-        "首次": 0,
-        "调高": 1,
-        "调低": -1,
-    }).fillna(0)
+    mdf["rc_score"] = (
+        mdf["rating_change"]
+        .map(
+            {
+                "上调": 1,
+                "下调": -1,
+                "维持": 0,
+                "首次": 0,
+                "调高": 1,
+                "调低": -1,
+            }
+        )
+        .fillna(0)
+    )
 
     factors = []
     for ind, group in mdf.groupby("sw_industry"):
@@ -210,13 +219,17 @@ def main() -> None:
     parser.add_argument("--output-dir", type=str, default=None)
     args = parser.parse_args()
 
-    policy_signals = Path(args.policy_signals) if args.policy_signals else get_data_path(
-        "processed", "policy", "policy_signals.parquet"
+    policy_signals = (
+        Path(args.policy_signals)
+        if args.policy_signals
+        else get_data_path("processed", "policy", "policy_signals.parquet")
     )
-    reports_path = Path(args.reports) if args.reports else get_data_path(
-        "raw", "policy", "eastmoney_industry_reports.parquet"
+    reports_path = (
+        Path(args.reports) if args.reports else get_data_path("raw", "policy", "eastmoney_industry_reports.parquet")
     )
-    sw_daily_path = Path(args.sw_daily) if args.sw_daily else get_data_root() / "tushare" / "sectors" / "sw_daily_all.parquet"
+    sw_daily_path = (
+        Path(args.sw_daily) if args.sw_daily else get_data_root() / "tushare" / "sectors" / "sw_daily_all.parquet"
+    )
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("processed", "policy", ensure=True)
     if not output_dir.is_absolute():
         output_dir = PROJECT_ROOT / output_dir

@@ -1,15 +1,19 @@
 """诊断：每期Top5选股明细（单一 vs Regime）"""
-import os, sys, copy, warnings
-import numpy as np, pandas as pd
+
+import copy
+import os
+import sys
+import warnings
+
+import numpy as np
+import pandas as pd
 
 warnings.filterwarnings("ignore")
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
+from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
-from sage_core.stock_selection.regime_stock_selector import (
-    RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
-)
-from scripts.backtest_multi_period import load_all_data, assign_macro_regime, HOLD_DAYS, MACRO_REGIMES
+from scripts.backtest_multi_period import HOLD_DAYS, assign_macro_regime, load_all_data
 
 TOP_N = 30
 
@@ -21,6 +25,7 @@ if os.path.exists(ths_path):
     ths = pd.read_parquet(ths_path)
     name_map = dict(zip(ths["con_code"], ths["con_name"]))
 
+
 def run_diagnose(bt_start, bt_end, train_years):
     print(f"\n{'='*70}")
     print(f"区间: {bt_start} ~ {bt_end}, 训练: {train_years}")
@@ -31,8 +36,7 @@ def run_diagnose(bt_start, bt_end, train_years):
     df_train = df_all[df_all["trade_date"] < train_end].copy()
     df_train["regime"] = assign_macro_regime(df_train["trade_date"])
 
-    cfg = SelectionConfig(model_type="lgbm", label_neutralized=True,
-                          ic_filter_enabled=True, industry_col="industry_l1")
+    cfg = SelectionConfig(model_type="lgbm", label_neutralized=True, ic_filter_enabled=True, industry_col="industry_l1")
 
     single = StockSelector(copy.deepcopy(cfg))
     single.fit(df_train)
@@ -47,9 +51,12 @@ def run_diagnose(bt_start, bt_end, train_years):
 
     idx_bt = idx[idx["date"] <= bt_end].copy()
     from scripts.backtest_multi_period import build_ma_regime
+
     d2s_bt = build_ma_regime(idx_bt)
 
-    bt_dates = sorted(df_all[(df_all["trade_date"] >= bt_start) & (df_all["trade_date"] <= bt_end)]["trade_date"].unique())
+    bt_dates = sorted(
+        df_all[(df_all["trade_date"] >= bt_start) & (df_all["trade_date"] <= bt_end)]["trade_date"].unique()
+    )
     rb_dates = bt_dates[::HOLD_DAYS]
 
     for i, rb in enumerate(rb_dates):
@@ -68,6 +75,7 @@ def run_diagnose(bt_start, bt_end, train_years):
 
             # 计算持仓期收益
             hold = df_all[(df_all["trade_date"] > rb) & (df_all["trade_date"] <= hold_end)]
+
             def get_ret(code):
                 s = hold[hold["ts_code"] == code].sort_values("trade_date")
                 return s["close"].iloc[-1] / s["close"].iloc[0] - 1 if len(s) >= 2 else 0
@@ -82,7 +90,7 @@ def run_diagnose(bt_start, bt_end, train_years):
             # 获取市值信息
             day_mv = df_day.set_index("ts_code")["total_mv"] if "total_mv" in df_day.columns else pd.Series(dtype=float)
 
-            print(f"  单一Top5:")
+            print("  单一Top5:")
             for j, (_, row) in enumerate(top_s.head(5).iterrows()):
                 code = row["ts_code"]
                 nm = name_map.get(code, "")
@@ -106,6 +114,7 @@ def run_diagnose(bt_start, bt_end, train_years):
 
         except Exception as e:
             print(f"  {str(rb)[:10]} 失败: {e}")
+
 
 if __name__ == "__main__":
     print("加载数据...")

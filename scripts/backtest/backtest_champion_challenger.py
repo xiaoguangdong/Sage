@@ -12,10 +12,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -23,24 +22,14 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from sage_core.governance.strategy_governance import SIGNAL_SCHEMA
+from sage_core.stock_selection.multi_alpha_selector import MultiAlphaStockSelector
+from sage_core.stock_selection.regime_stock_selector import RegimeSelectionConfig, RegimeStockSelector
+from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from scripts.data._shared.runtime import get_data_root, get_tushare_root
-from sage_core.stock_selection.stock_selector import StockSelector, SelectionConfig
-from sage_core.stock_selection.multi_alpha_selector import MultiAlphaStockSelector, MultiAlphaConfig
-from sage_core.stock_selection.regime_stock_selector import (
-    RegimeSelectionConfig, RegimeStockSelector, REGIME_NAMES,
-)
-from sage_core.governance.strategy_governance import (
-    ChallengerConfig,
-    MultiAlphaChallengerStrategies,
-    SeedBalanceStrategy,
-    StrategyGovernanceConfig,
-    normalize_strategy_id,
-    SIGNAL_SCHEMA,
-)
-from sage_core.backtest.types import BacktestResult
-
 
 # ==================== 数据加载工具 ====================
+
 
 def _resolve_tushare_root(data_dir: Optional[str]) -> Path:
     if data_dir:
@@ -53,7 +42,7 @@ def _find_trade_dates(daily_dir: Path, start_date: str, end_date: str) -> List[s
     dates = set()
     start_year = int(start_date[:4])
     end_year = int(end_date[:4])
-    
+
     for year in range(start_year - 1, end_year + 2):
         path = daily_dir / f"daily_{year}.parquet"
         if not path.exists():
@@ -63,7 +52,7 @@ def _find_trade_dates(daily_dir: Path, start_date: str, end_date: str) -> List[s
             dates.update(df["trade_date"].astype(str).unique())
         except Exception:
             continue
-    
+
     dates = sorted([d for d in dates if start_date <= d <= end_date])
     return dates
 
@@ -72,7 +61,7 @@ def _load_daily_data(daily_dir: Path, trade_dates: List[str]) -> pd.DataFrame:
     """加载日线数据"""
     frames = []
     years = set(int(d[:4]) for d in trade_dates)
-    
+
     for year in years:
         path = daily_dir / f"daily_{year}.parquet"
         if not path.exists():
@@ -82,10 +71,10 @@ def _load_daily_data(daily_dir: Path, trade_dates: List[str]) -> pd.DataFrame:
             frames.append(df)
         except Exception:
             continue
-    
+
     if not frames:
         return pd.DataFrame()
-    
+
     df = pd.concat(frames, ignore_index=True)
     df = df[df["trade_date"].astype(str).isin(trade_dates)]
     return df
@@ -95,7 +84,7 @@ def _load_daily_basic(daily_basic_path: Path, trade_dates: List[str]) -> pd.Data
     """加载每日基本面数据"""
     if not daily_basic_path.exists():
         return pd.DataFrame()
-    
+
     try:
         df = pd.read_parquet(daily_basic_path)
         df = df[df["trade_date"].astype(str).isin(trade_dates)]
@@ -108,7 +97,7 @@ def _load_fina_indicator(fina_dir: Path, end_date: str) -> pd.DataFrame:
     """加载财务指标数据"""
     frames = []
     year = int(end_date[:4])
-    
+
     for y in [year, year - 1, year - 2]:
         path = fina_dir / f"fina_indicator_{y}.parquet"
         if path.exists():
@@ -117,16 +106,17 @@ def _load_fina_indicator(fina_dir: Path, end_date: str) -> pd.DataFrame:
                 frames.append(df)
             except Exception:
                 continue
-    
+
     if not frames:
         return pd.DataFrame()
-    
+
     df = pd.concat(frames, ignore_index=True)
     df = df[df["ann_date"].astype(str) <= end_date]
     return df
 
 
 # ==================== 回测引擎 ====================
+
 
 class StrategyBacktester:
     """策略回测引擎"""
@@ -208,7 +198,7 @@ class StrategyBacktester:
                     signals = strategy_fn(day_data, trade_date, daily_basic_df, fina_df)
                     if signals is not None and not signals.empty:
                         signal_cache[exec_date] = signals
-                except Exception as e:
+                except Exception:
                     pass  # 策略生成失败，保持空仓
 
             # 执行信号（T+2 后执行）
@@ -242,15 +232,21 @@ class StrategyBacktester:
                 else:
                     holdings = {}  # 清仓
 
-                trade_records.append({
-                    "trade_date": trade_date,
-                    "signal_date": signal_cache[trade_date].iloc[0].get("trade_date", trade_date) if len(signal_cache[trade_date]) > 0 else trade_date,
-                    "num_positions": len(holdings),
-                    "turnover": turnover,
-                    "cost": cost,
-                    "position_ratio": position_ratio,
-                    "current_drawdown": current_drawdown if self.enable_drawdown_control else 0.0,
-                })
+                trade_records.append(
+                    {
+                        "trade_date": trade_date,
+                        "signal_date": (
+                            signal_cache[trade_date].iloc[0].get("trade_date", trade_date)
+                            if len(signal_cache[trade_date]) > 0
+                            else trade_date
+                        ),
+                        "num_positions": len(holdings),
+                        "turnover": turnover,
+                        "cost": cost,
+                        "position_ratio": position_ratio,
+                        "current_drawdown": current_drawdown if self.enable_drawdown_control else 0.0,
+                    }
+                )
 
             # 计算当日收益
             if holdings:
@@ -263,7 +259,7 @@ class StrategyBacktester:
                         if prev_close and prev_close > 0:
                             ret = (curr_close - prev_close) / prev_close
                             day_return += weight * ret
-                
+
                 # 扣除交易成本
                 if trade_records and trade_records[-1]["trade_date"] == trade_date:
                     day_return -= trade_records[-1]["cost"]
@@ -316,9 +312,7 @@ class StrategyBacktester:
         # 夏普比率
         risk_free_rate = 0.03
         if metrics["annual_volatility"] > 0:
-            metrics["sharpe_ratio"] = float(
-                (metrics["annual_return"] - risk_free_rate) / metrics["annual_volatility"]
-            )
+            metrics["sharpe_ratio"] = float((metrics["annual_return"] - risk_free_rate) / metrics["annual_volatility"])
         else:
             metrics["sharpe_ratio"] = 0.0
 
@@ -353,6 +347,7 @@ class StrategyBacktester:
 
 # ==================== 策略函数 ====================
 
+
 def create_champion_strategy_fn(
     daily_df: pd.DataFrame,
     daily_basic_df: pd.DataFrame,
@@ -361,10 +356,12 @@ def create_champion_strategy_fn(
     daily_basic_path: Path = None,
 ):
     """创建 Champion 策略函数（预训练）"""
-    import copy
 
-    basic_cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
-                  if c in daily_basic_df.columns]
+    basic_cols = [
+        c
+        for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
+        if c in daily_basic_df.columns
+    ]
 
     # 加载训练期历史数据（train_end 前1年）
     train_frames = []
@@ -414,7 +411,9 @@ def create_champion_strategy_fn(
     df_backtest["trade_date"] = pd.to_datetime(df_backtest["trade_date"], format="%Y%m%d", errors="coerce")
     df_prepared = selector.prepare_features(df_backtest)
 
-    def strategy_fn(day_data: pd.DataFrame, trade_date: str, daily_basic: pd.DataFrame, fina: pd.DataFrame) -> pd.DataFrame:
+    def strategy_fn(
+        day_data: pd.DataFrame, trade_date: str, daily_basic: pd.DataFrame, fina: pd.DataFrame
+    ) -> pd.DataFrame:
         try:
             td = pd.to_datetime(trade_date)
             df_day = df_prepared[df_prepared["trade_date"] == td]
@@ -435,7 +434,7 @@ def create_champion_strategy_fn(
 
             return result[["ts_code", "trade_date", "score", "rank", "confidence", "model_version"]]
 
-        except Exception as e:
+        except Exception:
             return pd.DataFrame(columns=SIGNAL_SCHEMA)
 
     return strategy_fn, "seed_balance_strategy"
@@ -448,22 +447,24 @@ def create_challenger_strategy_fn(
 ):
     """创建 Challenger 策略函数"""
 
-    def strategy_fn(day_data: pd.DataFrame, trade_date: str, daily_basic: pd.DataFrame, fina: pd.DataFrame) -> pd.DataFrame:
+    def strategy_fn(
+        day_data: pd.DataFrame, trade_date: str, daily_basic: pd.DataFrame, fina: pd.DataFrame
+    ) -> pd.DataFrame:
         try:
             result = selector.select(trade_date=trade_date, top_n=30)
             all_scores = result.get("all_scores", pd.DataFrame())
-            
+
             if all_scores.empty or score_col not in all_scores.columns:
                 return pd.DataFrame(columns=SIGNAL_SCHEMA)
-            
+
             scores = all_scores[["ts_code", "trade_date", score_col]].copy()
             scores = scores.rename(columns={score_col: "score"})
             scores["rank"] = scores["score"].rank(ascending=False)
             scores["model_version"] = f"{strategy_id}@v1.0.0"
             scores["confidence"] = scores["score"].abs()
-            
+
             return scores[["ts_code", "trade_date", "score", "rank", "confidence", "model_version"]]
-            
+
         except Exception:
             return pd.DataFrame(columns=SIGNAL_SCHEMA)
 
@@ -476,8 +477,9 @@ def _build_ma_regime(idx_df: pd.DataFrame) -> dict:
     df["ma20"] = df["close"].rolling(20).mean()
     df["ma60"] = df["close"].rolling(60).mean()
     regime = np.where(
-        (df["close"] > df["ma60"]) & (df["ma20"] > df["ma60"]), 2,
-        np.where((df["close"] < df["ma60"]) & (df["ma20"] < df["ma60"]), 0, 1)
+        (df["close"] > df["ma60"]) & (df["ma20"] > df["ma60"]),
+        2,
+        np.where((df["close"] < df["ma60"]) & (df["ma20"] < df["ma60"]), 0, 1),
     )
     return dict(zip(df["date"].astype(str).str[:8].values, regime))
 
@@ -515,8 +517,11 @@ def create_regime_strategy_fn(
     """创建 Regime MA 策略（预训练+预计算特征）"""
     import copy
 
-    basic_cols = [c for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
-                  if c in daily_basic_df.columns]
+    basic_cols = [
+        c
+        for c in ["ts_code", "trade_date", "pe_ttm", "pb", "turnover_rate", "total_mv", "circ_mv"]
+        if c in daily_basic_df.columns
+    ]
 
     # 加载训练期历史数据（train_end 前3年，与之前报告一致）
     train_frames = []
@@ -549,10 +554,12 @@ def create_regime_strategy_fn(
     df_train["regime"] = _assign_macro_regime(df_train["trade_date"])
 
     cfg = SelectionConfig(
-        model_type="lgbm", label_neutralized=True,
+        model_type="lgbm",
+        label_neutralized=True,
         ic_filter_enabled=False,  # 禁用IC过滤，加速训练
         industry_rank=False,  # 禁用行业排名，加速训练
-        exclude_bj=True, exclude_st=True,
+        exclude_bj=True,
+        exclude_st=True,
     )
     print(f"[DEBUG] cfg.industry_rank = {cfg.industry_rank}")
     regime_cfg = RegimeSelectionConfig(base_config=copy.deepcopy(cfg))
@@ -571,12 +578,14 @@ def create_regime_strategy_fn(
     ma20 = idx_df["close"].rolling(20).mean()
     ma60 = idx_df["close"].rolling(60).mean()
     for i, row in idx_df.iterrows():
-        r = 2 if (row["close"] > ma60.iloc[i] and ma20.iloc[i] > ma60.iloc[i]) else (
-            0 if (row["close"] < ma60.iloc[i] and ma20.iloc[i] < ma60.iloc[i]) else 1)
+        r = (
+            2
+            if (row["close"] > ma60.iloc[i] and ma20.iloc[i] > ma60.iloc[i])
+            else (0 if (row["close"] < ma60.iloc[i] and ma20.iloc[i] < ma60.iloc[i]) else 1)
+        )
         d2s_ma[row["date"].strftime("%Y%m%d")] = r
 
     # 缓存预测结果
-    pred_cache = {}
 
     def strategy_fn(day_data, trade_date, daily_basic, fina):
         try:
@@ -600,6 +609,7 @@ def create_regime_strategy_fn(
 
 # ==================== 主函数 ====================
 
+
 def main():
     parser = argparse.ArgumentParser(description="Champion/Challenger 回测验证")
     parser.add_argument("--start-date", type=str, default="20230601", help="回测开始日期")
@@ -614,12 +624,14 @@ def main():
         default=None,
         help="输出目录，默认 data/backtest/champion_challenger",
     )
-    parser.add_argument("--strategies", type=str, default="regime,champion,balance,positive,value,satellite", help="策略列表")
+    parser.add_argument(
+        "--strategies", type=str, default="regime,champion,balance,positive,value,satellite", help="策略列表"
+    )
     args = parser.parse_args()
 
     # 解析策略列表
     strategy_names = [s.strip().lower() for s in args.strategies.split(",")]
-    
+
     # 数据目录
     data_root = _resolve_tushare_root(args.data_dir)
     daily_dir = data_root / "daily"
@@ -640,7 +652,7 @@ def main():
         raise ValueError("未找到交易日数据")
 
     print(f"交易日数量: {len(trade_dates)}")
-    
+
     daily_df = _load_daily_data(daily_dir, trade_dates)
     print(f"日线数据: {len(daily_df)} 条")
 
@@ -687,9 +699,12 @@ def main():
         if idx_path.exists():
             idx_df = pd.read_parquet(idx_path)
             strategy_fn, strategy_id = create_regime_strategy_fn(
-                daily_df=daily_df, daily_basic_df=daily_basic_df,
-                idx_df=idx_df, train_end=args.start_date,
-                daily_dir=daily_dir, daily_basic_path=daily_basic_path,
+                daily_df=daily_df,
+                daily_basic_df=daily_basic_df,
+                idx_df=idx_df,
+                train_end=args.start_date,
+                daily_dir=daily_dir,
+                daily_basic_path=daily_basic_path,
             )
             result = backtester.run_backtest(
                 trade_dates=trade_dates,
@@ -714,7 +729,7 @@ def main():
     if any(name in strategy_names for name in challenger_map.keys()):
         print("\n准备 Challenger 策略...")
         selector = MultiAlphaStockSelector(data_dir=str(data_root))
-        
+
         for name, (score_col, strategy_id) in challenger_map.items():
             if name in strategy_names:
                 strategy_fn, sid = create_challenger_strategy_fn(selector, score_col, strategy_id)
@@ -757,12 +772,12 @@ def main():
     output_root.mkdir(parents=True, exist_ok=True)
 
     run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     # 保存汇总结果
     summary_df = pd.DataFrame(summary_rows)
     summary_path = output_root / f"backtest_summary_{run_id}.parquet"
     summary_df.to_parquet(summary_path, index=False)
-    
+
     # 保存详细结果
     detail_path = output_root / f"backtest_detail_{run_id}.json"
     detail = {
@@ -781,7 +796,7 @@ def main():
     # 更新最新结果
     latest_path = output_root / "backtest_summary_latest.parquet"
     summary_df.to_parquet(latest_path, index=False)
-    
+
     latest_json = output_root / "backtest_summary_latest.json"
     latest_json.write_text(json.dumps(detail, ensure_ascii=False, indent=2), encoding="utf-8")
 

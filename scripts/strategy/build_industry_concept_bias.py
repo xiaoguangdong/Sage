@@ -57,8 +57,15 @@ def build_industry_bias(signals: pd.DataFrame, mapping: pd.DataFrame) -> pd.Data
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="将概念热度信号聚合为行业偏置信号")
-    parser.add_argument("--signals-path", type=str, default=None, help="概念信号路径（默认 data/signals/concept_signals_top10.parquet）")
-    parser.add_argument("--mapping-path", type=str, default=None, help="概念行业映射路径（默认 data/processed/concepts/concept_industry_primary.parquet）")
+    parser.add_argument(
+        "--signals-path", type=str, default=None, help="概念信号路径（默认 data/signals/concept_signals_top10.parquet）"
+    )
+    parser.add_argument(
+        "--mapping-path",
+        type=str,
+        default=None,
+        help="概念行业映射路径（默认 data/processed/concepts/concept_industry_primary.parquet）",
+    )
     parser.add_argument("--output-dir", type=str, default=None, help="输出目录（默认 data/signals/industry）")
     parser.add_argument("--top-k", type=int, default=10, help="读取的概念TopK文件后缀")
     args = parser.parse_args()
@@ -69,8 +76,10 @@ def main() -> None:
         fallback = get_data_path("signals", "concept_signals.parquet")
         if fallback.exists():
             signals_path = fallback
-    mapping_path = Path(args.mapping_path) if args.mapping_path else get_data_path(
-        "processed", "concepts", "concept_industry_primary.parquet"
+    mapping_path = (
+        Path(args.mapping_path)
+        if args.mapping_path
+        else get_data_path("processed", "concepts", "concept_industry_primary.parquet")
     )
     output_dir = Path(args.output_dir) if args.output_dir else get_data_path("signals", "industry", ensure=True)
     if not output_dir.is_absolute():

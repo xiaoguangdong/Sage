@@ -12,13 +12,14 @@
 
 from __future__ import annotations
 
-import pandas as pd
-import numpy as np
-from typing import Optional, Dict, List
+import pickle
 from pathlib import Path
+from typing import Dict, List, Optional
+
+import numpy as np
+import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import StandardScaler
-import pickle
 
 
 class HybridStockSelector:
@@ -51,9 +52,9 @@ class HybridStockSelector:
         self.feature_names: List[str] = []
 
         # 根据类型设置硬规则和特征
-        if selector_type == 'value':
+        if selector_type == "value":
             self._setup_value_config()
-        elif selector_type == 'growth':
+        elif selector_type == "growth":
             self._setup_growth_config()
         else:
             raise ValueError(f"不支持的选股器类型: {selector_type}")
@@ -62,48 +63,48 @@ class HybridStockSelector:
         """配置价值股选股器"""
         # 硬规则阈值
         self.hard_rules = {
-            'roe': (0.10, None),              # ROE > 10%
-            'debt_ratio': (None, 0.70),       # 负债率 < 70%
-            'consecutive_dividend': (3, None), # 连续分红3年+
-            'is_st': (False,),                # 非ST
+            "roe": (0.10, None),  # ROE > 10%
+            "debt_ratio": (None, 0.70),  # 负债率 < 70%
+            "consecutive_dividend": (3, None),  # 连续分红3年+
+            "is_st": (False,),  # 非ST
         }
 
         # 模型特征（用于训练和预测）
         self.feature_names = [
-            'roe',                    # 盈利能力
-            'roe_5y_avg',            # 盈利稳定性
-            'debt_ratio',            # 财务安全
-            'interest_coverage',     # 利息保障
-            'consecutive_dividend',  # 分红能力
-            'dividend_yield',        # 股息率
-            'pe_relative',           # 估值水平
-            'fund_holders',          # 机构认可
-            'inst_holding_change',   # 机构增持
-            'revenue_growth',        # 营收增长
+            "roe",  # 盈利能力
+            "roe_5y_avg",  # 盈利稳定性
+            "debt_ratio",  # 财务安全
+            "interest_coverage",  # 利息保障
+            "consecutive_dividend",  # 分红能力
+            "dividend_yield",  # 股息率
+            "pe_relative",  # 估值水平
+            "fund_holders",  # 机构认可
+            "inst_holding_change",  # 机构增持
+            "revenue_growth",  # 营收增长
         ]
 
     def _setup_growth_config(self):
         """配置成长股选股器"""
         # 硬规则阈值
         self.hard_rules = {
-            'revenue_cagr_3y': (0.15, None),  # 营收CAGR > 15%
-            'rd_ratio': (0.03, None),         # 研发费用率 > 3%
-            'debt_ratio': (None, 0.60),       # 负债率 < 60%
-            'is_st': (False,),                # 非ST
+            "revenue_cagr_3y": (0.15, None),  # 营收CAGR > 15%
+            "rd_ratio": (0.03, None),  # 研发费用率 > 3%
+            "debt_ratio": (None, 0.60),  # 负债率 < 60%
+            "is_st": (False,),  # 非ST
         }
 
         # 模型特征
         self.feature_names = [
-            'revenue_cagr_3y',       # 营收增长
-            'profit_cagr_3y',        # 利润增长
-            'rd_ratio',              # 研发投入
-            'gross_margin',          # 毛利率
-            'gross_margin_trend',    # 毛利率趋势
-            'asset_turnover',        # 运营效率
-            'roe',                   # 盈利能力
-            'industry_rank',         # 行业地位
-            'fund_holders',          # 机构认可
-            'inst_holding_change',   # 机构增持
+            "revenue_cagr_3y",  # 营收增长
+            "profit_cagr_3y",  # 利润增长
+            "rd_ratio",  # 研发投入
+            "gross_margin",  # 毛利率
+            "gross_margin_trend",  # 毛利率趋势
+            "asset_turnover",  # 运营效率
+            "roe",  # 盈利能力
+            "industry_rank",  # 行业地位
+            "fund_holders",  # 机构认可
+            "inst_holding_change",  # 机构增持
         ]
 
     def hard_filter(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -126,10 +127,7 @@ class HybridStockSelector:
                 filtered = filtered[filtered[feature] == threshold[0]]
             elif threshold[0] is not None and threshold[1] is not None:
                 # 区间判断
-                filtered = filtered[
-                    (filtered[feature] >= threshold[0]) &
-                    (filtered[feature] <= threshold[1])
-                ]
+                filtered = filtered[(filtered[feature] >= threshold[0]) & (filtered[feature] <= threshold[1])]
             elif threshold[0] is not None:
                 # 下限判断
                 filtered = filtered[filtered[feature] >= threshold[0]]
@@ -142,7 +140,7 @@ class HybridStockSelector:
     def train(
         self,
         df_train: pd.DataFrame,
-        target_col: str = 'return_6m',
+        target_col: str = "return_6m",
     ) -> Dict[str, float]:
         """训练线性模型
 
@@ -190,10 +188,9 @@ class HybridStockSelector:
 
         # 6. 打印特征权重
         print("\n特征权重（标准化后）：")
-        feature_importance = pd.DataFrame({
-            'feature': available_features,
-            'weight': self.model.coef_
-        }).sort_values('weight', ascending=False)
+        feature_importance = pd.DataFrame({"feature": available_features, "weight": self.model.coef_}).sort_values(
+            "weight", ascending=False
+        )
         print(feature_importance.to_string(index=False))
 
         # 7. 保存模型
@@ -201,10 +198,10 @@ class HybridStockSelector:
             self._save_model()
 
         return {
-            'r2': r2,
-            'mse': mse,
-            'n_samples': len(X),
-            'n_features': len(available_features),
+            "r2": r2,
+            "mse": mse,
+            "n_samples": len(X),
+            "n_features": len(available_features),
         }
 
     def predict(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -242,10 +239,10 @@ class HybridStockSelector:
 
         # 3. 标准化并预测
         X_scaled = self.scaler.transform(X_valid)
-        df_valid['score'] = self.model.predict(X_scaled)
+        df_valid["score"] = self.model.predict(X_scaled)
 
         # 4. 按评分排序
-        df_valid = df_valid.sort_values('score', ascending=False)
+        df_valid = df_valid.sort_values("score", ascending=False)
 
         return df_valid
 
@@ -288,14 +285,14 @@ class HybridStockSelector:
         self.model_path.parent.mkdir(parents=True, exist_ok=True)
 
         model_data = {
-            'model': self.model,
-            'scaler': self.scaler,
-            'feature_names': self.feature_names,
-            'selector_type': self.selector_type,
-            'hard_rules': self.hard_rules,
+            "model": self.model,
+            "scaler": self.scaler,
+            "feature_names": self.feature_names,
+            "selector_type": self.selector_type,
+            "hard_rules": self.hard_rules,
         }
 
-        with open(self.model_path, 'wb') as f:
+        with open(self.model_path, "wb") as f:
             pickle.dump(model_data, f)
 
         print(f"模型已保存: {self.model_path}")
@@ -310,13 +307,13 @@ class HybridStockSelector:
         if path is None:
             raise ValueError("未指定模型路径")
 
-        with open(path, 'rb') as f:
+        with open(path, "rb") as f:
             model_data = pickle.load(f)
 
-        self.model = model_data['model']
-        self.scaler = model_data['scaler']
-        self.feature_names = model_data['feature_names']
-        self.selector_type = model_data['selector_type']
-        self.hard_rules = model_data['hard_rules']
+        self.model = model_data["model"]
+        self.scaler = model_data["scaler"]
+        self.feature_names = model_data["feature_names"]
+        self.selector_type = model_data["selector_type"]
+        self.hard_rules = model_data["hard_rules"]
 
         print(f"模型已加载: {path}")

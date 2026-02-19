@@ -11,11 +11,12 @@
 - 1: NEUTRAL（震荡/中性）
 - 2: RISK_ON（牛市/上涨）
 """
+
 from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -27,53 +28,56 @@ logger = logging.getLogger(__name__)
 # 数据类定义
 # ============================================================================
 
+
 @dataclass
 class TrendState:
     """趋势状态输出"""
-    state: int                          # 0/1/2: RISK_OFF/NEUTRAL/RISK_ON
-    state_name: str                     # 状态名称
-    confidence: float                   # 置信度 [0, 1]
-    trend_strength: float               # 趋势强度 [-1, 1]
-    position_suggestion: float          # 建议仓位 [0, 1]
-    prob_risk_on: float                 # RISK_ON概率
-    prob_neutral: float                 # NEUTRAL概率
-    prob_risk_off: float                # RISK_OFF概率
+
+    state: int  # 0/1/2: RISK_OFF/NEUTRAL/RISK_ON
+    state_name: str  # 状态名称
+    confidence: float  # 置信度 [0, 1]
+    trend_strength: float  # 趋势强度 [-1, 1]
+    position_suggestion: float  # 建议仓位 [0, 1]
+    prob_risk_on: float  # RISK_ON概率
+    prob_neutral: float  # NEUTRAL概率
+    prob_risk_off: float  # RISK_OFF概率
     reasons: List[str] = field(default_factory=list)  # 状态原因
-    diagnostics: Dict = field(default_factory=dict)   # 诊断信息
+    diagnostics: Dict = field(default_factory=dict)  # 诊断信息
 
 
 @dataclass
 class TrendModelConfig:
     """趋势模型配置"""
+
     # 均线参数
     ma_short: int = 20
     ma_medium: int = 60
     ma_long: int = 120
 
     # 入场确认天数（与原版均线确认一致）
-    confirmation_periods: int = 5       # 连续满足条件N天才切换
+    confirmation_periods: int = 5  # 连续满足条件N天才切换
 
     # 退出宽容期（核心改进：解决断续问题）
-    exit_tolerance: int = 8             # 条件不满足后宽容N天才退出
+    exit_tolerance: int = 8  # 条件不满足后宽容N天才退出
 
     # 最小持续期
-    min_hold_periods: int = 10          # 状态切换后强制保持N天
+    min_hold_periods: int = 10  # 状态切换后强制保持N天
 
     # P0: 极端行情熔断
     circuit_breaker_1d: float = -0.035  # 单日跌幅阈值（强制RISK_OFF）
-    circuit_breaker_3d: float = -0.06   # 连续3日累计跌幅阈值
-    circuit_breaker_5d: float = -0.08   # 连续5日累计跌幅阈值
+    circuit_breaker_3d: float = -0.06  # 连续3日累计跌幅阈值
+    circuit_breaker_5d: float = -0.08  # 连续5日累计跌幅阈值
     circuit_breaker_drawdown: float = -0.08  # 从20日高点回撤阈值
-    circuit_breaker_hold: int = 5       # 熔断后强制RISK_OFF天数
+    circuit_breaker_hold: int = 5  # 熔断后强制RISK_OFF天数
 
     # P1: 波动率自适应退出宽容期
-    vol_adaptive: bool = True           # 是否启用波动率自适应
-    vol_window: int = 20                # 当前波动率窗口
-    vol_median_window: int = 120        # 中位波动率窗口
+    vol_adaptive: bool = True  # 是否启用波动率自适应
+    vol_window: int = 20  # 当前波动率窗口
+    vol_median_window: int = 120  # 中位波动率窗口
 
     # P2: 多时间框架确认
-    mtf_enabled: bool = True            # 是否启用多时间框架
-    ma_weekly: int = 13                 # 周线级别均线（≈60日/5）
+    mtf_enabled: bool = True  # 是否启用多时间框架
+    ma_weekly: int = 13  # 周线级别均线（≈60日/5）
 
     # 仓位映射
     position_risk_on: Tuple[float, float] = (0.70, 0.95)
@@ -84,6 +88,7 @@ class TrendModelConfig:
 # ============================================================================
 # 核心模型：趋势强度 + 回滞状态机
 # ============================================================================
+
 
 class TrendModelRuleV2:
     """
@@ -103,11 +108,11 @@ class TrendModelRuleV2:
         self.config = config or TrendModelConfig()
 
     def predict(self, df_index: pd.DataFrame, return_history: bool = False) -> TrendState:
-        if 'close' not in df_index.columns:
+        if "close" not in df_index.columns:
             raise ValueError("DataFrame必须包含'close'列")
 
         cfg = self.config
-        close = df_index['close']
+        close = df_index["close"]
 
         # 计算均线
         ma_short = close.rolling(cfg.ma_short, min_periods=cfg.ma_short).mean()
@@ -131,10 +136,10 @@ class TrendModelRuleV2:
         # 状态机遍历
         states = []
         trend_strength_list = []
-        state = 1           # 当前状态
-        confirm_count = 0   # 入场确认计数
-        fail_count = 0      # 退出宽容计数
-        hold_count = 0      # 最小持续期计数
+        state = 1  # 当前状态
+        confirm_count = 0  # 入场确认计数
+        fail_count = 0  # 退出宽容计数
+        hold_count = 0  # 最小持续期计数
 
         for i in range(len(df_index)):
             ms = ma_short.iloc[i]
@@ -158,8 +163,12 @@ class TrendModelRuleV2:
             r5 = ret_5d.iloc[i]
             dd = drawdown.iloc[i]
             _tripped = False
-            for _val, _th in [(dr, cfg.circuit_breaker_1d), (r3, cfg.circuit_breaker_3d),
-                              (r5, cfg.circuit_breaker_5d), (dd, cfg.circuit_breaker_drawdown)]:
+            for _val, _th in [
+                (dr, cfg.circuit_breaker_1d),
+                (r3, cfg.circuit_breaker_3d),
+                (r5, cfg.circuit_breaker_5d),
+                (dd, cfg.circuit_breaker_drawdown),
+            ]:
                 if not pd.isna(_val) and _val <= _th:
                     _tripped = True
                     break
@@ -246,11 +255,9 @@ class TrendModelRuleV2:
         p_on, p_neu, p_off = self._calc_probability(final_ts)
         confidence = self._calc_confidence(final_state, p_on, p_off)
         position = self._calc_position(final_state, confidence)
-        reasons = self._gen_reasons(
-            final_state, ma_short.iloc[-1], ma_medium.iloc[-1], close.iloc[-1], slope.iloc[-1]
-        )
+        reasons = self._gen_reasons(final_state, ma_short.iloc[-1], ma_medium.iloc[-1], close.iloc[-1], slope.iloc[-1])
 
-        state_names = {0: 'RISK_OFF', 1: 'NEUTRAL', 2: 'RISK_ON'}
+        state_names = {0: "RISK_OFF", 1: "NEUTRAL", 2: "RISK_ON"}
         result = TrendState(
             state=final_state,
             state_name=state_names[final_state],
@@ -262,16 +269,16 @@ class TrendModelRuleV2:
             prob_risk_off=round(p_off, 4),
             reasons=reasons,
             diagnostics={
-                'ma_short': round(ma_short.iloc[-1], 2),
-                'ma_medium': round(ma_medium.iloc[-1], 2),
-                'current_price': round(close.iloc[-1], 2),
-                'slope': round(slope.iloc[-1], 4),
-            }
+                "ma_short": round(ma_short.iloc[-1], 2),
+                "ma_medium": round(ma_medium.iloc[-1], 2),
+                "current_price": round(close.iloc[-1], 2),
+                "slope": round(slope.iloc[-1], 4),
+            },
         )
 
         if return_history:
-            result.diagnostics['states'] = states
-            result.diagnostics['trend_strength'] = trend_strength_list
+            result.diagnostics["states"] = states
+            result.diagnostics["trend_strength"] = trend_strength_list
 
         logger.info(f"趋势状态: {result.state_name} (confidence={result.confidence:.2f})")
         return result
@@ -335,6 +342,7 @@ class TrendModelRuleV2:
 # 旧版兼容：TrendModelRule（保持向后兼容）
 # ============================================================================
 
+
 class TrendModelRule(TrendModelRuleV2):
     """
     趋势状态模型（规则版本）- 兼容旧接口
@@ -361,6 +369,7 @@ class TrendModelRule(TrendModelRuleV2):
 # HMM 版本（粘性HMM）
 # ============================================================================
 
+
 class TrendModelHMM:
     """
     趋势状态模型（HMM版本）- 粘性HMM
@@ -378,15 +387,15 @@ class TrendModelHMM:
         self.is_trained = False
 
         # 默认参数
-        self.n_components = self.config.get('n_components', 3)
-        self.sticky_factor = self.config.get('sticky_factor', 0.90)
-        self.min_duration = self.config.get('min_duration', 5)
+        self.n_components = self.config.get("n_components", 3)
+        self.sticky_factor = self.config.get("sticky_factor", 0.90)
+        self.min_duration = self.config.get("min_duration", 5)
 
     def _compute_observations(self, df: pd.DataFrame) -> np.ndarray:
         """
         计算HMM观测特征（趋势证据）
         """
-        close = df['close']
+        close = df["close"]
 
         # 趋势强度
         ma20 = close.rolling(20).mean()
@@ -400,15 +409,17 @@ class TrendModelHMM:
         momentum = close.pct_change(20)
 
         # 组合观测
-        obs = pd.DataFrame({
-            'trend_strength': trend_strength,
-            'volatility': vol,
-            'momentum': momentum,
-        }).dropna()
+        obs = pd.DataFrame(
+            {
+                "trend_strength": trend_strength,
+                "volatility": vol,
+                "momentum": momentum,
+            }
+        ).dropna()
 
         return obs.values
 
-    def train(self, df: pd.DataFrame) -> 'TrendModelHMM':
+    def train(self, df: pd.DataFrame) -> "TrendModelHMM":
         """
         训练HMM模型
         """
@@ -432,16 +443,13 @@ class TrendModelHMM:
         # 训练HMM
         self.model = hmm.GaussianHMM(
             n_components=self.n_components,
-            covariance_type='full',
+            covariance_type="full",
             n_iter=500,
             random_state=42,
         )
 
         # 初始化粘性转移矩阵
-        transmat = np.full(
-            (self.n_components, self.n_components),
-            (1 - self.sticky_factor) / (self.n_components - 1)
-        )
+        transmat = np.full((self.n_components, self.n_components), (1 - self.sticky_factor) / (self.n_components - 1))
         np.fill_diagonal(transmat, self.sticky_factor)
         self.model.startprob_ = np.ones(self.n_components) / self.n_components
         self.model.transmat_ = transmat
@@ -460,7 +468,7 @@ class TrendModelHMM:
             logger.warning("HMM模型未训练，使用默认状态")
             return TrendState(
                 state=1,
-                state_name='NEUTRAL',
+                state_name="NEUTRAL",
                 confidence=0.5,
                 trend_strength=0.0,
                 position_suggestion=0.4,
@@ -481,11 +489,11 @@ class TrendModelHMM:
 
         # 状态映射（需要根据训练结果确定）
         # 这里简化处理，假设状态0=熊市，1=震荡，2=牛市
-        state_names = {0: 'RISK_OFF', 1: 'NEUTRAL', 2: 'RISK_ON'}
+        state_names = {0: "RISK_OFF", 1: "NEUTRAL", 2: "RISK_ON"}
 
         return TrendState(
             state=final_state,
-            state_name=state_names.get(final_state, 'NEUTRAL'),
+            state_name=state_names.get(final_state, "NEUTRAL"),
             confidence=round(max(probs), 4),
             trend_strength=0.0,  # HMM不直接输出强度
             position_suggestion=round(0.3 + max(probs) * 0.5, 4),
@@ -498,6 +506,7 @@ class TrendModelHMM:
 # ============================================================================
 # LGBM 版本（待实现）
 # ============================================================================
+
 
 class TrendModelLGBM:
     """
@@ -515,7 +524,7 @@ class TrendModelLGBM:
         self.is_trained = False
         logger.warning("LightGBM版本的趋势模型尚未实现，请使用TrendModelRuleV2")
 
-    def train(self, df: pd.DataFrame, labels: pd.Series) -> 'TrendModelLGBM':
+    def train(self, df: pd.DataFrame, labels: pd.Series) -> "TrendModelLGBM":
         """训练模型"""
         logger.warning("LightGBM版本暂未实现")
         return self
@@ -524,7 +533,7 @@ class TrendModelLGBM:
         """预测趋势状态"""
         return TrendState(
             state=1,
-            state_name='NEUTRAL',
+            state_name="NEUTRAL",
             confidence=0.5,
             trend_strength=0.0,
             position_suggestion=0.4,
@@ -538,9 +547,9 @@ class TrendModelLGBM:
 # 工厂函数
 # ============================================================================
 
+
 def create_trend_model(
-    model_type: str = 'rule',
-    config: Optional[Dict] = None
+    model_type: str = "rule", config: Optional[Dict] = None
 ) -> TrendModelRuleV2 | TrendModelHMM | TrendModelLGBM:
     """
     创建趋势模型工厂函数
@@ -557,25 +566,25 @@ def create_trend_model(
     """
     config = config or {}
 
-    if model_type in ('rule', 'rule_v2'):
+    if model_type in ("rule", "rule_v2"):
         model_config = TrendModelConfig()
-        if 'rule_params' in config:
-            params = config['rule_params']
+        if "rule_params" in config:
+            params = config["rule_params"]
             model_config = TrendModelConfig(
-                ma_short=params.get('ma_short', 20),
-                ma_medium=params.get('ma_medium', 60),
-                ma_long=params.get('ma_long', 120),
-                confirmation_periods=params.get('confirmation_periods', 3),
-                exit_tolerance=params.get('exit_tolerance', 5),
-                min_hold_periods=params.get('min_hold_periods', 7),
+                ma_short=params.get("ma_short", 20),
+                ma_medium=params.get("ma_medium", 60),
+                ma_long=params.get("ma_long", 120),
+                confirmation_periods=params.get("confirmation_periods", 3),
+                exit_tolerance=params.get("exit_tolerance", 5),
+                min_hold_periods=params.get("min_hold_periods", 7),
             )
         return TrendModelRuleV2(model_config)
 
-    elif model_type == 'hmm':
-        return TrendModelHMM(config.get('hmm_params', {}))
+    elif model_type == "hmm":
+        return TrendModelHMM(config.get("hmm_params", {}))
 
-    elif model_type == 'lgbm':
-        return TrendModelLGBM(config.get('lgbm_params', {}))
+    elif model_type == "lgbm":
+        return TrendModelLGBM(config.get("lgbm_params", {}))
 
     else:
         raise ValueError(f"不支持的模型类型: {model_type}")
@@ -590,35 +599,39 @@ if __name__ == "__main__":
 
     # 创建测试数据
     np.random.seed(42)
-    dates = pd.date_range('2020-01-01', '2023-12-31', freq='D')
+    dates = pd.date_range("2020-01-01", "2023-12-31", freq="D")
 
     # 模拟指数数据（带趋势+噪声）
-    trend = np.concatenate([
-        np.linspace(3000, 4000, 500),   # 上涨
-        np.linspace(4000, 3500, 300),   # 回调
-        np.linspace(3500, 3800, 400),   # 震荡上行
-        np.linspace(3800, 3200, 300),   # 下跌
-        np.linspace(3200, 3400, 200),   # 反弹
-    ])
+    trend = np.concatenate(
+        [
+            np.linspace(3000, 4000, 500),  # 上涨
+            np.linspace(4000, 3500, 300),  # 回调
+            np.linspace(3500, 3800, 400),  # 震荡上行
+            np.linspace(3800, 3200, 300),  # 下跌
+            np.linspace(3200, 3400, 200),  # 反弹
+        ]
+    )
     noise = np.random.randn(len(dates)) * 20
-    close = trend[:len(dates)] + noise
+    close = trend[: len(dates)] + noise
 
-    df = pd.DataFrame({
-        'date': dates,
-        'close': close,
-        'high': close + np.abs(np.random.randn(len(dates))) * 10,
-        'low': close - np.abs(np.random.randn(len(dates))) * 10,
-    })
+    df = pd.DataFrame(
+        {
+            "date": dates,
+            "close": close,
+            "high": close + np.abs(np.random.randn(len(dates))) * 10,
+            "low": close - np.abs(np.random.randn(len(dates))) * 10,
+        }
+    )
 
     # 测试规则模型
     print("=" * 60)
     print("测试趋势模型 V2")
     print("=" * 60)
 
-    model = create_trend_model('rule')
+    model = create_trend_model("rule")
     result = model.predict(df, return_history=True)
 
-    print(f"\n预测结果:")
+    print("\n预测结果:")
     print(f"  状态: {result.state_name} ({result.state})")
     print(f"  置信度: {result.confidence:.2%}")
     print(f"  趋势强度: {result.trend_strength:.2f}")

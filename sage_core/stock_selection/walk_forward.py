@@ -7,11 +7,12 @@ Walk-Forward 评估框架 — 滚动窗口训练 + Purging + Embargo + 分组回
 - Embargo 消除自相关（验证集开头几天与训练集末尾相关）
 - 分组回测（Quintile）评估真实选股能力
 """
+
 from __future__ import annotations
 
 import copy
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
@@ -25,22 +26,24 @@ logger = logging.getLogger(__name__)
 @dataclass
 class WalkForwardConfig:
     """Walk-Forward 配置"""
-    train_days: int = 504       # 训练窗口（约2年）
-    val_days: int = 63          # 验证窗口（约1季度）
-    step_days: int = 63         # 步进天数
-    purge_days: int = 30        # Purge gap（>= max_label_horizon × 1.5）
-    embargo_days: int = 5       # Embargo 天数
-    n_quantiles: int = 5        # 分组数
-    forward_days: int = 20      # 评估用前瞻收益天数
+
+    train_days: int = 504  # 训练窗口（约2年）
+    val_days: int = 63  # 验证窗口（约1季度）
+    step_days: int = 63  # 步进天数
+    purge_days: int = 30  # Purge gap（>= max_label_horizon × 1.5）
+    embargo_days: int = 5  # Embargo 天数
+    n_quantiles: int = 5  # 分组数
+    forward_days: int = 20  # 评估用前瞻收益天数
 
 
 @dataclass
 class WalkForwardResult:
     """Walk-Forward 结果"""
-    predictions: pd.DataFrame       # 所有窗口的预测汇总
+
+    predictions: pd.DataFrame  # 所有窗口的预测汇总
     quintile_returns: pd.DataFrame  # 分组收益
-    summary: Dict                   # 汇总指标
-    window_details: List[Dict]      # 每个窗口的详情
+    summary: Dict  # 汇总指标
+    window_details: List[Dict]  # 每个窗口的详情
 
 
 class WalkForwardEvaluator:
@@ -68,8 +71,6 @@ class WalkForwardEvaluator:
         """
         cfg = self.wf_config
         date_col = self.selection_config.date_col
-        price_col = self.selection_config.price_col
-        code_col = self.selection_config.code_col
 
         dates = sorted(df[date_col].unique())
         n_dates = len(dates)
@@ -112,21 +113,25 @@ class WalkForwardEvaluator:
                 all_preds.append(pred)
 
                 n_features = len(model.feature_cols) if model.feature_cols else 0
-                window_details.append({
-                    "window_id": window_id,
-                    "train_start": str(train_dates[0])[:10],
-                    "train_end": str(train_dates[-1])[:10],
-                    "val_start": str(val_dates[0])[:10],
-                    "val_end": str(val_dates[-1])[:10],
-                    "n_features": n_features,
-                    "status": "ok",
-                })
+                window_details.append(
+                    {
+                        "window_id": window_id,
+                        "train_start": str(train_dates[0])[:10],
+                        "train_end": str(train_dates[-1])[:10],
+                        "val_start": str(val_dates[0])[:10],
+                        "val_end": str(val_dates[-1])[:10],
+                        "n_features": n_features,
+                        "status": "ok",
+                    }
+                )
             except Exception as e:
                 logger.warning(f"[Window {window_id}] 训练失败: {e}")
-                window_details.append({
-                    "window_id": window_id,
-                    "status": f"failed: {e}",
-                })
+                window_details.append(
+                    {
+                        "window_id": window_id,
+                        "status": f"failed: {e}",
+                    }
+                )
 
             start += cfg.step_days
             window_id += 1
@@ -154,9 +159,7 @@ class WalkForwardEvaluator:
             window_details=window_details,
         )
 
-    def _add_forward_returns(
-        self, pred: pd.DataFrame, df_full: pd.DataFrame, forward_days: int
-    ) -> pd.DataFrame:
+    def _add_forward_returns(self, pred: pd.DataFrame, df_full: pd.DataFrame, forward_days: int) -> pd.DataFrame:
         """为预测结果添加前瞻收益（仅用于评估，不参与训练）"""
         date_col = self.selection_config.date_col
         code_col = self.selection_config.code_col
@@ -171,14 +174,10 @@ class WalkForwardEvaluator:
         price_df["_fwd_ret"] = price_df["_fwd_price"] / price_df[price_col] - 1
 
         lookup = price_df.set_index([code_col, date_col])["_fwd_ret"]
-        pred["forward_ret"] = pred.set_index([code_col, date_col]).index.map(
-            lambda x: lookup.get(x, np.nan)
-        )
+        pred["forward_ret"] = pred.set_index([code_col, date_col]).index.map(lambda x: lookup.get(x, np.nan))
         return pred
 
-    def _quintile_analysis(
-        self, pred: pd.DataFrame, n_quantiles: int
-    ) -> Tuple[pd.DataFrame, Dict]:
+    def _quintile_analysis(self, pred: pd.DataFrame, n_quantiles: int) -> Tuple[pd.DataFrame, Dict]:
         """分组回测分析"""
         date_col = self.selection_config.date_col
 

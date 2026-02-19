@@ -15,10 +15,12 @@
 """
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
+import yaml
 
 
 @dataclass
@@ -27,7 +29,7 @@ class CostModelConfig:
 
     # 1. 固定成本（单边）
     commission_rate: float = 0.0003  # 佣金费率（万三）
-    stamp_tax_rate: float = 0.001    # 印花税（卖出时收取）
+    stamp_tax_rate: float = 0.001  # 印花税（卖出时收取）
     transfer_fee_rate: float = 0.00002  # 过户费
 
     # 2. 滑点成本
@@ -41,6 +43,24 @@ class CostModelConfig:
     # 4. 流动性约束
     max_participation_rate: float = 0.05  # 最大成交量占比（5%）
     min_daily_volume: float = 1_000_000  # 最小日成交额（元）
+
+    @classmethod
+    def from_yaml(cls, path: str = "config/app/backtest_costs.yaml", profile: str = "default") -> "CostModelConfig":
+        """从 YAML 配置文件加载
+
+        Args:
+            path: 配置文件路径（相对于项目根目录或绝对路径）
+            profile: 配置档位（default / conservative / aggressive）
+        """
+        config_path = Path(path)
+        if not config_path.is_absolute():
+            config_path = Path(__file__).resolve().parents[2] / path
+
+        with open(config_path, "r", encoding="utf-8") as f:
+            all_cfg = yaml.safe_load(f)
+
+        cfg = all_cfg.get(profile, {})
+        return cls(**{k: v for k, v in cfg.items() if k in cls.__dataclass_fields__})
 
     @property
     def total_fixed_cost_buy(self) -> float:
@@ -104,20 +124,18 @@ class TradingCostModel:
         slippage_cost = self._calculate_slippage(trade_value, volatility)
 
         # 3. 市场冲击成本
-        market_impact_cost = self._calculate_market_impact(
-            trade_value, daily_volume, volatility, avg_price
-        )
+        market_impact_cost = self._calculate_market_impact(trade_value, daily_volume, volatility, avg_price)
 
         # 4. 总成本
         total_cost = fixed_cost + slippage_cost + market_impact_cost
         total_cost_rate = total_cost / trade_value if trade_value > 0 else 0.0
 
         return {
-            'fixed_cost': fixed_cost,
-            'slippage_cost': slippage_cost,
-            'market_impact_cost': market_impact_cost,
-            'total_cost': total_cost,
-            'total_cost_rate': total_cost_rate,
+            "fixed_cost": fixed_cost,
+            "slippage_cost": slippage_cost,
+            "market_impact_cost": market_impact_cost,
+            "total_cost": total_cost,
+            "total_cost_rate": total_cost_rate,
         }
 
     def _calculate_slippage(self, trade_value: float, volatility: float) -> float:
@@ -175,12 +193,7 @@ class TradingCostModel:
 
         # 永久冲击（与参与率和波动率成正比）
         # 公式：permanent_impact = α × σ × (Q/V)^0.5
-        permanent_impact = (
-            self.config.market_impact_factor
-            * volatility
-            * np.sqrt(participation_rate)
-            * trade_value
-        )
+        permanent_impact = self.config.market_impact_factor * volatility * np.sqrt(participation_rate) * trade_value
 
         # 临时冲击（交易过程中的价格压力，会部分恢复）
         # 公式：temporary_impact = β × σ × (Q/V)
@@ -224,29 +237,31 @@ class TradingCostModel:
 
         # 如果有市场数据，使用实际参数
         if market_data is not None and not market_data.empty:
-            if 'volatility' in market_data.columns:
-                avg_volatility = market_data['volatility'].mean()
-            if 'amount' in market_data.columns:
-                avg_daily_volume = market_data['amount'].mean()
-            if 'close' in market_data.columns:
-                avg_price = market_data['close'].mean()
+            if "volatility" in market_data.columns:
+                avg_volatility = market_data["volatility"].mean()
+            if "amount" in market_data.columns:
+                avg_daily_volume = market_data["amount"].mean()
+            if "close" in market_data.columns:
+                avg_price = market_data["close"].mean()
 
         # 假设买卖各占一半
         buy_cost = self.calculate_total_cost(
-            trade_value / 2, is_buy=True,
+            trade_value / 2,
+            is_buy=True,
             volatility=avg_volatility,
             daily_volume=avg_daily_volume,
             avg_price=avg_price,
         )
 
         sell_cost = self.calculate_total_cost(
-            trade_value / 2, is_buy=False,
+            trade_value / 2,
+            is_buy=False,
             volatility=avg_volatility,
             daily_volume=avg_daily_volume,
             avg_price=avg_price,
         )
 
-        total_cost = buy_cost['total_cost'] + sell_cost['total_cost']
+        total_cost = buy_cost["total_cost"] + sell_cost["total_cost"]
         cost_rate = total_cost / portfolio_value
 
         return cost_rate
@@ -278,37 +293,47 @@ class TradingCostModel:
 
 
 def create_default_cost_model() -> TradingCostModel:
-    """创建默认成本模型（使用默认配置）"""
-    return TradingCostModel(CostModelConfig())
+    """创建默认成本模型（优先从配置文件加载）"""
+    try:
+        config = CostModelConfig.from_yaml(profile="default")
+    except FileNotFoundError:
+        config = CostModelConfig()
+    return TradingCostModel(config)
 
 
 def create_conservative_cost_model() -> TradingCostModel:
     """创建保守成本模型（较高成本估计）"""
-    config = CostModelConfig(
-        commission_rate=0.0003,  # 万三佣金
-        stamp_tax_rate=0.001,    # 千一印花税
-        transfer_fee_rate=0.00002,  # 过户费
-        fixed_slippage_bps=2.0,  # 2bp固定滑点
-        volatility_slippage_factor=0.5,  # 波动率滑点系数
-        market_impact_factor=0.1,  # 市场冲击系数
-        temporary_impact_decay=0.5,  # 临时冲击衰减
-        max_participation_rate=0.05,  # 最大5%参与率
-        min_daily_volume=1_000_000,  # 最小100万成交额
-    )
+    try:
+        config = CostModelConfig.from_yaml(profile="conservative")
+    except FileNotFoundError:
+        config = CostModelConfig(
+            commission_rate=0.0003,
+            stamp_tax_rate=0.001,
+            transfer_fee_rate=0.00002,
+            fixed_slippage_bps=2.0,
+            volatility_slippage_factor=0.5,
+            market_impact_factor=0.1,
+            temporary_impact_decay=0.5,
+            max_participation_rate=0.05,
+            min_daily_volume=1_000_000,
+        )
     return TradingCostModel(config)
 
 
 def create_aggressive_cost_model() -> TradingCostModel:
     """创建激进成本模型（乐观估计，用于对比）"""
-    config = CostModelConfig(
-        commission_rate=0.0001,  # 万一佣金
-        stamp_tax_rate=0.001,    # 千一印花税
-        transfer_fee_rate=0.00002,  # 过户费
-        fixed_slippage_bps=1.0,  # 1bp固定滑点
-        volatility_slippage_factor=0.3,  # 较低波动率滑点
-        market_impact_factor=0.05,  # 较低市场冲击
-        temporary_impact_decay=0.3,  # 较低临时冲击
-        max_participation_rate=0.10,  # 最大10%参与率
-        min_daily_volume=500_000,  # 最小50万成交额
-    )
+    try:
+        config = CostModelConfig.from_yaml(profile="aggressive")
+    except FileNotFoundError:
+        config = CostModelConfig(
+            commission_rate=0.0001,
+            stamp_tax_rate=0.001,
+            transfer_fee_rate=0.00002,
+            fixed_slippage_bps=1.0,
+            volatility_slippage_factor=0.3,
+            market_impact_factor=0.05,
+            temporary_impact_decay=0.3,
+            max_participation_rate=0.10,
+            min_daily_volume=500_000,
+        )
     return TradingCostModel(config)

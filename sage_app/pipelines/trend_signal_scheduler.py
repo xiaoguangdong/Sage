@@ -20,7 +20,7 @@ from apscheduler.triggers.cron import CronTrigger
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import setup_logger, get_tushare_root
+from scripts.data._shared.runtime import get_tushare_root, setup_logger
 from scripts.models.export_trend_signal import export_trend_main_signal
 
 
