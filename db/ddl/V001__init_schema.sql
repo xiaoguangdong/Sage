@@ -10,6 +10,7 @@ CREATE SCHEMA IF NOT EXISTS factor;
 CREATE SCHEMA IF NOT EXISTS macro;
 CREATE SCHEMA IF NOT EXISTS flow;
 CREATE SCHEMA IF NOT EXISTS concept;
+CREATE SCHEMA IF NOT EXISTS policy;
 CREATE SCHEMA IF NOT EXISTS meta;
 
 -- ============================================================
@@ -378,6 +379,36 @@ CREATE TABLE macro.cn_macro (
     nt_mom       NUMERIC(10,4),
     nt_accu      NUMERIC(12,4),
     PRIMARY KEY (month, indicator)
+);
+
+-- ============================================================
+-- policy: 政策/研报元数据（不入库原文，仅保存链接与关键字段）
+-- ============================================================
+
+CREATE TABLE policy.gov_notice (
+    publish_date DATE         NOT NULL,
+    title        TEXT         NOT NULL,
+    url          TEXT         NOT NULL,
+    source_name  VARCHAR(100),
+    source_tag   VARCHAR(100),
+    source_type  VARCHAR(50),
+    fetched_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (publish_date, url)
+);
+
+CREATE TABLE policy.industry_report (
+    publish_date  DATE         NOT NULL,
+    title         TEXT         NOT NULL,
+    industry      VARCHAR(100),
+    org           VARCHAR(100),
+    rating        VARCHAR(50),
+    rating_change VARCHAR(50),
+    info_code     VARCHAR(50),
+    source_name   VARCHAR(100),
+    source_type   VARCHAR(50),
+    source_url    TEXT,
+    fetched_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (publish_date, info_code, title)
 );
 
 -- ============================================================

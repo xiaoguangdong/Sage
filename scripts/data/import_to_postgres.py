@@ -42,7 +42,7 @@ except Exception:  # pragma: no cover - 运行时报错提示
     psycopg = None
     execute_values = None
 
-from scripts.data._shared.runtime import get_tushare_root, setup_logger
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, setup_logger
 
 logger = setup_logger("import_postgres", module="data")
 
@@ -546,6 +546,37 @@ def _task_sw_valuation(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
     )
 
 
+def _task_gov_notice(_: Path) -> tuple[str, List[Path], List[str]]:
+    path = get_data_path("raw", "policy", "gov_notices.parquet")
+    paths = [path] if path.exists() else []
+    return (
+        "policy.gov_notice",
+        paths,
+        ["publish_date", "title", "url", "source_name", "source_tag", "source_type"],
+    )
+
+
+def _task_eastmoney_industry_report(_: Path) -> tuple[str, List[Path], List[str]]:
+    path = get_data_path("raw", "policy", "eastmoney_industry_reports.parquet")
+    paths = [path] if path.exists() else []
+    return (
+        "policy.industry_report",
+        paths,
+        [
+            "publish_date",
+            "title",
+            "industry",
+            "org",
+            "rating",
+            "rating_change",
+            "info_code",
+            "source_name",
+            "source_type",
+            "source_url",
+        ],
+    )
+
+
 def _task_yield_curve(tushare_root: Path, curve_type: str) -> pd.DataFrame:
     frames = []
     for term in (10, 2):
@@ -626,6 +657,8 @@ TASK_BUILDERS = {
     "sw_index_member": _task_sw_index_member,
     "sw_industry": _task_sw_industry,
     "sw_valuation": _task_sw_valuation,
+    "gov_notice": _task_gov_notice,
+    "eastmoney_industry_report": _task_eastmoney_industry_report,
 }
 
 
@@ -695,6 +728,12 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             else:
                 df[col] = pd.NA
+    if task == "gov_notice":
+        df = _normalize_date_col(df, "publish_date")
+    if task == "eastmoney_industry_report":
+        df = _normalize_date_col(df, "publish_date")
+        if "source_url" not in df.columns:
+            df["source_url"] = "https://data.eastmoney.com/report/hyyb.html"
     return df
 
 
@@ -803,6 +842,8 @@ def main() -> None:
             "sw_index_member",
             "sw_industry",
             "sw_valuation",
+            "gov_notice",
+            "eastmoney_industry_report",
             "yield_curve",
             "cn_macro",
         ]
