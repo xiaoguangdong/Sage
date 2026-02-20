@@ -17,7 +17,7 @@ portfolio_manager:
     growth_model_path: "data/models/hybrid_growth.pkl"
     value_top_n: 20           # 价值股候选池大小
     growth_top_n: 20          # 成长股候选池大小
-    rule_only: true           # 仅规则选股（跳过模型）
+    rule_only: true           # 仅规则选股（跳过模型）；基线期 2026-02-20~2026-03-20
     rule_fallback: true       # 模型失败或候选不足时回退规则
     rule_top_n: 20            # 规则候选池大小
     min_candidates: 5         # 模型候选不足时触发回退（仅 rule_only=false 时生效）
@@ -25,7 +25,7 @@ portfolio_manager:
       value:
         hard_filters:
           roe:
-            min: 0.12
+            min: 0.15
           debt_ratio:
             max: 0.60
           consecutive_dividend:
@@ -33,7 +33,7 @@ portfolio_manager:
           revenue_growth:
             min: 0.00
           cash_profit_ratio:
-            min: 0.60
+            min: 1.00
           dedt_profit_ratio:
             min: 0.60
           net_cash_ratio:
