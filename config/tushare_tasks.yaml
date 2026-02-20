@@ -250,6 +250,7 @@ tasks:
     end_field: end_m
     split: month
     dedup_keys: ["month"]
+    note: "全国PPI主口径（替代NBS nbs_ppi_national）"
     state: "data/states/cn_ppi.json"
     output: "macro/tushare_ppi.parquet"
 

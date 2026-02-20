@@ -40,6 +40,10 @@ download_plans:
     desc: sw_industry_daily 缺少近期数据
     start_date: '20260211'
     end_date: '20260213'
+  - task: cn_ppi
+    desc: cn_ppi 补齐全国PPI（替代NBS）
+    start_date: '201602'
+    end_date: '202602'
   - task: fina_indicator
     desc: fina_indicator 缺少早期数据
     start_date: '20160101'
