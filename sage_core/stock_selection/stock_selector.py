@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,6 +11,9 @@ logger = logging.getLogger(__name__)
 
 # 模块级变量：控制 industry_col 警告只打印一次
 _WARNED_INDUSTRY_COL = False
+
+if TYPE_CHECKING:
+    from sage_core.features.factor_optimizer import FactorOptimizer
 
 
 @dataclass
@@ -62,6 +65,7 @@ class SelectionConfig:
     neutralize_features: bool = False  # 是否对特征进行中性化
     neutralize_method: str = "market_cap"  # 中性化方法: market_cap/industry/both
     neutralize_features_list: Optional[List[str]] = None  # 指定需要中性化的因子（None=全部）
+    neutralize_by_date: bool = True  # 是否按日期分组中性化（避免时序泄露）
 
     # 模型参数
     lgbm_params: Dict[str, object] = field(
@@ -390,28 +394,42 @@ class StockSelector:
 
             if neutralize_cols:
                 try:
-                    if self.config.neutralize_method == "market_cap":
-                        if "total_mv" in df.columns:
-                            df = optimizer.market_cap_neutralize(df, neutralize_cols, cap_col="total_mv")
-                            logger.info(f"✅ 市值中性化完成 ({len(neutralize_cols)} 个因子)")
-                    elif self.config.neutralize_method == "industry":
-                        if self.config.industry_col and self.config.industry_col in df.columns:
-                            df = optimizer.industry_neutralize(
-                                df, neutralize_cols, industry_col=self.config.industry_col
+                    if self.config.neutralize_by_date and self.config.date_col in df.columns:
+                        date_col = self.config.date_col
+                        if df[date_col].nunique() > 1:
+                            df = df.groupby(date_col, group_keys=False).apply(
+                                lambda g: self._apply_feature_neutralization(g, optimizer, neutralize_cols)
                             )
-                            logger.info(f"✅ 行业中性化完成 ({len(neutralize_cols)} 个因子)")
-                    elif self.config.neutralize_method == "both":
-                        if "total_mv" in df.columns:
-                            df = optimizer.market_cap_neutralize(df, neutralize_cols, cap_col="total_mv")
-                        if self.config.industry_col and self.config.industry_col in df.columns:
-                            df = optimizer.industry_neutralize(
-                                df, neutralize_cols, industry_col=self.config.industry_col
-                            )
-                        logger.info(f"✅ 双重中性化完成 ({len(neutralize_cols)} 个因子)")
+                        else:
+                            df = self._apply_feature_neutralization(df, optimizer, neutralize_cols)
+                    else:
+                        df = self._apply_feature_neutralization(df, optimizer, neutralize_cols)
+                    logger.info(f"✅ 因子中性化完成 ({self.config.neutralize_method}) ({len(neutralize_cols)} 个因子)")
                 except Exception as e:
                     logger.warning(f"⚠️  因子中性化失败: {e}")
 
         df["trade_date"] = df[date_col]
+        return df
+
+    def _apply_feature_neutralization(
+        self,
+        df: pd.DataFrame,
+        optimizer: FactorOptimizer,
+        neutralize_cols: Sequence[str],
+    ) -> pd.DataFrame:
+        cfg = self.config
+        if cfg.neutralize_method == "market_cap":
+            if "total_mv" in df.columns:
+                return optimizer.market_cap_neutralize(df, neutralize_cols, cap_col="total_mv")
+        elif cfg.neutralize_method == "industry":
+            if cfg.industry_col and cfg.industry_col in df.columns:
+                return optimizer.industry_neutralize(df, neutralize_cols, industry_col=cfg.industry_col)
+        elif cfg.neutralize_method == "both":
+            if "total_mv" in df.columns:
+                df = optimizer.market_cap_neutralize(df, neutralize_cols, cap_col="total_mv")
+            if cfg.industry_col and cfg.industry_col in df.columns:
+                df = optimizer.industry_neutralize(df, neutralize_cols, industry_col=cfg.industry_col)
+            return df
         return df
 
     def build_labels(self, df: pd.DataFrame) -> pd.Series:

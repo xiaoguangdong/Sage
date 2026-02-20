@@ -433,6 +433,15 @@ class HighAlphaFeatures:
         lookback_date = (trade_dt - pd.DateOffset(months=lookback_months)).strftime("%Y%m%d")
         forecast = forecast[forecast["ann_date"] >= lookback_date]
 
+        express_by_code = None
+        if express_path.exists():
+            express = pd.read_parquet(express_path)
+            express = express[express["ann_date"] <= trade_date].copy()
+            if not express.empty:
+                express_by_code = {
+                    ts_code: group.sort_values("ann_date") for ts_code, group in express.groupby("ts_code")
+                }
+
         # 按股票分组计算
         features = []
         for ts_code, group in forecast.groupby("ts_code"):
@@ -456,17 +465,13 @@ class HighAlphaFeatures:
 
             # 3. 超预期程度（需要 express 数据）
             beat_expectation_rate = 0
-            if express_path.exists():
-                express = pd.read_parquet(express_path)
-                express_stock = express[(express["ts_code"] == ts_code) & (express["ann_date"] <= trade_date)]
-                if not express_stock.empty and not group_sorted.empty:
-                    latest_express = express_stock.sort_values("ann_date").iloc[-1]
-                    latest_forecast = group_sorted.iloc[-1]
-                    forecast_mid = (
-                        latest_forecast.get("net_profit_min", 0) + latest_forecast.get("net_profit_max", 0)
-                    ) / 2
-                    actual = latest_express.get("n_income", 0)
-                    beat_expectation_rate = (actual - forecast_mid) / abs(forecast_mid) if forecast_mid != 0 else 0
+            express_stock = express_by_code.get(ts_code) if express_by_code else None
+            if express_stock is not None and not express_stock.empty and not group_sorted.empty:
+                latest_express = express_stock.iloc[-1]
+                latest_forecast = group_sorted.iloc[-1]
+                forecast_mid = (latest_forecast.get("net_profit_min", 0) + latest_forecast.get("net_profit_max", 0)) / 2
+                actual = latest_express.get("n_income", 0)
+                beat_expectation_rate = (actual - forecast_mid) / abs(forecast_mid) if forecast_mid != 0 else 0
 
             # 4. 预期一致性（预告区间宽度 / 中值，越小越好）
             latest = group_sorted.iloc[-1]

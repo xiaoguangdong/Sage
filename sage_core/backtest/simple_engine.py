@@ -341,7 +341,9 @@ class SimpleBacktestEngine:
 
             # 换手率约束
             if holdings:
-                old_weights = pd.Series(holdings)
+                old_weights = pd.DataFrame(
+                    [{"ts_code": ts_code, "weight": weight} for ts_code, weight in holdings.items()]
+                )
                 new_weights_df = pd.DataFrame({"ts_code": day_signals["ts_code"].values, "weight": weights.values})
                 new_weights_df = optimizer.apply_turnover_constraint(
                     new_weights_df, old_weights, max_turnover=self.config.max_turnover
