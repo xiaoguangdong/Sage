@@ -15,5 +15,6 @@ dependencies:
       - lightgbm
       - xgboost
       - pyarrow
+      - psycopg[binary]
       - pytest
       - APScheduler

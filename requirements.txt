@@ -16,6 +16,9 @@ xgboost
 # IO
 pyarrow
 
+# DB
+psycopg[binary]
+
 # Testing
 pytest
 

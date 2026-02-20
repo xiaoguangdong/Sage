@@ -10,6 +10,21 @@
 - 数据根目录优先从 `config/base.yaml -> data.roots.primary` 读取（如 `/Volumes/SPEED/BizData/Stock/sage_primary`）
 - 可用环境变量覆盖：`SAGE_DATA_ROOT_PRIMARY` / `SAGE_DATA_ROOT_SECONDARY`
 
+## 数据导入数据库（PostgreSQL 单库）
+
+脚本：`scripts/data/import_to_postgres.py`
+
+```bash
+# 导入单表
+python scripts/data/import_to_postgres.py --task daily_kline
+
+# 导入全部（建议先 dry-run 评估体量）
+python scripts/data/import_to_postgres.py --task all --dry-run
+```
+
+默认读取环境变量：
+- `SAGE_DB_HOST` / `SAGE_DB_PORT` / `SAGE_DB_NAME` / `SAGE_DB_USER` / `SAGE_DB_PASSWORD`
+
 ## Tushare 统一脚本（理想版统一入口）
 
 脚本：`scripts/data/tushare_downloader.py`
