@@ -518,6 +518,11 @@ def _task_sw_index_member(tushare_root: Path) -> tuple[str, List[Path], List[str
     )
 
 
+def _task_sw_industry(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    paths = sorted((tushare_root / "sw_industry").glob("sw_industry_*.parquet"))
+    return "concept.sw_industry", paths, ["index_code", "industry_name", "level", "src", "list_date", "fullname"]
+
+
 def _task_yield_curve(tushare_root: Path, curve_type: str) -> pd.DataFrame:
     frames = []
     for term in (10, 2):
@@ -596,6 +601,7 @@ TASK_BUILDERS = {
     "ths_daily": _task_ths_daily,
     "ths_member": _task_ths_member,
     "sw_index_member": _task_sw_index_member,
+    "sw_industry": _task_sw_industry,
 }
 
 
@@ -649,6 +655,13 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
             df["index_name"] = pd.NA
         if "con_name" not in df.columns:
             df["con_name"] = pd.NA
+    if task == "sw_industry":
+        if "list_date" in df.columns:
+            df = _normalize_date_col(df, "list_date")
+        else:
+            df["list_date"] = pd.NA
+        if "fullname" not in df.columns:
+            df["fullname"] = pd.NA
     return df
 
 
@@ -755,6 +768,7 @@ def main() -> None:
             "ths_daily",
             "ths_member",
             "sw_index_member",
+            "sw_industry",
             "yield_curve",
             "cn_macro",
         ]
