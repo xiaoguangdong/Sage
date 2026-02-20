@@ -25,10 +25,10 @@ portfolio_manager:
       value:
         industry_quantile:
           enabled: true
-          industry_col: "industry_l1"
-          top_pct: 0.30
-          min_samples: 30
-          fallback: "market"
+          industry_col: "industry_l1"  # 分位数基准行业字段
+          top_pct: 0.30                # 前/后分位比例（0.30 = 前30%/后30%）
+          min_samples: 30              # 行业样本不足时回退
+          fallback: "market"           # 回退方式：market / none
           rules:
             roe_5y_avg: "top"
             cash_profit_ratio: "top"
@@ -133,10 +133,10 @@ portfolio_manager:
       growth:
         industry_quantile:
           enabled: true
-          industry_col: "industry_l1"
-          top_pct: 0.30
-          min_samples: 30
-          fallback: "market"
+          industry_col: "industry_l1"  # 分位数基准行业字段
+          top_pct: 0.30                # 前/后分位比例（0.30 = 前30%/后30%）
+          min_samples: 30              # 行业样本不足时回退
+          fallback: "market"           # 回退方式：market / none
           rules:
             revenue_cagr_3y: "top"
             profit_cagr_3y: "top"
