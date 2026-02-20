@@ -36,6 +36,8 @@ class HybridStockSelector:
         selector_type: str,  # 'value' or 'growth'
         data_root: Path,
         model_path: Optional[Path] = None,
+        hard_rules: Optional[Dict[str, tuple]] = None,
+        feature_names: Optional[List[str]] = None,
     ):
         """初始化混合选股器
 
@@ -58,6 +60,11 @@ class HybridStockSelector:
             self._setup_growth_config()
         else:
             raise ValueError(f"不支持的选股器类型: {selector_type}")
+
+        if hard_rules:
+            self.hard_rules = hard_rules
+        if feature_names:
+            self.feature_names = feature_names
 
     def _setup_value_config(self):
         """配置价值股选股器"""

@@ -465,6 +465,19 @@ def _run_long_term_selectors(
     rule_fallback = bool(lt_cfg.get("rule_fallback", True))
     min_candidates = int(lt_cfg.get("min_candidates", 5))
     rule_top_n = int(lt_cfg.get("rule_top_n", max(value_top_n, growth_top_n)))
+    rule_config = lt_cfg.get("rule_config", {}) or {}
+    value_rule_cfg = rule_config.get("value", {}) or {}
+    growth_rule_cfg = rule_config.get("growth", {}) or {}
+
+    def _to_hybrid_hard_rules(cfg: dict) -> dict:
+        hard_filters = cfg.get("hard_filters", {}) or {}
+        converted = {}
+        for field, rule in hard_filters.items():
+            if "eq" in rule:
+                converted[field] = (rule.get("eq"),)
+            else:
+                converted[field] = (rule.get("min"), rule.get("max"))
+        return converted
 
     value_candidates = pd.DataFrame()
     growth_candidates = pd.DataFrame()
@@ -484,8 +497,12 @@ def _run_long_term_selectors(
     growth_rule_candidates = pd.DataFrame()
 
     if rule_only or rule_fallback:
-        value_rule_candidates = _run_rule_selector(ValueStockSelector(data_root=data_root), rule_top_n)
-        growth_rule_candidates = _run_rule_selector(GrowthStockSelector(data_root=data_root), rule_top_n)
+        value_rule_candidates = _run_rule_selector(
+            ValueStockSelector(data_root=data_root, rule_config=value_rule_cfg), rule_top_n
+        )
+        growth_rule_candidates = _run_rule_selector(
+            GrowthStockSelector(data_root=data_root, rule_config=growth_rule_cfg), rule_top_n
+        )
         if not value_rule_candidates.empty:
             logger.info("价值股规则候选: %d 只", len(value_rule_candidates))
         if not growth_rule_candidates.empty:
@@ -495,7 +512,12 @@ def _run_long_term_selectors(
         # 价值股选股器（模型选优）
         if value_model_path.exists():
             try:
-                value_selector = HybridStockSelector("value", data_root=data_root, model_path=value_model_path)
+                value_selector = HybridStockSelector(
+                    "value",
+                    data_root=data_root,
+                    model_path=value_model_path,
+                    hard_rules=_to_hybrid_hard_rules(value_rule_cfg),
+                )
                 value_selector.load_model()
                 value_candidates = value_selector.select(df_features, top_n=value_top_n)
                 logger.info("价值股选股完成: %d 只候选", len(value_candidates))
@@ -507,7 +529,12 @@ def _run_long_term_selectors(
         # 成长股选股器（模型选优）
         if growth_model_path.exists():
             try:
-                growth_selector = HybridStockSelector("growth", data_root=data_root, model_path=growth_model_path)
+                growth_selector = HybridStockSelector(
+                    "growth",
+                    data_root=data_root,
+                    model_path=growth_model_path,
+                    hard_rules=_to_hybrid_hard_rules(growth_rule_cfg),
+                )
                 growth_selector.load_model()
                 growth_candidates = growth_selector.select(df_features, top_n=growth_top_n)
                 logger.info("成长股选股完成: %d 只候选", len(growth_candidates))

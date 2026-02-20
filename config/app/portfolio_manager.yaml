@@ -21,3 +21,174 @@ portfolio_manager:
     rule_fallback: true       # 模型失败或候选不足时回退规则
     rule_top_n: 20            # 规则候选池大小
     min_candidates: 5         # 模型候选不足时触发回退
+    rule_config:
+      value:
+        hard_filters:
+          roe:
+            min: 0.12
+          debt_ratio:
+            max: 0.60
+          consecutive_dividend:
+            min: 3
+          revenue_growth:
+            min: 0.00
+          cash_profit_ratio:
+            min: 0.60
+          dedt_profit_ratio:
+            min: 0.60
+          net_cash_ratio:
+            min: -0.20
+          goodwill_ratio:
+            max: 0.40
+          interest_coverage:
+            min: 3
+        score_weights:
+          roe: 0.12
+          roe_5y_std: 0.05
+          cash_profit_ratio: 0.05
+          dedt_profit_ratio: 0.05
+          opex_ratio_ttm: 0.03
+          debt_ratio: 0.08
+          interest_coverage: 0.05
+          net_cash_ratio: 0.05
+          goodwill_ratio: 0.05
+          consecutive_dividend: 0.10
+          dividend_yield: 0.10
+          pe_relative: 0.15
+          fund_holders: 0.05
+          inst_holding_change: 0.05
+        score_params:
+          roe:
+            min: 0.10
+            max: 0.40
+            higher_better: true
+          roe_5y_std:
+            min: 0.00
+            max: 0.10
+            higher_better: false
+          cash_profit_ratio:
+            min: 0.00
+            max: 1.00
+            higher_better: true
+          dedt_profit_ratio:
+            min: 0.00
+            max: 1.00
+            higher_better: true
+          opex_ratio_ttm:
+            min: 0.00
+            max: 0.40
+            higher_better: false
+          debt_ratio:
+            min: 0.00
+            max: 1.00
+            higher_better: false
+          interest_coverage:
+            min: 0.00
+            max: 10.00
+            higher_better: true
+          net_cash_ratio:
+            min: -0.20
+            max: 0.20
+            higher_better: true
+          goodwill_ratio:
+            min: 0.00
+            max: 0.40
+            higher_better: false
+          consecutive_dividend:
+            min: 0
+            max: 10
+            higher_better: true
+          dividend_yield:
+            min: 0.00
+            max: 0.05
+            higher_better: true
+          pe_relative:
+            min: 0.00
+            max: 1.00
+            higher_better: false
+          fund_holders:
+            min: 0
+            max: 50
+            higher_better: true
+          inst_holding_change:
+            min: 0.00
+            max: 0.10
+            higher_better: true
+      growth:
+        hard_filters:
+          revenue_cagr_3y:
+            min: 0.20
+          profit_cagr_3y:
+            min: 0.20
+          rd_ratio:
+            min: 0.05
+          debt_ratio:
+            max: 0.60
+          cash_profit_ratio:
+            min: 0.60
+          net_cash_ratio:
+            min: -0.20
+          gross_margin_trend:
+            min: 0.00
+        score_weights:
+          revenue_cagr_3y: 0.18
+          profit_cagr_3y: 0.12
+          rd_ratio: 0.12
+          gross_margin_trend: 0.08
+          cash_profit_ratio: 0.05
+          asset_turnover: 0.08
+          roe: 0.08
+          opex_ratio_ttm: 0.04
+          industry_rank: 0.10
+          fund_holders: 0.05
+          inst_holding_change: 0.05
+          net_cash_ratio: 0.05
+        score_params:
+          revenue_cagr_3y:
+            min: 0.20
+            max: 0.50
+            higher_better: true
+          profit_cagr_3y:
+            min: 0.00
+            max: 0.50
+            higher_better: true
+          rd_ratio:
+            min: 0.00
+            max: 0.10
+            higher_better: true
+          gross_margin_trend:
+            min: 0.00
+            max: 0.05
+            higher_better: true
+          cash_profit_ratio:
+            min: 0.00
+            max: 1.00
+            higher_better: true
+          asset_turnover:
+            min: 0.00
+            max: 2.00
+            higher_better: true
+          roe:
+            min: 0.00
+            max: 0.30
+            higher_better: true
+          opex_ratio_ttm:
+            min: 0.00
+            max: 0.40
+            higher_better: false
+          industry_rank:
+            min: 1
+            max: 4
+            higher_better: false
+          fund_holders:
+            min: 0
+            max: 50
+            higher_better: true
+          inst_holding_change:
+            min: 0.00
+            max: 0.10
+            higher_better: true
+          net_cash_ratio:
+            min: -0.20
+            max: 0.20
+            higher_better: true

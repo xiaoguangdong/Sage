@@ -34,25 +34,32 @@ class ValueStockSelector:
     def __init__(
         self,
         data_root: Path,
-        min_roe: float = 0.15,
-        max_debt_ratio: float = 0.60,
-        min_consecutive_dividend: int = 5,
-        min_fund_holders: int = 20,
+        rule_config: dict | None = None,
     ):
         """初始化价值股选股器
 
         Args:
             data_root: 数据根目录
-            min_roe: 最低ROE要求（默认15%）
-            max_debt_ratio: 最高负债率（默认60%）
-            min_consecutive_dividend: 最少连续分红年数（默认5年）
-            min_fund_holders: 最少基金持仓家数（默认20家）
+            rule_config: 规则配置（硬规则/评分权重/评分参数）
         """
         self.data_root = Path(data_root)
-        self.min_roe = min_roe
-        self.max_debt_ratio = max_debt_ratio
-        self.min_consecutive_dividend = min_consecutive_dividend
-        self.min_fund_holders = min_fund_holders
+        self.rule_config = rule_config or {}
+        self.hard_filters = self.rule_config.get("hard_filters", {})
+        self.score_weights = self.rule_config.get("score_weights", {})
+        self.score_params = self.rule_config.get("score_params", {})
+
+    @staticmethod
+    def _normalize_score(series: pd.Series, params: dict) -> pd.Series:
+        min_val = params.get("min")
+        max_val = params.get("max")
+        higher_better = params.get("higher_better", True)
+        if min_val is None or max_val is None or max_val == min_val:
+            return pd.Series(index=series.index, data=pd.NA)
+        if higher_better:
+            score = (series - min_val) / (max_val - min_val)
+        else:
+            score = (max_val - series) / (max_val - min_val)
+        return (score.clip(0, 1) * 100).astype(float)
 
     def hard_filter(self, df: pd.DataFrame) -> pd.DataFrame:
         """硬规则过滤：不可妥协的底线
@@ -65,17 +72,19 @@ class ValueStockSelector:
         """
         filtered = df.copy()
 
-        # 1. ROE > 15%（盈利能力底线）
-        if "roe" in filtered.columns:
-            filtered = filtered[filtered["roe"] > self.min_roe]
-
-        # 2. 负债率 < 60%（财务安全底线）
-        if "debt_ratio" in filtered.columns:
-            filtered = filtered[filtered["debt_ratio"] < self.max_debt_ratio]
-
-        # 3. 连续分红5年+（现金流稳定）
-        if "consecutive_dividend" in filtered.columns:
-            filtered = filtered[filtered["consecutive_dividend"] >= self.min_consecutive_dividend]
+        for field, rule in self.hard_filters.items():
+            if field not in filtered.columns:
+                continue
+            min_val = rule.get("min")
+            max_val = rule.get("max")
+            eq_val = rule.get("eq")
+            if eq_val is not None:
+                filtered = filtered[filtered[field] == eq_val]
+            else:
+                if min_val is not None:
+                    filtered = filtered[filtered[field] >= min_val]
+                if max_val is not None:
+                    filtered = filtered[filtered[field] <= max_val]
 
         # 4. 非ST股
         if "is_st" in filtered.columns:
@@ -86,8 +95,11 @@ class ValueStockSelector:
             filtered = filtered[~filtered["is_delisted"]]
 
         # 6. 营收正增长（成长性底线）
-        if "revenue_growth" in filtered.columns:
-            filtered = filtered[filtered["revenue_growth"] > 0]
+        if "revenue_growth" in filtered.columns and self.hard_filters.get("revenue_growth", {}) != {}:
+            rule = self.hard_filters.get("revenue_growth", {})
+            min_val = rule.get("min")
+            if min_val is not None:
+                filtered = filtered[filtered["revenue_growth"] >= min_val]
 
         return filtered
 
@@ -110,94 +122,14 @@ class ValueStockSelector:
         scored = df.copy()
         scored["score"] = 0.0
 
-        # 1. 盈利能力（30%）
-        if "roe" in scored.columns:
-            # ROE标准化（0-100分）
-            roe_score = (scored["roe"] - 0.10) / 0.30 * 100  # 10%-40%映射到0-100
-            roe_score = roe_score.clip(0, 100)
-            scored["score"] += roe_score * 0.12
-
-        if "roe_5y_std" in scored.columns:
-            # ROE稳定性（标准差越小越好）
-            roe_stability_score = (1 - scored["roe_5y_std"] / 0.10) * 100
-            roe_stability_score = roe_stability_score.clip(0, 100)
-            scored["score"] += roe_stability_score * 0.05
-
-        if "cash_profit_ratio" in scored.columns:
-            # CFO/净利润（>=1为优秀）
-            cash_profit_score = (scored["cash_profit_ratio"] / 1.0) * 100
-            cash_profit_score = cash_profit_score.clip(0, 100)
-            scored["score"] += cash_profit_score * 0.05
-
-        if "dedt_profit_ratio" in scored.columns:
-            # 扣非/净利润（>=1为优秀）
-            dedt_profit_score = (scored["dedt_profit_ratio"] / 1.0) * 100
-            dedt_profit_score = dedt_profit_score.clip(0, 100)
-            scored["score"] += dedt_profit_score * 0.05
-
-        if "opex_ratio_ttm" in scored.columns:
-            # 费用率（越低越好，40%为下限）
-            opex_score = (1 - scored["opex_ratio_ttm"] / 0.40) * 100
-            opex_score = opex_score.clip(0, 100)
-            scored["score"] += opex_score * 0.03
-
-        # 2. 财务安全（25%）
-        if "debt_ratio" in scored.columns:
-            # 负债率（越低越好）
-            debt_score = (1 - scored["debt_ratio"]) * 100
-            debt_score = debt_score.clip(0, 100)
-            scored["score"] += debt_score * 0.08
-
-        if "interest_coverage" in scored.columns:
-            # 利息保障倍数（>5倍为优秀）
-            interest_score = (scored["interest_coverage"] / 10) * 100
-            interest_score = interest_score.clip(0, 100)
-            scored["score"] += interest_score * 0.05
-
-        if "net_cash_ratio" in scored.columns:
-            # 净现金率（>=20%为优秀，<-20%扣分）
-            net_cash_score = (scored["net_cash_ratio"] + 0.20) / 0.40 * 100
-            net_cash_score = net_cash_score.clip(0, 100)
-            scored["score"] += net_cash_score * 0.05
-
-        if "goodwill_ratio" in scored.columns:
-            # 商誉占比（越低越好，40%为下限）
-            goodwill_score = (1 - scored["goodwill_ratio"] / 0.40) * 100
-            goodwill_score = goodwill_score.clip(0, 100)
-            scored["score"] += goodwill_score * 0.05
-
-        # 3. 分红能力（20%）
-        if "consecutive_dividend" in scored.columns:
-            # 连续分红年数（10年+为满分）
-            dividend_years_score = (scored["consecutive_dividend"] / 10) * 100
-            dividend_years_score = dividend_years_score.clip(0, 100)
-            scored["score"] += dividend_years_score * 0.10
-
-        if "dividend_yield" in scored.columns:
-            # 股息率（5%为满分）
-            dividend_yield_score = (scored["dividend_yield"] / 0.05) * 100
-            dividend_yield_score = dividend_yield_score.clip(0, 100)
-            scored["score"] += dividend_yield_score * 0.10
-
-        # 4. 估值水平（15%）
-        if "pe_relative" in scored.columns:
-            # PE相对值（<0.8为优秀）
-            pe_score = (1 - scored["pe_relative"]) * 100
-            pe_score = pe_score.clip(0, 100)
-            scored["score"] += pe_score * 0.15
-
-        # 5. 机构认可（10%）
-        if "fund_holders" in scored.columns:
-            # 基金持仓家数（50家+为满分）
-            fund_score = (scored["fund_holders"] / 50) * 100
-            fund_score = fund_score.clip(0, 100)
-            scored["score"] += fund_score * 0.05
-
-        if "inst_holding_change" in scored.columns:
-            # 机构增持（>10%为满分）
-            inst_change_score = (scored["inst_holding_change"] / 0.10) * 100
-            inst_change_score = inst_change_score.clip(0, 100)
-            scored["score"] += inst_change_score * 0.05
+        for feature, weight in self.score_weights.items():
+            if feature not in scored.columns:
+                continue
+            params = self.score_params.get(feature, {})
+            score_series = self._normalize_score(scored[feature], params)
+            if score_series.isna().all():
+                continue
+            scored["score"] += score_series.fillna(0) * float(weight)
 
         return scored.sort_values("score", ascending=False)
 
