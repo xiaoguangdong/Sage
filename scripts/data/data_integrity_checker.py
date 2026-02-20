@@ -19,10 +19,12 @@ sys.path.insert(0, str(ROOT))
 
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, Optional
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import yaml
+
+from scripts.data._shared.runtime import get_log_dir, get_tushare_root
 
 
 class DataIntegrityChecker:
@@ -34,6 +36,7 @@ class DataIntegrityChecker:
         data_root: Path,
         start_year: int = 2016,
         end_year: int = 2026,
+        light_mode: bool = True,
     ):
         """初始化
 
@@ -47,6 +50,7 @@ class DataIntegrityChecker:
         self.data_root = data_root
         self.start_year = start_year
         self.end_year = end_year
+        self.light_mode = light_mode
 
         # 加载配置
         with open(config_path, "r", encoding="utf-8") as f:
@@ -120,6 +124,18 @@ class DataIntegrityChecker:
 
         return results
 
+    def _read_parquet(
+        self,
+        path: Path,
+        columns: Optional[List[str]] = None,
+    ) -> pd.DataFrame:
+        if not self.light_mode or not columns:
+            return pd.read_parquet(path)
+        try:
+            return pd.read_parquet(path, columns=columns)
+        except Exception:
+            return pd.read_parquet(path)
+
     def _check_task(self, task_name: str, task_config: Dict) -> Dict:
         """检查单个任务的数据完整性
 
@@ -160,6 +176,17 @@ class DataIntegrityChecker:
             dfs = []
             sources = []
 
+            dedup_keys = task_config.get("dedup_keys") or []
+            candidate_cols = [
+                "trade_date",
+                "ann_date",
+                "end_date",
+                "cal_date",
+                "period",
+                "f_ann_date",
+            ]
+            columns = list({*dedup_keys, *candidate_cols})
+
             if actual_path.is_dir():
                 # 读取目录下所有parquet文件
                 parquet_files = list(actual_path.glob("*.parquet"))
@@ -168,10 +195,10 @@ class DataIntegrityChecker:
                     print(f"  ❌ 目录为空: {actual_path}")
                     return result
                 for pf in parquet_files:
-                    dfs.append(pd.read_parquet(pf))
+                    dfs.append(self._read_parquet(pf, columns=columns))
                 sources.append(f"目录({len(parquet_files)}个文件)")
             else:
-                dfs.append(pd.read_parquet(actual_path))
+                dfs.append(self._read_parquet(actual_path, columns=columns))
                 sources.append(actual_path.name)
 
             # 同时查找 _all 版本和分片目录，合并更完整的数据
@@ -181,7 +208,7 @@ class DataIntegrityChecker:
             # 查找 _all 文件
             all_file = parent / f"{stem}_all.parquet"
             if all_file.exists() and str(all_file) != str(actual_path):
-                dfs.append(pd.read_parquet(all_file))
+                dfs.append(self._read_parquet(all_file, columns=columns))
                 sources.append(f"{all_file.name}")
 
             # 查找同名分片目录
@@ -190,12 +217,11 @@ class DataIntegrityChecker:
                 split_files = list(split_dir.glob("*.parquet"))
                 if split_files:
                     for sf in split_files:
-                        dfs.append(pd.read_parquet(sf))
+                        dfs.append(self._read_parquet(sf, columns=columns))
                     sources.append(f"{stem}/({len(split_files)}个分片)")
 
             # 合并去重
             df = pd.concat(dfs, ignore_index=True)
-            dedup_keys = task_config.get("dedup_keys")
             if dedup_keys and all(k in df.columns for k in dedup_keys):
                 df = df.drop_duplicates(subset=dedup_keys, keep="last")
 
@@ -284,6 +310,7 @@ class DataIntegrityChecker:
         missing_years = sorted(expected_years - years_with_data)
         if missing_years:
             issues.append(f"中间年份空洞: {', '.join(str(y) for y in missing_years)}")
+            result["missing_years"] = missing_years
 
         # 4. 按年统计记录数
         year_counts = df[date_field].dt.year.value_counts().sort_index()
@@ -299,6 +326,82 @@ class DataIntegrityChecker:
             print("  ✅ 数据完整")
 
         return result
+
+    def _parse_date(self, value: Optional[str]) -> Optional[datetime]:
+        if not value:
+            return None
+        try:
+            return datetime.strptime(value, "%Y-%m-%d")
+        except Exception:
+            return None
+
+    def _format_date(self, value: datetime) -> str:
+        return value.strftime("%Y%m%d")
+
+    def _target_window(self) -> Tuple[datetime, datetime]:
+        target_start = datetime(self.start_year, 1, 1)
+        now = datetime.now()
+        target_end = min(datetime(self.end_year, 12, 31), now - timedelta(days=7))
+        return target_start, target_end
+
+    def _infer_missing_ranges(self, result: Dict) -> List[Tuple[str, str, str]]:
+        ranges: List[Tuple[str, str, str]] = []
+        target_start, target_end = self._target_window()
+        min_date = self._parse_date(result.get("min_date"))
+        max_date = self._parse_date(result.get("max_date"))
+        missing_years = result.get("missing_years") or []
+
+        if min_date and min_date > target_start + timedelta(days=30):
+            ranges.append(
+                (self._format_date(target_start), self._format_date(min_date - timedelta(days=1)), "缺少早期数据")
+            )
+        if max_date and max_date < target_end - timedelta(days=1):
+            ranges.append(
+                (self._format_date(max_date + timedelta(days=1)), self._format_date(target_end), "缺少近期数据")
+            )
+        for year in missing_years:
+            ranges.append((f"{year}0101", f"{year}1231", f"缺少年份 {year}"))
+
+        if not ranges:
+            ranges.append((self._format_date(target_start), self._format_date(target_end), "补齐缺口/全量回补"))
+        return ranges
+
+    def build_backfill_plan(self, results: Dict[str, Dict], plan_name: Optional[str] = None) -> Dict[str, List[Dict]]:
+        plan_items: List[Dict] = []
+        plan_name = plan_name or f"补充历史数据_{datetime.now().strftime('%Y%m%d')}"
+
+        for task_name, result in results.items():
+            status = result.get("status")
+            if status not in {"incomplete", "missing_file", "empty", "invalid_dates"}:
+                continue
+            task_config = self.tasks.get(task_name, {})
+            mode = result.get("mode") or task_config.get("mode", "single")
+
+            if mode in {"date_range", "list"}:
+                ranges = self._infer_missing_ranges(result)
+                for start_date, end_date, reason in ranges:
+                    plan_items.append(
+                        {
+                            "task": task_name,
+                            "desc": f"{task_name} {reason}",
+                            "start_date": start_date,
+                            "end_date": end_date,
+                        }
+                    )
+            elif mode == "year_quarters":
+                missing_periods = result.get("missing_periods") or []
+                years = sorted({p[:4] for p in missing_periods if len(p) >= 4})
+                for year in years:
+                    plan_items.append(
+                        {
+                            "task": task_name,
+                            "desc": f"{task_name} 缺失季度 {year}",
+                            "start_date": f"{year}0101",
+                            "end_date": f"{year}1231",
+                        }
+                    )
+
+        return {plan_name: plan_items}
 
     def _check_year_quarters(self, df: pd.DataFrame, task_config: Dict, result: Dict) -> Dict:
         """检查季度任务的数据完整性
@@ -462,14 +565,30 @@ class DataIntegrityChecker:
 
 def main():
     """主函数"""
-    config_path = ROOT / "config/tushare_tasks.yaml"
-    data_root = ROOT / "data/tushare"
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser(description="Tushare数据完整性校验")
+    parser.add_argument("--config", default=str(ROOT / "config/tushare_tasks.yaml"))
+    parser.add_argument("--data-root", default="")
+    parser.add_argument("--start-year", type=int, default=2016)
+    parser.add_argument("--end-year", type=int, default=2026)
+    parser.add_argument("--report-out", default="")
+    parser.add_argument("--json-out", default="")
+    parser.add_argument("--plan-out", default="")
+    parser.add_argument("--plan-name", default="")
+    parser.add_argument("--full-scan", action="store_true", help="关闭轻量模式，读取全量数据")
+    args = parser.parse_args()
+
+    config_path = Path(args.config)
+    data_root = Path(args.data_root) if args.data_root else get_tushare_root()
 
     checker = DataIntegrityChecker(
         config_path=config_path,
         data_root=data_root,
-        start_year=2016,
-        end_year=2026,
+        start_year=args.start_year,
+        end_year=args.end_year,
+        light_mode=not args.full_scan,
     )
 
     # 执行检查
@@ -480,12 +599,28 @@ def main():
     print("\n" + report)
 
     # 保存报告
-    report_path = ROOT / "logs/data/data_integrity_report.txt"
+    report_path = Path(args.report_out) if args.report_out else get_log_dir("data") / "data_integrity_report.txt"
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(report_path, "w", encoding="utf-8") as f:
-        f.write(report)
+    report_path.write_text(report, encoding="utf-8")
 
     print(f"\n报告已保存: {report_path}")
+
+    # 生成补数计划
+    plan_payload = None
+    if args.plan_out:
+        plan = checker.build_backfill_plan(results, plan_name=args.plan_name or None)
+        plan_payload = {"download_plans": plan}
+        plan_path = Path(args.plan_out)
+        plan_path.parent.mkdir(parents=True, exist_ok=True)
+        with plan_path.open("w", encoding="utf-8") as f:
+            yaml.safe_dump(plan_payload, f, allow_unicode=True, sort_keys=False)
+        print(f"补数计划已保存: {plan_path}")
+
+    if args.json_out:
+        payload = {"results": results, "plan": plan_payload}
+        json_path = Path(args.json_out)
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        json_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 if __name__ == "__main__":

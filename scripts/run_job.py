@@ -22,6 +22,7 @@ JOB_SCRIPTS = {
     "industry_concept_bias": PROJECT_ROOT / "scripts" / "strategy" / "build_industry_concept_bias.py",
     "industry_signal_contract": PROJECT_ROOT / "scripts" / "strategy" / "build_industry_signal_contract.py",
     "industry_signal_quality": PROJECT_ROOT / "scripts" / "monitoring" / "check_industry_signal_quality.py",
+    "data_integrity_loop": PROJECT_ROOT / "scripts" / "monitoring" / "data_integrity_loop.py",
     "ths_daily_completeness": PROJECT_ROOT / "scripts" / "monitoring" / "check_ths_daily_completeness.py",
     "ths_daily_monthly_full": PROJECT_ROOT / "scripts" / "data" / "run_ths_daily_monthly_full.py",
     "champion_challenger_backtest": PROJECT_ROOT / "scripts" / "backtest" / "backtest_champion_challenger.py",

@@ -38,3 +38,17 @@ python scripts/monitoring/check_ths_daily_completeness.py \
 ```
 
 输出：`data/processed/concepts/ths_daily_completeness_report.json`
+
+## 数据完整性闭环
+
+检查 Tushare 数据完整性，生成补数计划，可选执行补数：
+
+```bash
+python scripts/monitoring/data_integrity_loop.py
+python scripts/monitoring/data_integrity_loop.py --execute --sleep 40
+```
+
+输出：
+- 报告：`logs/data/data_integrity_report_<timestamp>.txt`
+- 计划：`config/download_plans.yaml`
+- 摘要：`logs/data/data_integrity_report_<timestamp>.json`
