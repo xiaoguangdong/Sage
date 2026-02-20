@@ -10,7 +10,7 @@ services:
       POSTGRES_USER: sage
       POSTGRES_PASSWORD: ${SAGE_DB_PASSWORD:-sage_dev_2026}
     ports:
-      - "5432:5432"
+      - "5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ../db/ddl:/docker-entrypoint-initdb.d:ro
