@@ -477,6 +477,15 @@ def _task_moneyflow(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
     )
 
 
+def _task_margin_detail(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    path = tushare_root / "margin_detail" / "margin_detail_all.parquet"
+    return (
+        "flow.margin_detail",
+        [path],
+        ["trade_date", "ts_code", "rzye", "rqye", "rzmre", "rqyl", "rzche", "rqchl", "rqmcl", "rzrqye"],
+    )
+
+
 def _task_ths_index(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
     path = tushare_root / "concepts" / "ths_index.parquet"
     return "concept.ths_index", [path], ["ts_code", "name", "count", "exchange", "list_date", "type"]
@@ -651,6 +660,7 @@ TASK_BUILDERS = {
     "northbound_top10": _task_northbound_top10,
     "margin": _task_margin,
     "moneyflow": _task_moneyflow,
+    "margin_detail": _task_margin_detail,
     "ths_index": _task_ths_index,
     "ths_daily": _task_ths_daily,
     "ths_member": _task_ths_member,
@@ -686,6 +696,8 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
         df = _normalize_date_col(df, "pay_date")
         df = _normalize_date_col(df, "div_listdate")
     if task in {"northbound_flow", "northbound_hold", "northbound_top10", "margin", "moneyflow"}:
+        df = _normalize_date_col(df, "trade_date")
+    if task == "margin_detail":
         df = _normalize_date_col(df, "trade_date")
     if task == "margin":
         if "rqyl" in df.columns and "rqylje" not in df.columns:
@@ -836,6 +848,7 @@ def main() -> None:
             "northbound_top10",
             "margin",
             "moneyflow",
+            "margin_detail",
             "ths_index",
             "ths_daily",
             "ths_member",

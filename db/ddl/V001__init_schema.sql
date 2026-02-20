@@ -255,6 +255,21 @@ CREATE TABLE flow.margin (
     PRIMARY KEY (trade_date, exchange_id)
 );
 
+-- 融资融券明细
+CREATE TABLE flow.margin_detail (
+    trade_date DATE        NOT NULL,
+    ts_code    VARCHAR(12) NOT NULL,
+    rzye       NUMERIC(20,4),
+    rqye       NUMERIC(20,4),
+    rzmre      NUMERIC(20,4),
+    rqyl       NUMERIC(20,4),
+    rzche      NUMERIC(20,4),
+    rqchl      NUMERIC(20,4),
+    rqmcl      NUMERIC(20,4),
+    rzrqye     NUMERIC(20,4),
+    PRIMARY KEY (trade_date, ts_code)
+);
+
 -- 个股资金流向（按年分区）
 CREATE TABLE flow.moneyflow (
     ts_code        VARCHAR(12)  NOT NULL,
