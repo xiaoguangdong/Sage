@@ -23,6 +23,22 @@ portfolio_manager:
     min_candidates: 5         # 模型候选不足时触发回退（仅 rule_only=false 时生效）
     rule_config:
       value:
+        industry_quantile:
+          enabled: true
+          industry_col: "industry_l1"
+          top_pct: 0.30
+          min_samples: 30
+          fallback: "market"
+          rules:
+            roe_5y_avg: "top"
+            cash_profit_ratio: "top"
+            dedt_profit_ratio: "top"
+            net_cash_ratio: "top"
+            interest_coverage: "top"
+            debt_ratio: "bottom"
+            goodwill_ratio: "bottom"
+            opex_ratio_ttm: "bottom"
+            pe_relative: "bottom"
         hard_filters:
           roe:
             min: 0.15
@@ -115,6 +131,21 @@ portfolio_manager:
             max: 0.10
             higher_better: true
       growth:
+        industry_quantile:
+          enabled: true
+          industry_col: "industry_l1"
+          top_pct: 0.30
+          min_samples: 30
+          fallback: "market"
+          rules:
+            revenue_cagr_3y: "top"
+            profit_cagr_3y: "top"
+            rd_ratio: "top"
+            gross_margin_trend: "top"
+            asset_turnover: "top"
+            cash_profit_ratio: "top"
+            opex_ratio_ttm: "bottom"
+            debt_ratio: "bottom"
         hard_filters:
           revenue_cagr_3y:
             min: 0.20

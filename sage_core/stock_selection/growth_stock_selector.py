@@ -71,6 +71,10 @@ class GrowthStockSelector:
         """
         filtered = df.copy()
 
+        industry_cfg = self.rule_config.get("industry_quantile", {}) or {}
+        if industry_cfg.get("enabled", False):
+            filtered = self._apply_industry_quantile_rules(filtered, industry_cfg)
+
         for field, rule in self.hard_filters.items():
             if field not in filtered.columns:
                 continue
@@ -99,6 +103,46 @@ class GrowthStockSelector:
             min_val = rule.get("min")
             if min_val is not None:
                 filtered = filtered[filtered["profit_cagr_3y"] >= min_val]
+
+        return filtered
+
+    def _apply_industry_quantile_rules(self, df: pd.DataFrame, cfg: dict) -> pd.DataFrame:
+        industry_col = cfg.get("industry_col", "industry_l1")
+        top_pct = float(cfg.get("top_pct", 0.30))
+        min_samples = int(cfg.get("min_samples", 30))
+        fallback = cfg.get("fallback", "market")
+        rules = cfg.get("rules", {}) or {}
+
+        if industry_col not in df.columns:
+            if fallback != "market":
+                return df
+            industry_col = None
+
+        filtered = df.copy()
+        for feature, direction in rules.items():
+            if feature not in filtered.columns:
+                continue
+
+            series = filtered[feature]
+            if industry_col:
+                quantiles = filtered.groupby(industry_col)[feature].transform(
+                    lambda s: (
+                        s.rank(pct=True)
+                        if s.notna().sum() >= min_samples
+                        else pd.Series([pd.NA] * len(s), index=s.index)
+                    )
+                )
+                use_market = quantiles.isna()
+                if fallback == "market" and use_market.any():
+                    market_q = series.rank(pct=True)
+                    quantiles = quantiles.fillna(market_q)
+            else:
+                quantiles = series.rank(pct=True)
+
+            if direction == "top":
+                filtered = filtered[quantiles >= (1 - top_pct)]
+            elif direction == "bottom":
+                filtered = filtered[quantiles <= top_pct]
 
         return filtered
 
