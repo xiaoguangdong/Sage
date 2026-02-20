@@ -17,7 +17,7 @@ portfolio_manager:
     growth_model_path: "data/models/hybrid_growth.pkl"
     value_top_n: 20           # 价值股候选池大小
     growth_top_n: 20          # 成长股候选池大小
-    rule_only: false          # 仅规则选股（跳过模型）
+    rule_only: true           # 仅规则选股（跳过模型）
     rule_fallback: true       # 模型失败或候选不足时回退规则
     rule_top_n: 20            # 规则候选池大小
     min_candidates: 5         # 模型候选不足时触发回退
