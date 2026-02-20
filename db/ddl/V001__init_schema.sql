@@ -396,6 +396,40 @@ CREATE TABLE macro.cn_macro (
     PRIMARY KEY (month, indicator)
 );
 
+-- NBS 工业品产量（原始口径）
+CREATE TABLE macro.nbs_output (
+    product       TEXT         NOT NULL,
+    product_code  VARCHAR(20)  NOT NULL,
+    period        VARCHAR(20)  NOT NULL,
+    output_value  NUMERIC(20,4),
+    output_yoy    NUMERIC(20,4),
+    year          INTEGER,
+    month         INTEGER,
+    PRIMARY KEY (product_code, period)
+);
+
+-- NBS 行业PPI
+CREATE TABLE macro.nbs_ppi_industry (
+    industry      TEXT         NOT NULL,
+    industry_code VARCHAR(20)  NOT NULL,
+    period        VARCHAR(20)  NOT NULL,
+    ppi_yoy       NUMERIC(12,4),
+    year          INTEGER,
+    month         INTEGER,
+    PRIMARY KEY (industry_code, period)
+);
+
+-- NBS 行业固定资产投资
+CREATE TABLE macro.nbs_fai_industry (
+    industry      TEXT         NOT NULL,
+    industry_code VARCHAR(20)  NOT NULL,
+    period        VARCHAR(20)  NOT NULL,
+    fai_yoy       NUMERIC(20,4),
+    year          INTEGER,
+    month         INTEGER,
+    PRIMARY KEY (industry_code, period)
+);
+
 -- ============================================================
 -- policy: 政策/研报元数据（不入库原文，仅保存链接与关键字段）
 -- ============================================================

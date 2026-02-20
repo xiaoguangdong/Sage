@@ -108,6 +108,17 @@ def _read_parquet_all(paths: List[Path], columns: Optional[List[str]] = None) ->
     return pd.concat(frames, ignore_index=True)
 
 
+def _read_csv_all(paths: List[Path]) -> pd.DataFrame:
+    frames = []
+    for path in paths:
+        if not path.exists():
+            continue
+        frames.append(pd.read_csv(path))
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
 def _insert_dataframe(
     conn: "psycopg.Connection",
     table: str,
@@ -555,6 +566,21 @@ def _task_sw_valuation(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
     )
 
 
+def _task_nbs_output(tushare_root: Path) -> pd.DataFrame:
+    paths = sorted((tushare_root / "macro").glob("nbs_output_*.csv"))
+    return _read_csv_all(paths)
+
+
+def _task_nbs_ppi_industry(tushare_root: Path) -> pd.DataFrame:
+    paths = sorted((tushare_root / "macro").glob("nbs_ppi_industry_*.csv"))
+    return _read_csv_all(paths)
+
+
+def _task_nbs_fai_industry(tushare_root: Path) -> pd.DataFrame:
+    paths = sorted((tushare_root / "macro").glob("nbs_fai_industry_*.csv"))
+    return _read_csv_all(paths)
+
+
 def _task_gov_notice(_: Path) -> tuple[str, List[Path], List[str]]:
     path = get_data_path("raw", "policy", "gov_notices.parquet")
     paths = [path] if path.exists() else []
@@ -671,6 +697,24 @@ TASK_BUILDERS = {
     "eastmoney_industry_report": _task_eastmoney_industry_report,
 }
 
+NBS_TASKS = {
+    "nbs_output": (
+        "macro.nbs_output",
+        _task_nbs_output,
+        ["product", "product_code", "period", "output_value", "output_yoy", "year", "month"],
+    ),
+    "nbs_ppi_industry": (
+        "macro.nbs_ppi_industry",
+        _task_nbs_ppi_industry,
+        ["industry", "industry_code", "period", "ppi_yoy", "year", "month"],
+    ),
+    "nbs_fai_industry": (
+        "macro.nbs_fai_industry",
+        _task_nbs_fai_industry,
+        ["industry", "industry_code", "period", "fai_yoy", "year", "month"],
+    ),
+}
+
 
 def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
@@ -740,6 +784,46 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             else:
                 df[col] = pd.NA
+    if task == "nbs_output":
+        if "date" in df.columns and "period" not in df.columns:
+            df["period"] = df["date"]
+        for col in ["output_value", "output_yoy"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                df[col] = pd.NA
+        for col in ["year", "month"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+            else:
+                df[col] = pd.NA
+        df = df.dropna(subset=["product_code", "period"])
+    if task == "nbs_ppi_industry":
+        if "date" in df.columns and "period" not in df.columns:
+            df["period"] = df["date"]
+        if "ppi_yoy" in df.columns:
+            df["ppi_yoy"] = pd.to_numeric(df["ppi_yoy"], errors="coerce")
+        else:
+            df["ppi_yoy"] = pd.NA
+        for col in ["year", "month"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+            else:
+                df[col] = pd.NA
+        df = df.dropna(subset=["industry_code", "period"])
+    if task == "nbs_fai_industry":
+        if "date" in df.columns and "period" not in df.columns:
+            df["period"] = df["date"]
+        if "fai_yoy" in df.columns:
+            df["fai_yoy"] = pd.to_numeric(df["fai_yoy"], errors="coerce")
+        else:
+            df["fai_yoy"] = pd.NA
+        for col in ["year", "month"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
+            else:
+                df[col] = pd.NA
+        df = df.dropna(subset=["industry_code", "period"])
     if task == "gov_notice":
         df = _normalize_date_col(df, "publish_date")
     if task == "eastmoney_industry_report":
@@ -757,6 +841,15 @@ def run_task(
     dry_run: bool,
     curve_type: str,
 ) -> int:
+    if task in NBS_TASKS:
+        table, loader, columns = NBS_TASKS[task]
+        df = loader(tushare_root)
+        if df.empty:
+            logger.warning("%s 无可用数据", task)
+            return 0
+        df = _apply_task_transforms(task, df)
+        return _insert_dataframe(conn, table, df, columns, batch_size, dry_run)
+
     if task == "yield_curve":
         df = _task_yield_curve(tushare_root, curve_type)
         if df.empty:
@@ -855,6 +948,9 @@ def main() -> None:
             "sw_index_member",
             "sw_industry",
             "sw_valuation",
+            "nbs_output",
+            "nbs_ppi_industry",
+            "nbs_fai_industry",
             "gov_notice",
             "eastmoney_industry_report",
             "yield_curve",
