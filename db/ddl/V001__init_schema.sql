@@ -442,6 +442,38 @@ CREATE TABLE meta.data_sync_log (
     created_at   TIMESTAMP DEFAULT NOW()
 );
 
+-- 运行配置（最小配置表）
+CREATE TABLE meta.app_config (
+    code        VARCHAR(100) NOT NULL PRIMARY KEY,
+    value       TEXT         NOT NULL,
+    is_active   BOOLEAN      NOT NULL DEFAULT TRUE,
+    updated_at  TIMESTAMP    DEFAULT NOW(),
+    remark      TEXT
+);
+
+-- 作业运行日志（周度/日度任务）
+CREATE TABLE meta.job_run_log (
+    id          SERIAL PRIMARY KEY,
+    job_name    VARCHAR(100) NOT NULL,
+    run_date    DATE         DEFAULT CURRENT_DATE,
+    status      VARCHAR(20)  NOT NULL,
+    started_at  TIMESTAMP    DEFAULT NOW(),
+    ended_at    TIMESTAMP,
+    output_path TEXT,
+    message     TEXT,
+    created_at  TIMESTAMP    DEFAULT NOW()
+);
+
+-- 信号快照登记（输出文件与行数）
+CREATE TABLE meta.signal_snapshot (
+    signal_name  VARCHAR(100) NOT NULL,
+    trade_date   DATE         NOT NULL,
+    record_count INTEGER,
+    output_path  TEXT,
+    created_at   TIMESTAMP    DEFAULT NOW(),
+    PRIMARY KEY (signal_name, trade_date)
+);
+
 -- ============================================================
 -- 分区表：按年创建分区
 -- ============================================================
