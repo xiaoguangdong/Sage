@@ -40,17 +40,17 @@ DATASETS: List[DatasetSpec] = [
     ),
     DatasetSpec(
         name="nbs_ppi_industry",
-        files=["macro/nbs_ppi_industry_2020.csv", "macro/nbs_ppi_industry_202512.csv"],
+        files=["macro/nbs_ppi_industry_*.csv"],
         kind="date_col",
     ),
     DatasetSpec(
         name="nbs_fai_industry",
-        files=["macro/nbs_fai_industry_2020.csv", "macro/nbs_fai_industry_202512.csv"],
+        files=["macro/nbs_fai_industry_*.csv"],
         kind="date_col_or_quarter",
     ),
     DatasetSpec(
         name="nbs_output",
-        files=["macro/nbs_output_2020.csv", "macro/nbs_output_202512.csv"],
+        files=["macro/nbs_output_*.csv"],
         kind="date_col",
     ),
 ]
@@ -73,6 +73,10 @@ def _resolve_files(files: List[str]) -> List[Path]:
     primary_root, tushare_path = _load_base_paths()
     candidates: List[Path] = []
     for rel in files:
+        if "*" in rel:
+            candidates.extend(sorted(tushare_path.glob(rel)))
+            candidates.extend(sorted((primary_root / "raw" / "tushare").glob(rel)))
+            continue
         p1 = tushare_path / rel
         p2 = primary_root / "raw" / "tushare" / rel
         if p1.exists():
