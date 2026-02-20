@@ -43,7 +43,7 @@
     >>> margin_feat = calculator.compute_margin_features("20240101", lookback_days=20)
     >>>
     >>> # 计算分析师预期因子
-    >>> analyst_feat = calculator.compute_analyst_features("20240101", lookback_days=120)
+    >>> analyst_feat = calculator.compute_analyst_expectation_features("20240101", lookback_months=3)
 
 数据依赖：
     - moneyflow: data/tushare/moneyflow/*.parquet
@@ -486,6 +486,18 @@ class HighAlphaFeatures:
             )
 
         return pd.DataFrame(features)
+
+    def compute_analyst_features(
+        self,
+        trade_date: str,
+        lookback_days: int = 120,
+    ) -> pd.DataFrame:
+        """兼容旧接口：分析师预期因子
+
+        旧接口使用天数回溯，这里按近似月份换算。
+        """
+        lookback_months = max(1, int(round(lookback_days / 30)))
+        return self.compute_analyst_expectation_features(trade_date=trade_date, lookback_months=lookback_months)
 
     # ==================== 统一入口 ====================
 

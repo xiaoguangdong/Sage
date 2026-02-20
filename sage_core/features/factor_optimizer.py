@@ -136,6 +136,21 @@ class FactorOptimizer:
 
         return result
 
+    def market_cap_neutralize(
+        self,
+        df: pd.DataFrame,
+        factor_cols: List[str],
+        cap_col: str = "total_mv",
+        n_bins: int = 10,
+    ) -> pd.DataFrame:
+        """兼容旧接口：市值中性化"""
+        return self.market_cap_neutralization(
+            df=df,
+            factor_cols=factor_cols,
+            market_cap_col=cap_col,
+            n_bins=n_bins,
+        )
+
     def apply_market_cap_neutralization(
         self,
         df: pd.DataFrame,
@@ -355,6 +370,19 @@ class FactorOptimizer:
             result[f"{factor}_ind_neutral"] = result[factor] - industry_mean
 
         return result
+
+    def industry_neutralize(
+        self,
+        df: pd.DataFrame,
+        factor_cols: List[str],
+        industry_col: str = "industry",
+    ) -> pd.DataFrame:
+        """兼容旧接口：行业中性化"""
+        return self.industry_neutralization(
+            df=df,
+            factor_cols=factor_cols,
+            industry_col=industry_col,
+        )
 
     # ==================== 双重中性化（行业 + 市值） ====================
 

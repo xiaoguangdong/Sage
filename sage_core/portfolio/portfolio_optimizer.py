@@ -84,6 +84,7 @@ class PortfolioOptimizer:
         max_turnover: float = 0.30,
         max_industry_weight: float = 0.30,
         min_position_weight: float = 0.01,
+        max_sector_exposure: Optional[float] = None,
     ):
         """初始化
 
@@ -93,6 +94,8 @@ class PortfolioOptimizer:
             min_position_weight: 最小持仓权重（低于此值的持仓会被清除）
         """
         self.max_turnover = max_turnover
+        if max_sector_exposure is not None:
+            max_industry_weight = max_sector_exposure
         self.max_industry_weight = max_industry_weight
         self.min_position_weight = min_position_weight
 
@@ -245,6 +248,24 @@ class PortfolioOptimizer:
 
         return result
 
+    def apply_turnover_constraint(
+        self,
+        new_portfolio: pd.DataFrame,
+        old_portfolio: Optional[pd.DataFrame] = None,
+        max_turnover: Optional[float] = None,
+        ts_code_col: str = "ts_code",
+        weight_col: str = "weight",
+    ) -> pd.DataFrame:
+        """兼容旧接口：换手率约束调仓"""
+        if max_turnover is not None:
+            self.max_turnover = max_turnover
+        return self.turnover_constrained_rebalance(
+            new_portfolio=new_portfolio,
+            old_portfolio=old_portfolio,
+            ts_code_col=ts_code_col,
+            weight_col=weight_col,
+        )
+
     # ==================== 行业暴露约束 ====================
 
     def industry_exposure_constraint(
@@ -314,6 +335,24 @@ class PortfolioOptimizer:
             result[weight_col] = result[weight_col] / total_weight
 
         return result
+
+    def apply_sector_constraint(
+        self,
+        portfolio: pd.DataFrame,
+        max_exposure: Optional[float] = None,
+        industry_col: str = "industry",
+        ts_code_col: str = "ts_code",
+        weight_col: str = "weight",
+    ) -> pd.DataFrame:
+        """兼容旧接口：行业暴露约束"""
+        if max_exposure is not None:
+            self.max_industry_weight = max_exposure
+        return self.industry_exposure_constraint(
+            portfolio=portfolio,
+            industry_col=industry_col,
+            ts_code_col=ts_code_col,
+            weight_col=weight_col,
+        )
 
     # ==================== 综合优化 ====================
 
