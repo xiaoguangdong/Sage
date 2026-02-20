@@ -147,59 +147,81 @@ class HighAlphaFeatures:
             return pd.DataFrame()
 
         moneyflow = pd.concat(frames, ignore_index=True)
+        if "ts_code" not in moneyflow.columns:
+            return pd.DataFrame()
 
-        # 计算因子
-        features = []
-        for ts_code, group in moneyflow.groupby("ts_code"):
-            if len(group) < 5:  # 至少需要 5 天数据
-                continue
+        # 预计算净流入
+        moneyflow["large_net"] = moneyflow["buy_lg_amount"] - moneyflow["sell_lg_amount"]
+        moneyflow["small_net"] = moneyflow["buy_sm_amount"] - moneyflow["sell_sm_amount"]
+        moneyflow["super_large_amount"] = moneyflow["buy_elg_amount"] + moneyflow["sell_elg_amount"]
+        total_amount_cols = [
+            "buy_sm_amount",
+            "sell_sm_amount",
+            "buy_md_amount",
+            "sell_md_amount",
+            "buy_lg_amount",
+            "sell_lg_amount",
+            "buy_elg_amount",
+            "sell_elg_amount",
+        ]
+        moneyflow["total_amount"] = moneyflow[total_amount_cols].sum(axis=1)
 
-            # 1. 大单净流入占比
-            large_net = (group["buy_lg_amount"] - group["sell_lg_amount"]).sum()
-            total_amount = (
-                group["buy_sm_amount"]
-                + group["sell_sm_amount"]
-                + group["buy_md_amount"]
-                + group["sell_md_amount"]
-                + group["buy_lg_amount"]
-                + group["sell_lg_amount"]
-                + group["buy_elg_amount"]
-                + group["sell_elg_amount"]
-            ).sum()
-            large_net_inflow_ratio = large_net / total_amount if total_amount > 0 else 0
+        agg = (
+            moneyflow.groupby("ts_code")
+            .agg(
+                large_net_sum=("large_net", "sum"),
+                total_amount_sum=("total_amount", "sum"),
+                super_large_sum=("super_large_amount", "sum"),
+                obs=("large_net", "count"),
+                small_std=("small_net", "std"),
+                large_std=("large_net", "std"),
+            )
+            .reset_index()
+        )
+        agg = agg[agg["obs"] >= 5]
+        if agg.empty:
+            return pd.DataFrame()
 
-            # 2. 主力资金持续流入天数
-            large_net_daily = group["buy_lg_amount"] - group["sell_lg_amount"]
-            main_inflow_days = 0
-            for val in large_net_daily.iloc[::-1]:  # 从最近往前数
+        # 1. 大单净流入占比
+        agg["large_net_inflow_ratio"] = agg["large_net_sum"] / agg["total_amount_sum"].replace(0, pd.NA)
+        agg["large_net_inflow_ratio"] = agg["large_net_inflow_ratio"].fillna(0.0)
+
+        # 2. 主力资金持续流入天数（从最近往前数）
+        def _inflow_days(series: pd.Series) -> int:
+            count = 0
+            for val in series.iloc[::-1]:
                 if val > 0:
-                    main_inflow_days += 1
+                    count += 1
                 else:
                     break
+            return int(count)
 
-            # 3. 散户/机构资金分化度（负相关表示分化）
-            small_net = group["buy_sm_amount"] - group["sell_sm_amount"]
-            large_net_series = group["buy_lg_amount"] - group["sell_lg_amount"]
-            if len(small_net) > 1 and small_net.std() > 0 and large_net_series.std() > 0:
-                retail_inst_divergence = -small_net.corr(large_net_series)
-            else:
-                retail_inst_divergence = 0
+        inflow_days = moneyflow.groupby("ts_code")["large_net"].apply(_inflow_days)
+        agg = agg.merge(inflow_days.rename("main_inflow_days"), on="ts_code", how="left")
+        agg["main_inflow_days"] = agg["main_inflow_days"].fillna(0).astype(int)
 
-            # 4. 特大单占比（机构活跃度）
-            super_large_amount = (group["buy_elg_amount"] + group["sell_elg_amount"]).sum()
-            super_large_ratio = super_large_amount / total_amount if total_amount > 0 else 0
+        # 3. 散户/机构资金分化度（负相关表示分化）
+        def _divergence(group: pd.DataFrame) -> float:
+            if group["small_net"].std() > 0 and group["large_net"].std() > 0:
+                return float(-group["small_net"].corr(group["large_net"]))
+            return 0.0
 
-            features.append(
-                {
-                    "ts_code": ts_code,
-                    "large_net_inflow_ratio": large_net_inflow_ratio,
-                    "main_inflow_days": main_inflow_days,
-                    "retail_inst_divergence": retail_inst_divergence,
-                    "super_large_ratio": super_large_ratio,
-                }
-            )
+        divergence = moneyflow.groupby("ts_code").apply(_divergence)
+        agg = agg.merge(divergence.rename("retail_inst_divergence"), on="ts_code", how="left")
 
-        return pd.DataFrame(features)
+        # 4. 特大单占比（机构活跃度）
+        agg["super_large_ratio"] = agg["super_large_sum"] / agg["total_amount_sum"].replace(0, pd.NA)
+        agg["super_large_ratio"] = agg["super_large_ratio"].fillna(0.0)
+
+        return agg[
+            [
+                "ts_code",
+                "large_net_inflow_ratio",
+                "main_inflow_days",
+                "retail_inst_divergence",
+                "super_large_ratio",
+            ]
+        ]
 
     # ==================== 北向资金细分 ====================
 
@@ -256,40 +278,47 @@ class HighAlphaFeatures:
         if hk_hold.empty:
             return pd.DataFrame()
 
-        # 按股票分组计算
-        features = []
-        for ts_code, group in hk_hold.groupby("ts_code"):
-            group = group.sort_values("trade_date").tail(lookback_days)
-            if len(group) < 10:  # 至少需要 10 天数据
-                continue
+        if "ts_code" not in hk_hold.columns or "ratio" not in hk_hold.columns:
+            return pd.DataFrame()
 
-            # 1. 配置型资金占比（持股占比变化 < 5%）
-            ratio_change = group["ratio"].pct_change().abs()
-            config_days = (ratio_change < 0.05).sum()
-            config_fund_ratio = config_days / len(group) if len(group) > 0 else 0
+        hk_hold = hk_hold.sort_values(["ts_code", "trade_date"])
+        hk_hold = hk_hold.groupby("ts_code").tail(lookback_days)
 
-            # 2. 交易型资金流入（持股占比波动 > 10% 且净流入 > 0）
-            ratio_std = group["ratio"].std()
-            ratio_change_total = group["ratio"].iloc[-1] - group["ratio"].iloc[0]
-            trading_fund_inflow = 1 if (ratio_std > 0.10 and ratio_change_total > 0) else 0
+        # 1. 配置型资金占比（持股占比变化 < 5%）
+        hk_hold["ratio_change"] = hk_hold.groupby("ts_code")["ratio"].pct_change().abs()
+        config_ratio = (
+            hk_hold.groupby("ts_code")["ratio_change"]
+            .apply(lambda s: float((s < 0.05).sum() / max(len(s), 1)))
+            .rename("config_fund_ratio")
+        )
 
-            # 3. 北向持仓集中度变化（简化版：用持股占比变化率）
-            holding_concentration_change = ratio_change_total
+        # 2/3/4 聚合
+        agg = (
+            hk_hold.groupby("ts_code")["ratio"]
+            .agg(ratio_std="std", ratio_last="last", ratio_first="first", obs="count")
+            .reset_index()
+        )
+        agg = agg[agg["obs"] >= 10]
+        if agg.empty:
+            return pd.DataFrame()
 
-            # 4. 北向持仓稳定性（持股占比标准差的负值）
-            holding_stability = -ratio_std if not pd.isna(ratio_std) else 0
+        agg["ratio_change_total"] = agg["ratio_last"] - agg["ratio_first"]
+        agg["trading_fund_inflow"] = ((agg["ratio_std"] > 0.10) & (agg["ratio_change_total"] > 0)).astype(int)
+        agg["holding_concentration_change"] = agg["ratio_change_total"]
+        agg["holding_stability"] = -agg["ratio_std"].fillna(0.0)
 
-            features.append(
-                {
-                    "ts_code": ts_code,
-                    "config_fund_ratio": config_fund_ratio,
-                    "trading_fund_inflow": trading_fund_inflow,
-                    "holding_concentration_change": holding_concentration_change,
-                    "holding_stability": holding_stability,
-                }
-            )
+        agg = agg.merge(config_ratio, on="ts_code", how="left")
+        agg["config_fund_ratio"] = agg["config_fund_ratio"].fillna(0.0)
 
-        return pd.DataFrame(features)
+        return agg[
+            [
+                "ts_code",
+                "config_fund_ratio",
+                "trading_fund_inflow",
+                "holding_concentration_change",
+                "holding_stability",
+            ]
+        ]
 
     # ==================== 融资融券因子 ====================
 
