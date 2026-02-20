@@ -1,0 +1,12 @@
+factor_exposure:
+  enabled: true
+  zscore: true
+  neutralize:
+    industry: true
+    size: false
+  factor_cols:
+    - quality_score
+    - growth_score
+    - momentum_score
+    - low_vol_score
+    - doubao_champion_score

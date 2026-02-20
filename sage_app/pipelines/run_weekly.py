@@ -31,6 +31,7 @@ try:
     from sage_core.stock_selection.rank_model import RankModelLGBM
 except ModuleNotFoundError:  # lightgbm 未安装时允许 weekly 链路继续运行
     RankModelLGBM = None
+from sage_core.backtest.exposure import compute_factor_exposures
 from sage_core.execution.entry_model import EntryModelLR
 from sage_core.execution.signal_contract import (
     apply_industry_overlay,
@@ -121,6 +122,13 @@ def load_config(config_dir: str | None = None) -> dict:
             config["strategy_governance"] = yaml.safe_load(f)
     except Exception as e:
         logger.warning(f"无法加载策略治理配置: {e}")
+
+    # 加载归因配置
+    try:
+        with open(f"{config_dir}/attribution.yaml", "r", encoding="utf-8") as f:
+            config["attribution"] = yaml.safe_load(f)
+    except Exception as e:
+        logger.warning(f"无法加载归因配置: {e}")
 
     # 加载组合管理器配置
     try:
@@ -1350,6 +1358,55 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     output_file = output_dir / f"portfolio_{datetime.now().strftime('%Y%m%d')}.csv"
     portfolio.to_csv(output_file, index=False)
     logger.info(f"组合结果已保存到: {output_file}")
+
+    # 12. 归因输入快照（因子暴露 + 行业权重）
+    attr_cfg = config.get("attribution") or {}
+    factor_cfg = (attr_cfg.get("factor_exposure") or {}) if isinstance(attr_cfg, dict) else {}
+    if factor_cfg.get("enabled", False):
+        factor_cols = factor_cfg.get("factor_cols") or []
+        if factor_cols and "trade_date" in df_features.columns:
+            date_series = pd.to_datetime(df_features["trade_date"], errors="coerce")
+            latest_date = date_series.max()
+            latest_date = latest_date.strftime("%Y%m%d") if pd.notna(latest_date) else datetime.now().strftime("%Y%m%d")
+            date_str = date_series.dt.strftime("%Y%m%d")
+            df_latest = df_features[date_str == latest_date].copy()
+            if "ts_code" not in df_latest.columns and "code" in df_latest.columns:
+                df_latest["ts_code"] = df_latest["code"]
+
+            neutralize_cfg = factor_cfg.get("neutralize") or {}
+            neutralize_industry = bool(neutralize_cfg.get("industry", True))
+            zscore = bool(factor_cfg.get("zscore", True))
+
+            try:
+                exposures = compute_factor_exposures(
+                    df_latest,
+                    factor_cols,
+                    date_col="trade_date",
+                    code_col="ts_code",
+                    industry_col="industry_l1",
+                    zscore=zscore,
+                    neutralize_industry=neutralize_industry,
+                )
+
+                code_col = "code" if "code" in portfolio.columns else "ts_code"
+                weights = portfolio[[code_col, "weight"]].rename(columns={code_col: "ts_code"})
+                exposures = exposures.merge(weights, on="ts_code", how="inner")
+                exposures["return"] = pd.NA
+
+                attr_dir = get_data_path("signals", "attribution", ensure=True)
+                exposure_path = attr_dir / f"factor_exposure_{latest_date}.csv"
+                exposures.to_csv(exposure_path, index=False)
+                logger.info("因子暴露快照已保存: %s", exposure_path)
+
+                if "industry_l1" in portfolio.columns:
+                    industry_weights = portfolio.groupby("industry_l1", dropna=False)["weight"].sum().reset_index()
+                    industry_weights.insert(0, "trade_date", latest_date)
+                    industry_weights["return"] = pd.NA
+                    industry_path = attr_dir / f"portfolio_industry_{latest_date}.csv"
+                    industry_weights.to_csv(industry_path, index=False)
+                    logger.info("行业权重快照已保存: %s", industry_path)
+            except Exception as exc:
+                logger.warning("归因快照生成失败: %s", exc)
 
     context_file = output_dir / f"execution_context_{datetime.now().strftime('%Y%m%d')}.json"
     context_payload = {
