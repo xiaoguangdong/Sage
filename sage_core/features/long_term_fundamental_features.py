@@ -13,8 +13,13 @@
 3. 营收/利润3年CAGR
 4. 连续分红年数
 5. 利息保障倍数
-6. 机构持仓变化
-7. 市占率（预留接口，需外部数据补充）
+6. 负债与净现金（净现金/资产、有息负债、资产负债率）
+7. 现金流质量（CFO/净利润、FCF/净利润、应计利润率）
+8. 费用率（销售/管理/财务/研发费用率，TTM）
+9. 扣非净利润质量（扣非/净利润、扣非利润率）
+10. 扣除商誉后的净资产
+11. 机构持仓变化（预留接口）
+12. 市占率（预留接口，需外部数据补充）
 """
 
 from __future__ import annotations
@@ -48,6 +53,13 @@ class LongTermFundamentalFeatures:
         self.fina_indicator_dir = self.data_root / "fundamental"
         self.daily_basic_dir = self.data_root / "daily_basic"
         self.dividend_dir = self.data_root / "fundamental" / "dividend"
+
+    def _load_parquet_files(self, directory: Path, pattern: str) -> pd.DataFrame:
+        files = sorted(directory.glob(pattern))
+        if not files:
+            raise FileNotFoundError(f"未找到数据文件: {directory} / {pattern}")
+        df_list = [pd.read_parquet(file) for file in files]
+        return pd.concat(df_list, ignore_index=True)
 
     def calculate_rd_expense_ratio_ttm(
         self,
@@ -416,6 +428,330 @@ class LongTermFundamentalFeatures:
 
         return result.dropna()
 
+    def calculate_balance_sheet_quality_metrics(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
+        """计算资产负债与净现金质量指标
+
+        指标：
+        - debt_ratio: 资产负债率 = total_liab / total_assets
+        - net_debt: 有息负债合计 - 现金资产
+        - net_cash: 现金资产 - 有息负债合计
+        - net_cash_ratio: 净现金 / total_assets
+        - goodwill_ratio: goodwill / 股东权益
+        - adj_equity: 股东权益 - goodwill
+        - adj_equity_ratio: adj_equity / total_assets
+        """
+        df_bs = self._load_parquet_files(self.balance_dir, "balancesheet_*.parquet")
+
+        keep_cols = [
+            "ts_code",
+            "end_date",
+            "total_assets",
+            "total_liab",
+            "monetary_cap",
+            "trad_asset",
+            "goodwill",
+            "total_hldr_eqy_exc_min_int",
+            "total_hldr_eqy_inc_min_int",
+            "st_borr",
+            "lt_borr",
+            "bond_payable",
+            "non_cur_liab_due_1y",
+        ]
+        keep_cols = [c for c in keep_cols if c in df_bs.columns]
+        df_bs = df_bs[keep_cols].copy()
+
+        df_bs["end_date"] = pd.to_datetime(df_bs["end_date"], format="%Y%m%d", errors="coerce")
+        df_bs = df_bs[
+            (df_bs["end_date"] >= pd.to_datetime(start_date, format="%Y%m%d"))
+            & (df_bs["end_date"] <= pd.to_datetime(end_date, format="%Y%m%d"))
+        ]
+        df_bs = df_bs.sort_values(["ts_code", "end_date"])
+
+        debt_cols = [c for c in ["st_borr", "lt_borr", "bond_payable", "non_cur_liab_due_1y"] if c in df_bs.columns]
+        cash_cols = [c for c in ["monetary_cap", "trad_asset"] if c in df_bs.columns]
+
+        if debt_cols:
+            df_bs["debt_total"] = df_bs[debt_cols].sum(axis=1, min_count=1)
+        else:
+            df_bs["debt_total"] = np.nan
+
+        if cash_cols:
+            df_bs["cash_total"] = df_bs[cash_cols].sum(axis=1, min_count=1)
+        else:
+            df_bs["cash_total"] = np.nan
+
+        if "total_assets" in df_bs.columns and "total_liab" in df_bs.columns:
+            df_bs["debt_ratio"] = df_bs["total_liab"] / df_bs["total_assets"]
+        else:
+            df_bs["debt_ratio"] = np.nan
+
+        df_bs["net_debt"] = df_bs["debt_total"] - df_bs["cash_total"]
+        df_bs["net_cash"] = df_bs["cash_total"] - df_bs["debt_total"]
+
+        if "total_assets" in df_bs.columns:
+            df_bs["net_cash_ratio"] = df_bs["net_cash"] / df_bs["total_assets"]
+        else:
+            df_bs["net_cash_ratio"] = np.nan
+
+        equity_col = None
+        for col in ["total_hldr_eqy_exc_min_int", "total_hldr_eqy_inc_min_int"]:
+            if col in df_bs.columns:
+                equity_col = col
+                break
+
+        if equity_col:
+            df_bs["equity"] = df_bs[equity_col]
+        else:
+            df_bs["equity"] = np.nan
+
+        if "goodwill" in df_bs.columns:
+            df_bs["goodwill_ratio"] = df_bs["goodwill"] / df_bs["equity"]
+            df_bs["adj_equity"] = df_bs["equity"] - df_bs["goodwill"]
+        else:
+            df_bs["goodwill_ratio"] = np.nan
+            df_bs["adj_equity"] = df_bs["equity"]
+
+        if "total_assets" in df_bs.columns:
+            df_bs["adj_equity_ratio"] = df_bs["adj_equity"] / df_bs["total_assets"]
+        else:
+            df_bs["adj_equity_ratio"] = np.nan
+
+        result = df_bs[
+            [
+                "ts_code",
+                "end_date",
+                "debt_ratio",
+                "net_debt",
+                "net_cash",
+                "net_cash_ratio",
+                "goodwill_ratio",
+                "adj_equity",
+                "adj_equity_ratio",
+            ]
+        ].copy()
+        result["end_date"] = result["end_date"].dt.strftime("%Y%m%d")
+        return result.dropna(how="all", subset=["debt_ratio", "net_cash_ratio", "goodwill_ratio", "adj_equity_ratio"])
+
+    def calculate_cashflow_quality_metrics(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
+        """计算现金流质量指标（TTM）
+
+        指标：
+        - cash_profit_ratio: CFO_TTM / 净利润_TTM
+        - fcf_to_np: FCF_TTM / 净利润_TTM
+        - accruals_ratio: (净利润_TTM - CFO_TTM) / total_assets
+        """
+        df_cash = self._load_parquet_files(self.cashflow_dir, "cashflow_*.parquet")
+        df_income = self._load_parquet_files(self.income_dir, "income_*.parquet")
+
+        cash_cols = ["ts_code", "end_date", "n_cashflow_act", "c_pay_acq_const_fiolta"]
+        cash_cols = [c for c in cash_cols if c in df_cash.columns]
+        df_cash = df_cash[cash_cols].copy()
+
+        income_cols = ["ts_code", "end_date", "n_income", "revenue"]
+        income_cols = [c for c in income_cols if c in df_income.columns]
+        df_income = df_income[income_cols].copy()
+
+        df_cash["end_date"] = pd.to_datetime(df_cash["end_date"], format="%Y%m%d", errors="coerce")
+        df_cash = df_cash[
+            (df_cash["end_date"] >= pd.to_datetime(start_date, format="%Y%m%d"))
+            & (df_cash["end_date"] <= pd.to_datetime(end_date, format="%Y%m%d"))
+        ]
+
+        df_income["end_date"] = pd.to_datetime(df_income["end_date"], format="%Y%m%d", errors="coerce")
+        df_income = df_income[
+            (df_income["end_date"] >= pd.to_datetime(start_date, format="%Y%m%d"))
+            & (df_income["end_date"] <= pd.to_datetime(end_date, format="%Y%m%d"))
+        ]
+
+        df_cash = df_cash.sort_values(["ts_code", "end_date"])
+        df_income = df_income.sort_values(["ts_code", "end_date"])
+
+        if "n_cashflow_act" in df_cash.columns:
+            df_cash["cfo_ttm"] = (
+                df_cash.groupby("ts_code")["n_cashflow_act"]
+                .rolling(window=4, min_periods=4)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+        else:
+            df_cash["cfo_ttm"] = np.nan
+
+        if "c_pay_acq_const_fiolta" in df_cash.columns:
+            df_cash["capex_ttm"] = (
+                df_cash.groupby("ts_code")["c_pay_acq_const_fiolta"]
+                .rolling(window=4, min_periods=4)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+        else:
+            df_cash["capex_ttm"] = np.nan
+
+        if "n_income" in df_income.columns:
+            df_income["n_income_ttm"] = (
+                df_income.groupby("ts_code")["n_income"]
+                .rolling(window=4, min_periods=4)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+        else:
+            df_income["n_income_ttm"] = np.nan
+
+        if "revenue" in df_income.columns:
+            df_income["revenue_ttm"] = (
+                df_income.groupby("ts_code")["revenue"]
+                .rolling(window=4, min_periods=4)
+                .sum()
+                .reset_index(level=0, drop=True)
+            )
+        else:
+            df_income["revenue_ttm"] = np.nan
+
+        df_merge = df_cash[["ts_code", "end_date", "cfo_ttm", "capex_ttm"]].merge(
+            df_income[["ts_code", "end_date", "n_income_ttm", "revenue_ttm"]],
+            on=["ts_code", "end_date"],
+            how="outer",
+        )
+
+        df_merge["fcf_ttm"] = df_merge["cfo_ttm"] - df_merge["capex_ttm"]
+
+        df_merge["cash_profit_ratio"] = df_merge["cfo_ttm"] / df_merge["n_income_ttm"]
+        df_merge.loc[df_merge["n_income_ttm"] <= 0, "cash_profit_ratio"] = np.nan
+
+        df_merge["fcf_to_np"] = df_merge["fcf_ttm"] / df_merge["n_income_ttm"]
+        df_merge.loc[df_merge["n_income_ttm"] <= 0, "fcf_to_np"] = np.nan
+
+        df_bs = self._load_parquet_files(self.balance_dir, "balancesheet_*.parquet")
+        if "total_assets" in df_bs.columns:
+            df_bs = df_bs[["ts_code", "end_date", "total_assets"]].copy()
+            df_bs["end_date"] = pd.to_datetime(df_bs["end_date"], format="%Y%m%d", errors="coerce")
+            df_merge = df_merge.merge(df_bs, on=["ts_code", "end_date"], how="left")
+            df_merge["accruals_ratio"] = (df_merge["n_income_ttm"] - df_merge["cfo_ttm"]) / df_merge["total_assets"]
+        else:
+            df_merge["accruals_ratio"] = np.nan
+
+        result = df_merge[
+            [
+                "ts_code",
+                "end_date",
+                "cash_profit_ratio",
+                "fcf_to_np",
+                "accruals_ratio",
+            ]
+        ].copy()
+        result["end_date"] = result["end_date"].dt.strftime("%Y%m%d")
+        return result.dropna(how="all", subset=["cash_profit_ratio", "fcf_to_np", "accruals_ratio"])
+
+    def calculate_expense_ratio_ttm(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
+        """计算费用率（TTM）"""
+        df_income = self._load_parquet_files(self.income_dir, "income_*.parquet")
+
+        keep_cols = ["ts_code", "end_date", "revenue", "sell_exp", "admin_exp", "fin_exp", "rd_exp"]
+        keep_cols = [c for c in keep_cols if c in df_income.columns]
+        df_income = df_income[keep_cols].copy()
+        df_income["end_date"] = pd.to_datetime(df_income["end_date"], format="%Y%m%d", errors="coerce")
+        df_income = df_income[
+            (df_income["end_date"] >= pd.to_datetime(start_date, format="%Y%m%d"))
+            & (df_income["end_date"] <= pd.to_datetime(end_date, format="%Y%m%d"))
+        ]
+        df_income = df_income.sort_values(["ts_code", "end_date"])
+
+        for col in ["revenue", "sell_exp", "admin_exp", "fin_exp", "rd_exp"]:
+            if col in df_income.columns:
+                df_income[f"{col}_ttm"] = (
+                    df_income.groupby("ts_code")[col]
+                    .rolling(window=4, min_periods=4)
+                    .sum()
+                    .reset_index(level=0, drop=True)
+                )
+
+        expense_cols = [
+            c for c in ["sell_exp_ttm", "admin_exp_ttm", "fin_exp_ttm", "rd_exp_ttm"] if c in df_income.columns
+        ]
+        if expense_cols:
+            df_income["opex_ttm"] = df_income[expense_cols].sum(axis=1, min_count=1)
+        else:
+            df_income["opex_ttm"] = np.nan
+
+        if "sell_exp_ttm" in df_income.columns and "admin_exp_ttm" in df_income.columns:
+            df_income["sga_ttm"] = df_income["sell_exp_ttm"] + df_income["admin_exp_ttm"]
+        else:
+            df_income["sga_ttm"] = np.nan
+
+        if "revenue_ttm" in df_income.columns:
+            df_income["opex_ratio_ttm"] = df_income["opex_ttm"] / df_income["revenue_ttm"]
+            df_income["sga_ratio_ttm"] = df_income["sga_ttm"] / df_income["revenue_ttm"]
+        else:
+            df_income["opex_ratio_ttm"] = np.nan
+            df_income["sga_ratio_ttm"] = np.nan
+
+        result = df_income[["ts_code", "end_date", "opex_ratio_ttm", "sga_ratio_ttm"]].copy()
+        result["end_date"] = result["end_date"].dt.strftime("%Y%m%d")
+        return result.dropna(how="all", subset=["opex_ratio_ttm", "sga_ratio_ttm"])
+
+    def calculate_sustainable_profit_metrics(
+        self,
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
+        """计算扣非净利润质量指标（TTM）"""
+        df_fina = self._load_parquet_files(self.fina_indicator_dir, "fina_indicator_*.parquet")
+        if "profit_dedt" not in df_fina.columns:
+            print("警告: fina_indicator 中缺少 profit_dedt 字段，跳过扣非净利润指标")
+            return pd.DataFrame(columns=["ts_code", "end_date", "profit_dedt_ttm", "dedt_profit_ratio"])
+
+        df_fina = df_fina[["ts_code", "end_date", "profit_dedt"]].copy()
+        df_fina["end_date"] = pd.to_datetime(df_fina["end_date"], format="%Y%m%d", errors="coerce")
+        df_fina = df_fina[
+            (df_fina["end_date"] >= pd.to_datetime(start_date, format="%Y%m%d"))
+            & (df_fina["end_date"] <= pd.to_datetime(end_date, format="%Y%m%d"))
+        ]
+        df_fina = df_fina.sort_values(["ts_code", "end_date"])
+        df_fina["profit_dedt_ttm"] = (
+            df_fina.groupby("ts_code")["profit_dedt"]
+            .rolling(window=4, min_periods=4)
+            .sum()
+            .reset_index(level=0, drop=True)
+        )
+
+        df_income = self._load_parquet_files(self.income_dir, "income_*.parquet")
+        df_income = df_income[["ts_code", "end_date", "n_income"]].copy()
+        df_income["end_date"] = pd.to_datetime(df_income["end_date"], format="%Y%m%d", errors="coerce")
+        df_income = df_income[
+            (df_income["end_date"] >= pd.to_datetime(start_date, format="%Y%m%d"))
+            & (df_income["end_date"] <= pd.to_datetime(end_date, format="%Y%m%d"))
+        ]
+        df_income = df_income.sort_values(["ts_code", "end_date"])
+        df_income["n_income_ttm"] = (
+            df_income.groupby("ts_code")["n_income"]
+            .rolling(window=4, min_periods=4)
+            .sum()
+            .reset_index(level=0, drop=True)
+        )
+
+        df_merge = df_fina[["ts_code", "end_date", "profit_dedt_ttm"]].merge(
+            df_income[["ts_code", "end_date", "n_income_ttm"]],
+            on=["ts_code", "end_date"],
+            how="left",
+        )
+        df_merge["dedt_profit_ratio"] = df_merge["profit_dedt_ttm"] / df_merge["n_income_ttm"]
+        df_merge.loc[df_merge["n_income_ttm"] <= 0, "dedt_profit_ratio"] = np.nan
+
+        result = df_merge[["ts_code", "end_date", "profit_dedt_ttm", "dedt_profit_ratio"]].copy()
+        result["end_date"] = result["end_date"].dt.strftime("%Y%m%d")
+        return result.dropna(how="all", subset=["profit_dedt_ttm", "dedt_profit_ratio"])
+
     def calculate_institutional_holding_change(
         self,
         start_date: str,
@@ -499,10 +835,36 @@ class LongTermFundamentalFeatures:
         print("  [6/7] 计算利息保障倍数...")
         df_interest = self.calculate_interest_coverage_ratio(start_date, end_date)
 
-        # 7. 合并所有特征
-        print("  [7/7] 合并所有特征...")
+        # 7. 资产负债与净现金
+        print("  [7/10] 计算资产负债与净现金...")
+        df_balance = self.calculate_balance_sheet_quality_metrics(start_date, end_date)
+
+        # 8. 现金流质量
+        print("  [8/10] 计算现金流质量...")
+        df_cashflow = self.calculate_cashflow_quality_metrics(start_date, end_date)
+
+        # 9. 费用率
+        print("  [9/10] 计算费用率...")
+        df_expense = self.calculate_expense_ratio_ttm(start_date, end_date)
+
+        # 10. 扣非净利润质量
+        print("  [10/10] 计算扣非净利润质量...")
+        df_sustainable = self.calculate_sustainable_profit_metrics(start_date, end_date)
+
+        # 11. 合并所有特征
+        print("  [11/11] 合并所有特征...")
         df_all = df_rd
-        for df in [df_roe, df_revenue_cagr, df_profit_cagr, df_dividend, df_interest]:
+        for df in [
+            df_roe,
+            df_revenue_cagr,
+            df_profit_cagr,
+            df_dividend,
+            df_interest,
+            df_balance,
+            df_cashflow,
+            df_expense,
+            df_sustainable,
+        ]:
             df_all = df_all.merge(df, on=["ts_code", "end_date"], how="outer")
 
         print(f"✓ 完成！共 {len(df_all)} 条记录")

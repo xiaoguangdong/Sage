@@ -108,8 +108,48 @@ def test_features():
     except Exception as e:
         print(f"✗ 失败: {e}")
 
-    # 测试7：计算所有特征
-    print("\n【测试7】计算所有特征（合并）")
+    # 测试7：资产负债与净现金
+    print("\n【测试7】资产负债与净现金")
+    try:
+        df_balance = calculator.calculate_balance_sheet_quality_metrics(start_date, end_date)
+        print(f"✓ 成功计算 {len(df_balance)} 条记录")
+        print("\n样例数据（前5条）：")
+        print(df_balance.head())
+    except Exception as e:
+        print(f"✗ 失败: {e}")
+
+    # 测试8：现金流质量
+    print("\n【测试8】现金流质量（TTM）")
+    try:
+        df_cashflow = calculator.calculate_cashflow_quality_metrics(start_date, end_date)
+        print(f"✓ 成功计算 {len(df_cashflow)} 条记录")
+        print("\n样例数据（前5条）：")
+        print(df_cashflow.head())
+    except Exception as e:
+        print(f"✗ 失败: {e}")
+
+    # 测试9：费用率
+    print("\n【测试9】费用率（TTM）")
+    try:
+        df_expense = calculator.calculate_expense_ratio_ttm(start_date, end_date)
+        print(f"✓ 成功计算 {len(df_expense)} 条记录")
+        print("\n样例数据（前5条）：")
+        print(df_expense.head())
+    except Exception as e:
+        print(f"✗ 失败: {e}")
+
+    # 测试10：扣非净利润质量
+    print("\n【测试10】扣非净利润质量（TTM）")
+    try:
+        df_sustainable = calculator.calculate_sustainable_profit_metrics(start_date, end_date)
+        print(f"✓ 成功计算 {len(df_sustainable)} 条记录")
+        print("\n样例数据（前5条）：")
+        print(df_sustainable.head())
+    except Exception as e:
+        print(f"✗ 失败: {e}")
+
+    # 测试11：计算所有特征
+    print("\n【测试11】计算所有特征（合并）")
     try:
         df_all = calculator.calculate_all_features(start_date, end_date)
         print(f"✓ 成功计算 {len(df_all)} 条记录")

@@ -24,7 +24,9 @@ class ValueStockSelector:
     核心理念：寻找"便宜的好公司"
     - 盈利能力强（ROE > 15%）
     - 财务安全（负债率 < 60%）
-    - 现金流稳定（连续分红5年+）
+    - 现金流真实（CFO/净利润健康）
+    - 分红稳定（连续分红5年+）
+    - 商誉占比合理（避免虚高净资产）
     - 估值合理（PE < 行业中位数）
     - 机构认可（基金持仓 > 20家）
     """
@@ -90,8 +92,8 @@ class ValueStockSelector:
         """计算综合评分
 
         评分维度：
-        1. 盈利能力（30%）：ROE + ROE稳定性
-        2. 财务安全（25%）：负债率 + 利息保障倍数
+        1. 盈利能力（30%）：ROE + ROE稳定性 + 真实利润 + 扣非质量 + 开销合理性
+        2. 财务安全（25%）：负债率 + 利息保障倍数 + 净现金 + 商誉占比
         3. 分红能力（20%）：连续分红年数 + 股息率
         4. 估值水平（15%）：PE相对值
         5. 机构认可（10%）：基金持仓 + 机构增持
@@ -110,26 +112,56 @@ class ValueStockSelector:
             # ROE标准化（0-100分）
             roe_score = (scored["roe"] - 0.10) / 0.30 * 100  # 10%-40%映射到0-100
             roe_score = roe_score.clip(0, 100)
-            scored["score"] += roe_score * 0.20
+            scored["score"] += roe_score * 0.12
 
         if "roe_5y_std" in scored.columns:
             # ROE稳定性（标准差越小越好）
             roe_stability_score = (1 - scored["roe_5y_std"] / 0.10) * 100
             roe_stability_score = roe_stability_score.clip(0, 100)
-            scored["score"] += roe_stability_score * 0.10
+            scored["score"] += roe_stability_score * 0.05
+
+        if "cash_profit_ratio" in scored.columns:
+            # CFO/净利润（>=1为优秀）
+            cash_profit_score = (scored["cash_profit_ratio"] / 1.0) * 100
+            cash_profit_score = cash_profit_score.clip(0, 100)
+            scored["score"] += cash_profit_score * 0.05
+
+        if "dedt_profit_ratio" in scored.columns:
+            # 扣非/净利润（>=1为优秀）
+            dedt_profit_score = (scored["dedt_profit_ratio"] / 1.0) * 100
+            dedt_profit_score = dedt_profit_score.clip(0, 100)
+            scored["score"] += dedt_profit_score * 0.05
+
+        if "opex_ratio_ttm" in scored.columns:
+            # 费用率（越低越好，40%为下限）
+            opex_score = (1 - scored["opex_ratio_ttm"] / 0.40) * 100
+            opex_score = opex_score.clip(0, 100)
+            scored["score"] += opex_score * 0.03
 
         # 2. 财务安全（25%）
         if "debt_ratio" in scored.columns:
             # 负债率（越低越好）
             debt_score = (1 - scored["debt_ratio"]) * 100
             debt_score = debt_score.clip(0, 100)
-            scored["score"] += debt_score * 0.15
+            scored["score"] += debt_score * 0.08
 
         if "interest_coverage" in scored.columns:
             # 利息保障倍数（>5倍为优秀）
             interest_score = (scored["interest_coverage"] / 10) * 100
             interest_score = interest_score.clip(0, 100)
-            scored["score"] += interest_score * 0.10
+            scored["score"] += interest_score * 0.05
+
+        if "net_cash_ratio" in scored.columns:
+            # 净现金率（>=20%为优秀，<-20%扣分）
+            net_cash_score = (scored["net_cash_ratio"] + 0.20) / 0.40 * 100
+            net_cash_score = net_cash_score.clip(0, 100)
+            scored["score"] += net_cash_score * 0.05
+
+        if "goodwill_ratio" in scored.columns:
+            # 商誉占比（越低越好，40%为下限）
+            goodwill_score = (1 - scored["goodwill_ratio"] / 0.40) * 100
+            goodwill_score = goodwill_score.clip(0, 100)
+            scored["score"] += goodwill_score * 0.05
 
         # 3. 分红能力（20%）
         if "consecutive_dividend" in scored.columns:

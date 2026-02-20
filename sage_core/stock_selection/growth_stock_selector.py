@@ -25,7 +25,8 @@ class GrowthStockSelector:
     - 高增长（营收CAGR > 20%）
     - 重研发（研发费用率 > 5%）
     - 强定价权（毛利率上升）
-    - 高效率（资产周转率高）
+    - 高效率（资产周转率高 + 费用率合理）
+    - 现金流真实（CFO/净利润健康）
     - 机构认可（基金持仓 > 20家）
     """
 
@@ -90,11 +91,12 @@ class GrowthStockSelector:
         """计算综合评分
 
         评分维度：
-        1. 增长速度（35%）：营收CAGR + 利润CAGR
-        2. 增长质量（25%）：研发费用率 + 毛利率趋势
-        3. 运营效率（20%）：资产周转率 + ROE
+        1. 增长速度（30%）：营收CAGR + 利润CAGR
+        2. 增长质量（25%）：研发费用率 + 毛利率趋势 + 真实利润
+        3. 运营效率（20%）：资产周转率 + ROE + 费用率
         4. 行业地位（10%）：行业排名
         5. 机构认可（10%）：基金持仓 + 机构增持
+        6. 财务安全（5%）：净现金水平
 
         Args:
             df: 通过硬规则的股票
@@ -105,44 +107,56 @@ class GrowthStockSelector:
         scored = df.copy()
         scored["score"] = 0.0
 
-        # 1. 增长速度（35%）
+        # 1. 增长速度（30%）
         if "revenue_cagr_3y" in scored.columns:
             # 营收CAGR标准化（20%-50%映射到0-100）
             revenue_growth_score = (scored["revenue_cagr_3y"] - 0.20) / 0.30 * 100
             revenue_growth_score = revenue_growth_score.clip(0, 100)
-            scored["score"] += revenue_growth_score * 0.20
+            scored["score"] += revenue_growth_score * 0.18
 
         if "profit_cagr_3y" in scored.columns:
             # 利润CAGR标准化（0%-50%映射到0-100）
             profit_growth_score = (scored["profit_cagr_3y"]) / 0.50 * 100
             profit_growth_score = profit_growth_score.clip(0, 100)
-            scored["score"] += profit_growth_score * 0.15
+            scored["score"] += profit_growth_score * 0.12
 
         # 2. 增长质量（25%）
         if "rd_ratio" in scored.columns:
             # 研发费用率（10%为满分）
             rd_score = (scored["rd_ratio"] / 0.10) * 100
             rd_score = rd_score.clip(0, 100)
-            scored["score"] += rd_score * 0.15
+            scored["score"] += rd_score * 0.12
 
         if "gross_margin_trend" in scored.columns:
             # 毛利率趋势（上升为正分）
             margin_trend_score = (scored["gross_margin_trend"] / 0.05) * 100
             margin_trend_score = margin_trend_score.clip(0, 100)
-            scored["score"] += margin_trend_score * 0.10
+            scored["score"] += margin_trend_score * 0.08
+
+        if "cash_profit_ratio" in scored.columns:
+            # CFO/净利润（>=1为优秀）
+            cash_profit_score = (scored["cash_profit_ratio"] / 1.0) * 100
+            cash_profit_score = cash_profit_score.clip(0, 100)
+            scored["score"] += cash_profit_score * 0.05
 
         # 3. 运营效率（20%）
         if "asset_turnover" in scored.columns:
             # 资产周转率（2为满分）
             turnover_score = (scored["asset_turnover"] / 2.0) * 100
             turnover_score = turnover_score.clip(0, 100)
-            scored["score"] += turnover_score * 0.10
+            scored["score"] += turnover_score * 0.08
 
         if "roe" in scored.columns:
             # ROE（30%为满分）
             roe_score = (scored["roe"] / 0.30) * 100
             roe_score = roe_score.clip(0, 100)
-            scored["score"] += roe_score * 0.10
+            scored["score"] += roe_score * 0.08
+
+        if "opex_ratio_ttm" in scored.columns:
+            # 费用率（越低越好，40%为下限）
+            opex_score = (1 - scored["opex_ratio_ttm"] / 0.40) * 100
+            opex_score = opex_score.clip(0, 100)
+            scored["score"] += opex_score * 0.04
 
         # 4. 行业地位（10%）
         if "industry_rank" in scored.columns:
@@ -163,6 +177,12 @@ class GrowthStockSelector:
             inst_change_score = (scored["inst_holding_change"] / 0.10) * 100
             inst_change_score = inst_change_score.clip(0, 100)
             scored["score"] += inst_change_score * 0.05
+
+        # 6. 财务安全（5%）
+        if "net_cash_ratio" in scored.columns:
+            net_cash_score = (scored["net_cash_ratio"] + 0.20) / 0.40 * 100
+            net_cash_score = net_cash_score.clip(0, 100)
+            scored["score"] += net_cash_score * 0.05
 
         return scored.sort_values("score", ascending=False)
 

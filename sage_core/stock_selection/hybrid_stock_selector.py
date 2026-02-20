@@ -75,6 +75,11 @@ class HybridStockSelector:
             "roe_5y_avg",  # 盈利稳定性
             "debt_ratio",  # 财务安全
             "interest_coverage",  # 利息保障
+            "net_cash_ratio",  # 净现金水平
+            "goodwill_ratio",  # 商誉占比
+            "cash_profit_ratio",  # 真实利润
+            "dedt_profit_ratio",  # 扣非利润质量
+            "opex_ratio_ttm",  # 费用率
             "consecutive_dividend",  # 分红能力
             "dividend_yield",  # 股息率
             "pe_relative",  # 估值水平
@@ -102,6 +107,9 @@ class HybridStockSelector:
             "gross_margin_trend",  # 毛利率趋势
             "asset_turnover",  # 运营效率
             "roe",  # 盈利能力
+            "cash_profit_ratio",  # 真实利润
+            "net_cash_ratio",  # 净现金水平
+            "opex_ratio_ttm",  # 费用率
             "industry_rank",  # 行业地位
             "fund_holders",  # 机构认可
             "inst_holding_change",  # 机构增持
