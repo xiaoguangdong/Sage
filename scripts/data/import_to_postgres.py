@@ -523,6 +523,29 @@ def _task_sw_industry(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
     return "concept.sw_industry", paths, ["index_code", "industry_name", "level", "src", "list_date", "fullname"]
 
 
+def _task_sw_valuation(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    path = tushare_root / "macro" / "sw_valuation.parquet"
+    paths = [path] if path.exists() else []
+    return (
+        "macro.sw_valuation",
+        paths,
+        [
+            "trade_date",
+            "index_code",
+            "name",
+            "pe",
+            "pb",
+            "float_share",
+            "total_mv",
+            "float_mv",
+            "turnover_rate",
+            "pct_change",
+            "vol",
+            "amount",
+        ],
+    )
+
+
 def _task_yield_curve(tushare_root: Path, curve_type: str) -> pd.DataFrame:
     frames = []
     for term in (10, 2):
@@ -602,6 +625,7 @@ TASK_BUILDERS = {
     "ths_member": _task_ths_member,
     "sw_index_member": _task_sw_index_member,
     "sw_industry": _task_sw_industry,
+    "sw_valuation": _task_sw_valuation,
 }
 
 
@@ -662,6 +686,15 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
             df["list_date"] = pd.NA
         if "fullname" not in df.columns:
             df["fullname"] = pd.NA
+    if task == "sw_valuation":
+        df = _normalize_date_col(df, "trade_date")
+        if "index_code" not in df.columns and "ts_code" in df.columns:
+            df["index_code"] = df["ts_code"]
+        for col in ["pe", "pb", "float_share", "total_mv", "float_mv", "turnover_rate", "pct_change", "vol", "amount"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                df[col] = pd.NA
     return df
 
 
@@ -769,6 +802,7 @@ def main() -> None:
             "ths_member",
             "sw_index_member",
             "sw_industry",
+            "sw_valuation",
             "yield_curve",
             "cn_macro",
         ]
