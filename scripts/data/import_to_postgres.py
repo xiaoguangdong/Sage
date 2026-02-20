@@ -566,6 +566,32 @@ def _task_sw_valuation(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
     )
 
 
+def _task_sw_industry_daily(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    path = tushare_root / "sectors" / "sw_daily_all.parquet"
+    paths = [path] if path.exists() else []
+    return (
+        "macro.sw_industry_daily",
+        paths,
+        [
+            "ts_code",
+            "trade_date",
+            "name",
+            "open",
+            "low",
+            "high",
+            "close",
+            "change",
+            "pct_change",
+            "vol",
+            "amount",
+            "pe",
+            "pb",
+            "float_mv",
+            "total_mv",
+        ],
+    )
+
+
 def _task_nbs_output(tushare_root: Path) -> pd.DataFrame:
     paths = sorted((tushare_root / "macro").glob("nbs_output_*.csv"))
     return _read_csv_all(paths)
@@ -610,6 +636,72 @@ def _task_eastmoney_industry_report(_: Path) -> tuple[str, List[Path], List[str]
             "source_url",
         ],
     )
+
+
+def _task_forecast(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    path = tushare_root / "fundamental" / "forecast" / "forecast_all.parquet"
+    paths = [path] if path.exists() else []
+    return (
+        "fundamental.forecast",
+        paths,
+        [
+            "ts_code",
+            "ann_date",
+            "end_date",
+            "type",
+            "p_change_min",
+            "p_change_max",
+            "net_profit_min",
+            "net_profit_max",
+            "last_parent_net",
+            "first_ann_date",
+            "summary",
+            "change_reason",
+            "update_flag",
+        ],
+    )
+
+
+def _task_express(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    path = tushare_root / "fundamental" / "express" / "express_all.parquet"
+    paths = [path] if path.exists() else []
+    return (
+        "fundamental.express",
+        paths,
+        [
+            "ts_code",
+            "ann_date",
+            "end_date",
+            "revenue",
+            "operate_profit",
+            "total_profit",
+            "n_income",
+            "total_assets",
+            "total_hldr_eqy_exc_min_int",
+            "diluted_eps",
+            "diluted_roe",
+            "yoy_net_profit",
+            "bps",
+            "perf_summary",
+            "update_flag",
+        ],
+    )
+
+
+def _task_fina_mainbz_vip(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    path = tushare_root / "macro" / "segments" / "fina_mainbz_vip.parquet"
+    paths = [path] if path.exists() else []
+    return (
+        "fundamental.fina_mainbz_vip",
+        paths,
+        ["ts_code", "end_date", "bz_item", "bz_code", "bz_sales", "bz_profit", "bz_cost", "curr_type"],
+    )
+
+
+def _task_ggt_daily(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
+    path = tushare_root / "northbound" / "ggt_daily.parquet"
+    paths = [path] if path.exists() else []
+    return "flow.ggt_daily", paths, ["trade_date", "ts_code", "buy", "sell", "net_amount"]
 
 
 def _task_yield_curve(tushare_root: Path, curve_type: str) -> pd.DataFrame:
@@ -693,8 +785,13 @@ TASK_BUILDERS = {
     "sw_index_member": _task_sw_index_member,
     "sw_industry": _task_sw_industry,
     "sw_valuation": _task_sw_valuation,
+    "sw_industry_daily": _task_sw_industry_daily,
     "gov_notice": _task_gov_notice,
     "eastmoney_industry_report": _task_eastmoney_industry_report,
+    "forecast": _task_forecast,
+    "express": _task_express,
+    "fina_mainbz_vip": _task_fina_mainbz_vip,
+    "ggt_daily": _task_ggt_daily,
 }
 
 NBS_TASKS = {
@@ -784,6 +881,26 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
             else:
                 df[col] = pd.NA
+    if task == "sw_industry_daily":
+        df = _normalize_date_col(df, "trade_date")
+        for col in [
+            "open",
+            "low",
+            "high",
+            "close",
+            "change",
+            "pct_change",
+            "vol",
+            "amount",
+            "pe",
+            "pb",
+            "float_mv",
+            "total_mv",
+        ]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                df[col] = pd.NA
     if task == "nbs_output":
         if "date" in df.columns and "period" not in df.columns:
             df["period"] = df["date"]
@@ -830,6 +947,48 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
         df = _normalize_date_col(df, "publish_date")
         if "source_url" not in df.columns:
             df["source_url"] = "https://data.eastmoney.com/report/hyyb.html"
+    if task == "forecast":
+        df = _normalize_date_col(df, "ann_date")
+        df = _normalize_date_col(df, "end_date")
+        df = _normalize_date_col(df, "first_ann_date")
+        for col in ["p_change_min", "p_change_max", "net_profit_min", "net_profit_max", "last_parent_net"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                df[col] = pd.NA
+    if task == "express":
+        df = _normalize_date_col(df, "ann_date")
+        df = _normalize_date_col(df, "end_date")
+        for col in [
+            "revenue",
+            "operate_profit",
+            "total_profit",
+            "n_income",
+            "total_assets",
+            "total_hldr_eqy_exc_min_int",
+            "diluted_eps",
+            "diluted_roe",
+            "yoy_net_profit",
+            "bps",
+        ]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                df[col] = pd.NA
+    if task == "fina_mainbz_vip":
+        df = _normalize_date_col(df, "end_date")
+        for col in ["bz_sales", "bz_profit", "bz_cost"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                df[col] = pd.NA
+    if task == "ggt_daily":
+        df = _normalize_date_col(df, "trade_date")
+        for col in ["buy", "sell", "net_amount"]:
+            if col in df.columns:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+            else:
+                df[col] = pd.NA
     return df
 
 
@@ -948,11 +1107,16 @@ def main() -> None:
             "sw_index_member",
             "sw_industry",
             "sw_valuation",
+            "sw_industry_daily",
             "nbs_output",
             "nbs_ppi_industry",
             "nbs_fai_industry",
             "gov_notice",
             "eastmoney_industry_report",
+            "forecast",
+            "express",
+            "fina_mainbz_vip",
+            "ggt_daily",
             "yield_curve",
             "cn_macro",
         ]

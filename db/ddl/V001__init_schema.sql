@@ -241,6 +241,16 @@ CREATE TABLE flow.northbound_top10 (
     PRIMARY KEY (trade_date, ts_code)
 );
 
+-- 港股通成交数据
+CREATE TABLE flow.ggt_daily (
+    trade_date DATE         NOT NULL,
+    ts_code    VARCHAR(12)  NOT NULL,
+    buy        NUMERIC(18,4),
+    sell       NUMERIC(18,4),
+    net_amount NUMERIC(18,4),
+    PRIMARY KEY (trade_date, ts_code)
+);
+
 -- 融资融券
 CREATE TABLE flow.margin (
     trade_date   DATE         NOT NULL,
@@ -376,6 +386,26 @@ CREATE TABLE macro.sw_valuation (
     PRIMARY KEY (trade_date, index_code)
 );
 
+-- 申万行业日行情
+CREATE TABLE macro.sw_industry_daily (
+    ts_code     VARCHAR(20)  NOT NULL,
+    trade_date  DATE         NOT NULL,
+    name        VARCHAR(100),
+    open        NUMERIC(20,4),
+    low         NUMERIC(20,4),
+    high        NUMERIC(20,4),
+    close       NUMERIC(20,4),
+    change      NUMERIC(12,4),
+    pct_change  NUMERIC(10,4),
+    vol         NUMERIC(18,2),
+    amount      NUMERIC(18,4),
+    pe          NUMERIC(14,4),
+    pb          NUMERIC(14,4),
+    float_mv    NUMERIC(20,4),
+    total_mv    NUMERIC(20,4),
+    PRIMARY KEY (ts_code, trade_date)
+);
+
 -- 国债收益率
 CREATE TABLE macro.yield_curve (
     trade_date   DATE         NOT NULL,
@@ -428,6 +458,58 @@ CREATE TABLE macro.nbs_fai_industry (
     year          INTEGER,
     month         INTEGER,
     PRIMARY KEY (industry_code, period)
+);
+
+-- ============================================================
+-- fundamental: 预告/快报/主营业务分部
+-- ============================================================
+
+CREATE TABLE fundamental.forecast (
+    ts_code         VARCHAR(12)  NOT NULL,
+    ann_date        DATE         NOT NULL,
+    end_date        DATE         NOT NULL,
+    type            VARCHAR(20),
+    p_change_min    NUMERIC(18,4),
+    p_change_max    NUMERIC(18,4),
+    net_profit_min  NUMERIC(20,4),
+    net_profit_max  NUMERIC(20,4),
+    last_parent_net NUMERIC(20,4),
+    first_ann_date  DATE,
+    summary         TEXT,
+    change_reason   TEXT,
+    update_flag     SMALLINT,
+    PRIMARY KEY (ts_code, ann_date, end_date)
+);
+
+CREATE TABLE fundamental.express (
+    ts_code                     VARCHAR(12)  NOT NULL,
+    ann_date                    DATE         NOT NULL,
+    end_date                    DATE         NOT NULL,
+    revenue                     NUMERIC(20,4),
+    operate_profit              NUMERIC(20,4),
+    total_profit                NUMERIC(20,4),
+    n_income                    NUMERIC(20,4),
+    total_assets                NUMERIC(20,4),
+    total_hldr_eqy_exc_min_int  NUMERIC(20,4),
+    diluted_eps                 NUMERIC(20,4),
+    diluted_roe                 NUMERIC(20,4),
+    yoy_net_profit              NUMERIC(20,4),
+    bps                         NUMERIC(20,4),
+    perf_summary                TEXT,
+    update_flag                 SMALLINT,
+    PRIMARY KEY (ts_code, end_date)
+);
+
+CREATE TABLE fundamental.fina_mainbz_vip (
+    ts_code    VARCHAR(12)  NOT NULL,
+    end_date   DATE         NOT NULL,
+    bz_item    TEXT         NOT NULL,
+    bz_code    VARCHAR(50),
+    bz_sales   NUMERIC(20,4),
+    bz_profit  NUMERIC(20,4),
+    bz_cost    NUMERIC(20,4),
+    curr_type  VARCHAR(10),
+    PRIMARY KEY (ts_code, end_date, bz_item, bz_code)
 );
 
 -- ============================================================
