@@ -185,39 +185,36 @@ class FAIToSWAligner:
         print("将固定资产投资数据对齐到申万行业")
         print("=" * 80)
 
-        aligned_records = []
-        unmatched_count = 0
+        unique_names = df["fai_name"].dropna().unique().tolist()
+        mapping_rows = []
+        unmatched_names = set()
 
-        for idx, row in df.iterrows():
-            fai_name = row["fai_name"]
-            fai_code = row["fai_code"]
-
-            # 匹配到申万行业
-            matches = self.match_fai_to_nbs(fai_name)
-
+        for name in unique_names:
+            matches = self.match_fai_to_nbs(name)
             if not matches:
-                unmatched_count += 1
-                print(f"  ⚠️  未匹配: {fai_name}")
+                unmatched_names.add(name)
                 continue
-
-            # 创建匹配记录
             for match in matches:
-                sw_industry = match["sw_industry"]
-                weight = match["weight"]
-
-                aligned_records.append(
+                mapping_rows.append(
                     {
-                        "date": row["date"],
-                        "fai_code": fai_code,
-                        "fai_name": fai_name,
-                        "sw_industry": sw_industry,
-                        "weight": weight,
-                        "fai_yoy": row["fai_yoy"],
-                        "fai_yoy_weighted": row["fai_yoy"] * weight,
+                        "fai_name": name,
+                        "sw_industry": match["sw_industry"],
+                        "weight": match["weight"],
                     }
                 )
 
-        aligned_df = pd.DataFrame(aligned_records)
+        if not mapping_rows:
+            print("  ❌ 无可用映射，终止对齐")
+            return pd.DataFrame()
+
+        mapping_df = pd.DataFrame(mapping_rows)
+        aligned_df = df.merge(mapping_df, on="fai_name", how="inner")
+        aligned_df["fai_yoy_weighted"] = aligned_df["fai_yoy"] * aligned_df["weight"]
+
+        unmatched_count = int(df["fai_name"].isin(unmatched_names).sum())
+        if unmatched_names:
+            preview = ", ".join(list(unmatched_names)[:10])
+            print(f"  ⚠️  未匹配行业: {preview}{'...' if len(unmatched_names) > 10 else ''}")
 
         if len(aligned_df) > 0:
             print("\n  对齐结果:")
@@ -234,8 +231,8 @@ class FAIToSWAligner:
             sw_coverage = sw_coverage.sort_values("data_points", ascending=False)
 
             print("\n  申万行业覆盖情况 (TOP 15):")
-            for i, row in sw_coverage.head(15).iterrows():
-                print(f"    {i+1}. {row['sw_industry']}: {row['fai_sources']}个FAI源, {row['data_points']}个数据点")
+            for idx, row in enumerate(sw_coverage.head(15).itertuples(index=False), 1):
+                print(f"    {idx}. {row.sw_industry}: {row.fai_sources}个FAI源, {row.data_points}个数据点")
 
         return aligned_df
 

@@ -40,6 +40,8 @@ def main() -> None:
     parser.add_argument("--report-out", default="")
     parser.add_argument("--json-out", default="")
     parser.add_argument("--execute", action="store_true", help="执行补数计划（调用 batch_download_missing.py）")
+    parser.add_argument("--retry-failed", action="store_true", help="补数执行时重试失败窗口")
+    parser.add_argument("--no-recheck", action="store_true", help="补数后不复查")
     parser.add_argument("--sleep", type=int, default=40, help="补数任务请求间隔秒数")
     parser.add_argument("--full-scan", action="store_true", help="关闭轻量模式，读取全量数据")
     args = parser.parse_args()
@@ -87,9 +89,33 @@ def main() -> None:
             "--sleep",
             str(args.sleep),
         ]
+        if args.retry_failed:
+            command.append("--retry-failed")
         result = subprocess.run(command, check=False)
         if result.returncode != 0:
             raise SystemExit(result.returncode)
+
+        if not args.no_recheck:
+            post_report = report_path.with_name(report_path.stem + "_post.txt")
+            post_json = json_path.with_name(json_path.stem + "_post.json")
+            post_plan = plan_path.with_name(plan_path.stem + "_post.yaml")
+
+            post_results = checker.check_all()
+            post_report_text = checker.generate_report(post_results)
+            post_report.write_text(post_report_text, encoding="utf-8")
+
+            post_plan_name = f"{plan_name}_post"
+            post_payload = {"download_plans": checker.build_backfill_plan(post_results, plan_name=post_plan_name)}
+            _write_yaml(post_plan, post_payload)
+
+            post_json.write_text(
+                json.dumps({"results": post_results, "plan": post_payload}, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+
+            print(f"✅ 复查报告: {post_report}")
+            print(f"✅ 复查计划: {post_plan} (plan={post_plan_name})")
+            print(f"✅ 复查摘要: {post_json}")
 
 
 if __name__ == "__main__":

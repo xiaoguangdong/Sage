@@ -46,6 +46,7 @@ def main():
     parser.add_argument("--start-date", type=str, help="开始日期 YYYYMMDD")
     parser.add_argument("--end-date", type=str, help="结束日期 YYYYMMDD")
     parser.add_argument("--sleep", type=int, default=40, help="请求间隔秒数（默认40）")
+    parser.add_argument("--retry-failed", action="store_true", help="优先重试失败窗口")
 
     args = parser.parse_args()
 
@@ -127,6 +128,7 @@ def main():
                 sleep_seconds=args.sleep,
                 resume=True,
                 dry_run=False,
+                retry_failed=args.retry_failed,
             )
 
             task_elapsed = time.time() - task_start

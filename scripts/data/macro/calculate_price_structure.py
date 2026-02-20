@@ -11,6 +11,7 @@
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from scripts.data.macro.paths import DAILY_DIR, PRICE_STRUCTURE_DIR, TUSHARE_ROOT
@@ -48,50 +49,40 @@ def calculate_price_structure():
     output_dir.mkdir(parents=True, exist_ok=True)
     output_file = output_dir / "price_structure.parquet"
 
-    # 按股票分组计算指标
-    print("\n开始计算价格结构指标...")
+    # 按股票分组计算指标（向量化）
+    print("\n开始计算价格结构指标（向量化）...")
 
-    results = []
-    stock_count = 0
-    total_stocks = daily_df["ts_code"].nunique()
+    daily_df["trade_date"] = daily_df["trade_date"].astype(str)
+    index_df["trade_date"] = index_df["trade_date"].astype(str)
 
-    for ts_code, stock_data in daily_df.groupby("ts_code"):
-        stock_count += 1
-        if stock_count % 100 == 0:
-            print(f"  处理进度: {stock_count}/{total_stocks} ({stock_count/total_stocks*100:.1f}%)")
+    daily_df = daily_df.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+    index_df = index_df.sort_values("trade_date").reset_index(drop=True)
 
-        # 按日期排序
-        stock_data = stock_data.sort_values("trade_date").copy()
+    # 动量：使用对数收益滚动求和，避免逐窗口 prod
+    daily_df["ret"] = daily_df["pct_chg"] / 100.0
+    daily_df["log_ret"] = np.log1p(daily_df["ret"].clip(lower=-0.999999))
 
-        # 计算动量（20日累计涨幅）
-        stock_data["momentum_20d"] = stock_data["pct_chg"].rolling(20).apply(lambda x: (1 + x / 100).prod() - 1)
-        stock_data["momentum_60d"] = stock_data["pct_chg"].rolling(60).apply(lambda x: (1 + x / 100).prod() - 1)
+    log_ret = daily_df.groupby("ts_code")["log_ret"]
+    daily_df["momentum_20d"] = np.expm1(log_ret.rolling(20).sum().reset_index(level=0, drop=True))
+    daily_df["momentum_60d"] = np.expm1(log_ret.rolling(60).sum().reset_index(level=0, drop=True))
 
-        # 计算位置（当前价格在60日区间中的位置）
-        stock_data["position_60d"] = (
-            stock_data["close"]
-            .rolling(60)
-            .apply(lambda x: (x.iloc[-1] - x.min()) / (x.max() - x.min()) if x.max() != x.min() else 0.5)
-        )
+    # 位置（60日区间位置）
+    rolling_min = daily_df.groupby("ts_code")["close"].rolling(60).min().reset_index(level=0, drop=True)
+    rolling_max = daily_df.groupby("ts_code")["close"].rolling(60).max().reset_index(level=0, drop=True)
+    denom = (rolling_max - rolling_min).replace(0, pd.NA)
+    daily_df["position_60d"] = (daily_df["close"] - rolling_min) / denom
+    daily_df["position_60d"] = daily_df["position_60d"].fillna(0.5)
 
-        # 计算相对强度（与沪深300对比）
-        stock_data = stock_data.merge(
-            index_df[["trade_date", "pct_chg"]], on="trade_date", how="left", suffixes=("", "_index")
-        )
+    # 指数动量
+    index_df["ret"] = index_df["pct_chg"] / 100.0
+    index_df["log_ret"] = np.log1p(index_df["ret"].clip(lower=-0.999999))
+    index_df["index_momentum_20d"] = np.expm1(index_df["log_ret"].rolling(20).sum())
 
-        # 相对强度 = 个股涨幅 - 指数涨幅
-        stock_data["relative_strength_20d"] = stock_data["momentum_20d"] - stock_data["pct_chg_index"].rolling(
-            20
-        ).apply(lambda x: (1 + x / 100).prod() - 1)
+    # 相对强度 = 个股动量 - 指数动量
+    daily_df = daily_df.merge(index_df[["trade_date", "index_momentum_20d"]], on="trade_date", how="left")
+    daily_df["relative_strength_20d"] = daily_df["momentum_20d"] - daily_df["index_momentum_20d"]
 
-        # 添加股票代码
-        stock_data["ts_code"] = ts_code
-
-        results.append(stock_data)
-
-    # 合并所有结果
-    print("\n合并结果...")
-    final_df = pd.concat(results, ignore_index=True)
+    final_df = daily_df
 
     # 保存
     final_df = final_df[

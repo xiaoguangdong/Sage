@@ -46,6 +46,8 @@ python scripts/monitoring/check_ths_daily_completeness.py \
 ```bash
 python scripts/monitoring/data_integrity_loop.py
 python scripts/monitoring/data_integrity_loop.py --execute --sleep 40
+python scripts/monitoring/data_integrity_loop.py --execute --retry-failed --sleep 40
+python scripts/monitoring/data_integrity_loop.py --execute --no-recheck --sleep 40
 ```
 
 输出：
