@@ -336,10 +336,16 @@ def _task_cashflow(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
 
 
 def _task_fina_indicator(tushare_root: Path) -> tuple[str, List[Path], List[str]]:
-    path = tushare_root / "fina_indicator" / "fina_indicator_all.parquet"
+    paths = []
+    base = tushare_root / "fina_indicator" / "fina_indicator_all.parquet"
+    vip = tushare_root / "fina_indicator_vip" / "fina_indicator_vip_all.parquet"
+    if base.exists():
+        paths.append(base)
+    if vip.exists():
+        paths.append(vip)
     return (
         "fundamental.fina_indicator",
-        [path],
+        paths,
         [
             "ts_code",
             "ann_date",
