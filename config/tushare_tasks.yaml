@@ -3,6 +3,7 @@ integrity_exclude:
   - tushare_anns
   - tushare_reports
   - ggt_daily
+  - margin_detail
 
 tasks:
   ths_index:

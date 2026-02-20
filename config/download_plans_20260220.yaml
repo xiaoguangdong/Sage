@@ -1,0 +1,118 @@
+download_plans:
+  补充历史数据_20260220:
+  - task: ths_daily
+    desc: ths_daily 缺少早期数据
+    start_date: '20160101'
+    end_date: '20200101'
+  - task: daily_basic
+    desc: daily_basic 缺少近期数据
+    start_date: '20260207'
+    end_date: '20260213'
+  - task: margin
+    desc: margin 补齐缺口/全量回补
+    start_date: '20160101'
+    end_date: '20260213'
+  - task: daily_kline
+    desc: daily_kline 缺少早期数据
+    start_date: '20160101'
+    end_date: '20161227'
+  - task: daily_kline
+    desc: daily_kline 缺少近期数据
+    start_date: '20260207'
+    end_date: '20260213'
+  - task: hs300_constituents
+    desc: hs300_constituents 缺少近期数据
+    start_date: '20260203'
+    end_date: '20260213'
+  - task: hs300_moneyflow
+    desc: hs300_moneyflow 缺少近期数据
+    start_date: '20260207'
+    end_date: '20260213'
+  - task: hs300_moneyflow_bydate
+    desc: hs300_moneyflow_bydate 缺少近期数据
+    start_date: '20260207'
+    end_date: '20260213'
+  - task: sw_industry_daily
+    desc: sw_industry_daily 缺少早期数据
+    start_date: '20160101'
+    end_date: '20200101'
+  - task: sw_industry_daily
+    desc: sw_industry_daily 缺少近期数据
+    start_date: '20260211'
+    end_date: '20260213'
+  - task: fina_indicator
+    desc: fina_indicator 缺少早期数据
+    start_date: '20160101'
+    end_date: '20160313'
+  - task: fina_indicator
+    desc: fina_indicator 缺少近期数据
+    start_date: '20230616'
+    end_date: '20260213'
+  - task: fina_indicator_vip
+    desc: fina_indicator_vip 缺失季度 2026
+    start_date: '20260101'
+    end_date: '20261231'
+  - task: northbound_flow
+    desc: northbound_flow 补齐缺口/全量回补
+    start_date: '20160101'
+    end_date: '20260213'
+  - task: northbound_hold
+    desc: northbound_hold 缺少早期数据
+    start_date: '20160101'
+    end_date: '20161227'
+  - task: northbound_top10
+    desc: northbound_top10 缺少早期数据
+    start_date: '20160101'
+    end_date: '20161206'
+  - task: sw_valuation
+    desc: sw_valuation 缺少近期数据
+    start_date: '20260213'
+    end_date: '20260213'
+  - task: fina_mainbz_vip
+    desc: fina_mainbz_vip 缺失季度 2026
+    start_date: '20260101'
+    end_date: '20261231'
+  - task: income
+    desc: income 缺失季度 2026
+    start_date: '20260101'
+    end_date: '20261231'
+  - task: balancesheet
+    desc: balancesheet 缺失季度 2026
+    start_date: '20260101'
+    end_date: '20261231'
+  - task: cashflow
+    desc: cashflow 缺失季度 2026
+    start_date: '20260101'
+    end_date: '20261231'
+  - task: dividend
+    desc: dividend 缺少早期数据
+    start_date: '20160101'
+    end_date: '20201230'
+  - task: dividend
+    desc: dividend 缺少近期数据
+    start_date: '20260101'
+    end_date: '20260213'
+  - task: dividend
+    desc: dividend 缺少年份 2021
+    start_date: '20210101'
+    end_date: '20211231'
+  - task: dividend
+    desc: dividend 缺少年份 2022
+    start_date: '20220101'
+    end_date: '20221231'
+  - task: dividend
+    desc: dividend 缺少年份 2023
+    start_date: '20230101'
+    end_date: '20231231'
+  - task: forecast
+    desc: forecast 缺少早期数据
+    start_date: '20160101'
+    end_date: '20160330'
+  - task: forecast
+    desc: forecast 缺少近期数据
+    start_date: '20260101'
+    end_date: '20260213'
+  - task: express
+    desc: express 缺失季度 2026
+    start_date: '20260101'
+    end_date: '20261231'
