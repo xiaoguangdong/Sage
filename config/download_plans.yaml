@@ -120,7 +120,3 @@ download_plans:
     desc: express 缺失季度 2026
     start_date: '20260101'
     end_date: '20261231'
-  - task: margin_detail
-    desc: margin_detail 缺少近期数据
-    start_date: '20160730'
-    end_date: '20260213'
