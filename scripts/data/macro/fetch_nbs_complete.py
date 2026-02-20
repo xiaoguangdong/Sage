@@ -201,7 +201,7 @@ class CompleteNBSDataFetcher:
         print(f"[DEBUG] DataFrame创建成功: {len(df)}行 x {len(df.columns)}列")
         return df
 
-    def fetch_nbs_cpi_national(self, sj_ranges: Optional[List[str]] = None):
+    def fetch_nbs_cpi_national(self, sj_ranges: Optional[List[str]] = None, zb_code: str = "A010101"):
         """
         获取全国CPI数据
         """
@@ -210,13 +210,13 @@ class CompleteNBSDataFetcher:
             dfs = []
             for sj_code in sj_ranges:
                 dfs.append(
-                    self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0101", sj_code=sj_code)
+                    self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code=zb_code, sj_code=sj_code)
                 )
                 time.sleep(self.api_delay)
             df = self._merge_wide_frames(dfs)
         else:
             df = self.fetch_from_nbs(
-                dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0101", sj_code="LAST36"
+                dbcode="hgyd", rowcode="zb", colcode="sj", zb_code=zb_code, sj_code="LAST36"
             )  # CPI
 
         if df is not None:
@@ -527,6 +527,7 @@ class CompleteNBSDataFetcher:
         start_year: Optional[int] = None,
         end_year: Optional[int] = None,
         span_years: int = 5,
+        cpi_sj_ranges: Optional[List[str]] = None,
     ):
         """
         获取所有NBS数据
@@ -550,7 +551,7 @@ class CompleteNBSDataFetcher:
         sj_ranges = self._build_sj_ranges(start_year, end_year, span_years=span_years)
 
         # 1.1 全国CPI
-        self.fetch_nbs_cpi_national(sj_ranges=sj_ranges)
+        self.fetch_nbs_cpi_national(sj_ranges=cpi_sj_ranges or sj_ranges)
 
         # 1.2 全国PPI
         self.fetch_nbs_ppi_national(sj_ranges=sj_ranges)
@@ -589,6 +590,8 @@ def main():
     parser.add_argument("--start-year", type=int, default=2016, help="起始年份")
     parser.add_argument("--end-year", type=int, default=datetime.now().year, help="结束年份")
     parser.add_argument("--span-years", type=int, default=5, help="时间分段跨度（年）")
+    parser.add_argument("--cpi-range", type=str, default=None, help="仅用于CPI的时间范围（如 2016-2020）")
+    parser.add_argument("--only-cpi", action="store_true", help="仅拉取CPI（避免覆盖其它数据）")
     args = parser.parse_args()
 
     fetcher = CompleteNBSDataFetcher()
@@ -597,12 +600,16 @@ def main():
     start_date = f"{start_year}0101"
     end_date = f"{end_year}1231"
     fetcher.api_delay = max(fetcher.api_delay, 3)
+    if args.only_cpi:
+        fetcher.fetch_nbs_cpi_national(sj_ranges=[args.cpi_range] if args.cpi_range else None)
+        return
     fetcher.fetch_all(
         start_date=start_date,
         end_date=end_date,
         start_year=start_year,
         end_year=end_year,
         span_years=args.span_years,
+        cpi_sj_ranges=[args.cpi_range] if args.cpi_range else None,
     )
 
 
