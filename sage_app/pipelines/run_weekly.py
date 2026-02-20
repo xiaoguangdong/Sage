@@ -417,8 +417,12 @@ def _merge_long_term_fundamentals(df_features: pd.DataFrame) -> pd.DataFrame:
 
     merged = df_features.copy()
     merged["_trade_date_dt"] = trade_dates
+    before_rows = len(merged)
+    merged = merged.dropna(subset=["ts_code", "_trade_date_dt"]).copy()
+    if len(merged) < before_rows:
+        logger.warning("长周期特征合并：丢弃无效日期行=%d", before_rows - len(merged))
     merged = merged.sort_values(["ts_code", "_trade_date_dt"])
-    long_term_df = long_term_df.sort_values(["ts_code", "effective_date"])
+    long_term_df = long_term_df.dropna(subset=["ts_code", "effective_date"]).sort_values(["ts_code", "effective_date"])
 
     merged = pd.merge_asof(
         merged,
