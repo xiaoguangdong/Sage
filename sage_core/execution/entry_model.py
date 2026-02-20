@@ -57,7 +57,22 @@ class EntryModelLR:
         Returns:
             包含特征的DataFrame
         """
+        if df is None or df.empty:
+            return pd.DataFrame()
+
         df = df.copy()
+
+        if "ts_code" in df.columns:
+            return df.groupby("ts_code", group_keys=False).apply(self._prepare_features_single).reset_index(drop=True)
+
+        return self._prepare_features_single(df)
+
+    def _prepare_features_single(self, df: pd.DataFrame) -> pd.DataFrame:
+        df = df.copy()
+        if "trade_date" in df.columns:
+            df = df.sort_values("trade_date")
+        elif "date" in df.columns:
+            df = df.sort_values("date")
 
         # 价格位置特征
         for period in [5, 10, 20, 60]:
@@ -159,18 +174,23 @@ class EntryModelLR:
         return_threshold = self.label_params["return_threshold"]
         max_drawdown = self.label_params["max_drawdown"]
 
-        # 计算未来N天的累积收益率
-        future_returns = df["close"].shift(-horizon) / df["close"] - 1
+        def _label_single(frame: pd.DataFrame) -> pd.Series:
+            local = frame.copy()
+            if "trade_date" in local.columns:
+                local = local.sort_values("trade_date")
+            elif "date" in local.columns:
+                local = local.sort_values("date")
 
-        # 计算未来N天的最大回撤
-        future_prices = df["close"].shift(-1).rolling(window=horizon, min_periods=1).max()
-        drawdowns = (df["close"] - future_prices) / df["close"]
-        max_dd = drawdowns.rolling(window=horizon, min_periods=1).min()
+            future_returns = local["close"].shift(-horizon) / local["close"] - 1
+            future_prices = local["close"].shift(-1).rolling(window=horizon, min_periods=1).max()
+            drawdowns = (local["close"] - future_prices) / local["close"]
+            max_dd = drawdowns.rolling(window=horizon, min_periods=1).min()
+            return ((future_returns >= return_threshold) & (max_dd >= max_drawdown)).astype(int)
 
-        # 创建标签：最大收益率超过阈值且最大回撤小于限制
-        labels = ((future_returns >= return_threshold) & (max_dd >= max_drawdown)).astype(int)
+        if "ts_code" in df.columns:
+            return df.groupby("ts_code", group_keys=False).apply(_label_single)
 
-        return labels
+        return _label_single(df)
 
     def train(self, df: pd.DataFrame, labels: pd.Series):
         """
@@ -190,7 +210,8 @@ class EntryModelLR:
             return
 
         # 获取特征名称
-        feature_cols = [col for col in df_features.columns if col not in ["date", "code", "close", "turnover"]]
+        exclude_cols = {"date", "trade_date", "code", "ts_code", "close", "turnover"}
+        feature_cols = [col for col in df_features.columns if col not in exclude_cols]
         self.feature_names = feature_cols
 
         # 对齐数据

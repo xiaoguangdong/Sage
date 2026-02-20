@@ -765,6 +765,68 @@ def _signals_to_ranked(execution_signals: pd.DataFrame) -> pd.DataFrame:
     return df_ranked.sort_values("rank_score", ascending=False).reset_index(drop=True)
 
 
+def _resolve_entry_model_config(config: dict) -> dict:
+    if not isinstance(config, dict):
+        return {}
+    entry_root = config.get("entry_model", {})
+    if isinstance(entry_root, dict) and isinstance(entry_root.get("entry_model"), dict):
+        return entry_root.get("entry_model") or {}
+    return entry_root if isinstance(entry_root, dict) else {}
+
+
+def _build_entry_model(entry_cfg: dict, df_features: pd.DataFrame) -> EntryModelLR | None:
+    if not isinstance(entry_cfg, dict) or not entry_cfg.get("enabled", False):
+        return None
+    if df_features is None or df_features.empty:
+        logger.warning("EntryModel 输入为空，跳过")
+        return None
+    if "close" not in df_features.columns or "turnover" not in df_features.columns:
+        logger.warning("EntryModel 需要 close/turnover 字段，跳过")
+        return None
+
+    model = EntryModelLR(entry_cfg)
+    try:
+        labels = model.create_entry_label(df_features)
+        df_train = df_features.dropna(subset=["close", "turnover"]).copy()
+        labels = labels.loc[df_train.index]
+        model.train(df_train, labels)
+        return model
+    except Exception as exc:
+        logger.warning("EntryModel 训练失败，跳过过滤: %s", exc)
+        return None
+
+
+def _apply_entry_model_filter(
+    champion_contract: pd.DataFrame,
+    df_features: pd.DataFrame,
+    entry_model: EntryModelLR | None,
+) -> pd.DataFrame:
+    if entry_model is None or champion_contract is None or champion_contract.empty:
+        return champion_contract
+    if df_features is None or df_features.empty:
+        return champion_contract
+    if "ts_code" not in df_features.columns:
+        logger.warning("EntryModel 缺少 ts_code 字段，跳过过滤")
+        return champion_contract
+
+    candidate_codes = champion_contract["ts_code"].astype(str).unique().tolist()
+    subset = df_features[df_features["ts_code"].astype(str).isin(candidate_codes)].copy()
+    if subset.empty:
+        return champion_contract
+
+    if "trade_date" in subset.columns:
+        subset = subset.sort_values(["ts_code", "trade_date"])
+    histories = {code: frame for code, frame in subset.groupby("ts_code")}
+    entry_map = entry_model.predict_batch(histories, existing_holdings=set())
+
+    filtered = champion_contract.copy()
+    filtered["entry_signal"] = filtered["ts_code"].astype(str).map(lambda x: entry_map.get(x, True))
+    before = len(filtered)
+    filtered = filtered[filtered["entry_signal"]].copy()
+    logger.info("EntryModel 过滤完成: before=%d, after=%d", before, len(filtered))
+    return filtered.reset_index(drop=True)
+
+
 def _load_evaluation_frame(evaluation_path: Path) -> pd.DataFrame:
     if not evaluation_path.exists():
         return pd.DataFrame()
@@ -1125,6 +1187,10 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         champion_id=active_champion_id,
         min_confidence=0.0,
     )
+    entry_cfg = _resolve_entry_model_config(config)
+    entry_model = _build_entry_model(entry_cfg, df_features)
+    if entry_model is not None:
+        champion_contract = _apply_entry_model_filter(champion_contract, df_features, entry_model)
     strategy_cfg = config.get("strategy_governance", {}) if isinstance(config, dict) else {}
     industry_cfg = (strategy_cfg.get("industry_signals") or {}) if isinstance(strategy_cfg, dict) else {}
     lookback_days = industry_cfg.get("signal_lookback_days")
@@ -1478,9 +1544,9 @@ def run_backtest_workflow(config: dict, df: pd.DataFrame):
     else:
         rank_model = None
 
-    entry_model_config = config.get("entry_model", {})
-    if entry_model_config.get("entry_model", {}).get("enabled", False):
-        entry_model = EntryModelLR(entry_model_config.get("entry_model", {}))
+    entry_model_config = _resolve_entry_model_config(config)
+    if entry_model_config.get("enabled", False):
+        entry_model = EntryModelLR(entry_model_config)
     else:
         entry_model = None
 

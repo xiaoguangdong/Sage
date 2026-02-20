@@ -9,10 +9,12 @@ from pathlib import Path
 from typing import Any, Dict
 
 import pandas as pd
+import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
+from sage_core.execution.entry_model import EntryModelLR
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from scripts.data._shared.runtime import get_data_path
 from scripts.stock.run_stock_selector_monthly import (
@@ -85,6 +87,30 @@ def _load_selector_from_metadata(metadata_path: Path) -> tuple[StockSelector, Di
     return selector, metadata
 
 
+def _load_entry_model_config(path: Path | None) -> Dict[str, Any]:
+    if path is None or not path.exists():
+        return {}
+    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if isinstance(raw, dict) and isinstance(raw.get("entry_model"), dict):
+        return raw.get("entry_model") or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _train_entry_model(entry_model: EntryModelLR, panel: pd.DataFrame) -> bool:
+    if panel is None or panel.empty:
+        return False
+    if "close" not in panel.columns or "turnover" not in panel.columns:
+        return False
+    try:
+        labels = entry_model.create_entry_label(panel)
+        df_train = panel.dropna(subset=["close", "turnover"]).copy()
+        labels = labels.loc[df_train.index]
+        entry_model.train(df_train, labels)
+        return True
+    except Exception:
+        return False
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="加载最新模型并导出最新周选股信号")
     parser.add_argument("--as-of-date", type=str, default=None, help="截止日期 YYYYMMDD，默认最新交易日")
@@ -93,6 +119,8 @@ def main() -> None:
     parser.add_argument("--data-dir", type=str, default=None, help="Tushare数据目录")
     parser.add_argument("--output-root", type=str, default=None, help="默认 data/signals/stock_selector/monthly")
     parser.add_argument("--model-metadata", type=str, default=None, help="显式指定模型元数据 json")
+    parser.add_argument("--entry-model-config", type=str, default=None, help="EntryModel配置文件")
+    parser.add_argument("--disable-entry-model", action="store_true")
     args = parser.parse_args()
 
     data_root = _resolve_tushare_root(args.data_dir)
@@ -125,6 +153,27 @@ def main() -> None:
     signals["model_version"] = metadata.get("model_version", "unknown")
     if "confidence" not in signals.columns:
         signals["confidence"] = signals["rank"].rank(pct=True)
+
+    entry_cfg_path = (
+        Path(args.entry_model_config) if args.entry_model_config else ROOT / "config" / "app" / "entry_model.yaml"
+    )
+    entry_cfg = {} if args.disable_entry_model else _load_entry_model_config(entry_cfg_path)
+    if entry_cfg.get("enabled", False):
+        entry_model = EntryModelLR(entry_cfg)
+        trained = _train_entry_model(entry_model, panel)
+        if trained:
+            candidate_codes = signals["ts_code"].astype(str).unique().tolist()
+            subset = panel[panel["ts_code"].astype(str).isin(candidate_codes)].copy()
+            if "trade_date" in subset.columns:
+                subset = subset.sort_values(["ts_code", "trade_date"])
+            histories = {code: frame for code, frame in subset.groupby("ts_code")}
+            entry_map = entry_model.predict_batch(histories, existing_holdings=set())
+            signals["entry_signal"] = signals["ts_code"].astype(str).map(lambda x: entry_map.get(x, True)).astype(int)
+            before = len(signals)
+            signals = signals[signals["entry_signal"] == 1].copy()
+            print(f"EntryModel过滤完成: before={before}, after={len(signals)}")
+        else:
+            print("EntryModel训练失败或数据不足，跳过过滤")
 
     signal_path = output_root / f"weekly_signals_{signal_trade_date}.parquet"
     summary_path = output_root / f"weekly_signal_summary_{signal_trade_date}.json"
