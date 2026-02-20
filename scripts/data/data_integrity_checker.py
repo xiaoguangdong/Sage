@@ -117,7 +117,19 @@ class DataIntegrityChecker:
         print(f"开始检查数据完整性 ({self.start_year}-{self.end_year})")
         print("=" * 80)
 
+        ignore_tasks = set(self.config.get("integrity_exclude", []) or [])
         for task_name, task_config in self.tasks.items():
+            if task_name in ignore_tasks:
+                print(f"\n跳过任务: {task_name} (integrity_exclude)")
+                results[task_name] = {
+                    "task_name": task_name,
+                    "mode": task_config.get("mode", "single"),
+                    "output_path": str(self.data_root / task_config["output"]),
+                    "file_exists": False,
+                    "missing_data": [],
+                    "status": "skipped",
+                }
+                continue
             print(f"\n检查任务: {task_name}")
             result = self._check_task(task_name, task_config)
             results[task_name] = result

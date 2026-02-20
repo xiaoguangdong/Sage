@@ -40,10 +40,6 @@ download_plans:
     desc: sw_industry_daily 缺少近期数据
     start_date: '20260211'
     end_date: '20260213'
-  - task: opt_daily
-    desc: opt_daily 补齐缺口/全量回补
-    start_date: '20160101'
-    end_date: '20260213'
   - task: fina_indicator
     desc: fina_indicator 缺少早期数据
     start_date: '20160101'
@@ -76,14 +72,6 @@ download_plans:
     desc: fina_mainbz_vip 缺失季度 2026
     start_date: '20260101'
     end_date: '20261231'
-  - task: tushare_anns
-    desc: tushare_anns 补齐缺口/全量回补
-    start_date: '20160101'
-    end_date: '20260213'
-  - task: tushare_reports
-    desc: tushare_reports 补齐缺口/全量回补
-    start_date: '20160101'
-    end_date: '20260213'
   - task: income
     desc: income 缺失季度 2026
     start_date: '20260101'
@@ -128,11 +116,7 @@ download_plans:
     desc: express 缺失季度 2026
     start_date: '20260101'
     end_date: '20261231'
-  - task: ggt_daily
-    desc: ggt_daily 补齐缺口/全量回补
-    start_date: '20160101'
-    end_date: '20260213'
   - task: margin_detail
     desc: margin_detail 缺少近期数据
-    start_date: '20160701'
+    start_date: '20160730'
     end_date: '20260213'

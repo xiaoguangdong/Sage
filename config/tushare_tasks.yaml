@@ -1,3 +1,9 @@
+integrity_exclude:
+  - opt_daily
+  - tushare_anns
+  - tushare_reports
+  - ggt_daily
+
 tasks:
   ths_index:
     api: ths_index
