@@ -16,6 +16,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from scripts.data._shared.runtime import get_data_path
 from scripts.models.label_hs300_daily_weekly import HS300Labeler
 
 
@@ -67,11 +68,12 @@ def summarize(output_file: Path) -> None:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--timeframe", default="daily", choices=["daily", "weekly"])
-    parser.add_argument("--output-dir", default="data/signals")
+    parser.add_argument("--output-dir", default=None)
     parser.add_argument("--data-dir", default=None, help="数据根目录（tushare）")
     args = parser.parse_args()
 
-    output_file = export_trend_main_signal(args.timeframe, Path(args.output_dir), args.data_dir)
+    output_dir = Path(args.output_dir) if args.output_dir else get_data_path("signals", ensure=True)
+    output_file = export_trend_main_signal(args.timeframe, output_dir, args.data_dir)
     summarize(output_file)
 
 

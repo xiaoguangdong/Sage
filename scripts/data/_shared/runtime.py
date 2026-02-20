@@ -106,6 +106,7 @@ def get_data_layout() -> Dict[str, str]:
         "processed": layout_cfg.get("processed", "processed"),
         "features": layout_cfg.get("features", "features"),
         "labels": layout_cfg.get("labels", "labels"),
+        "signals": layout_cfg.get("signals", "signals"),
         "backtest": layout_cfg.get("backtest", "backtest"),
         "cache": layout_cfg.get("cache", "cache"),
         "states": layout_cfg.get("states", "states"),

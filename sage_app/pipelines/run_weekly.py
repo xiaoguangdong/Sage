@@ -1088,7 +1088,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         len(champion_signals),
     )
 
-    signals_root = Path("data/signals/stock_selector")
+    signals_root = get_data_path("signals", "stock_selector", ensure=True)
     saved_paths = save_strategy_outputs(
         output_root=signals_root,
         trade_date=latest_trade_date,
@@ -1346,14 +1346,12 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         logger.info(f"  {row[code_col]}: 权重 {row['weight']:.2%}{rank_str}{stype_str}")
 
     # 11. 保存结果
-    output_dir = "data/signals/portfolio"
-    Path(output_dir).mkdir(parents=True, exist_ok=True)
-
-    output_file = f"{output_dir}/portfolio_{datetime.now().strftime('%Y%m%d')}.csv"
+    output_dir = get_data_path("signals", "portfolio", ensure=True)
+    output_file = output_dir / f"portfolio_{datetime.now().strftime('%Y%m%d')}.csv"
     portfolio.to_csv(output_file, index=False)
     logger.info(f"组合结果已保存到: {output_file}")
 
-    context_file = f"{output_dir}/execution_context_{datetime.now().strftime('%Y%m%d')}.json"
+    context_file = output_dir / f"execution_context_{datetime.now().strftime('%Y%m%d')}.json"
     context_payload = {
         "trade_date": latest_trade_date,
         "active_champion_id": active_champion_id,
@@ -1450,10 +1448,8 @@ def run_backtest_workflow(config: dict, df: pd.DataFrame):
     logger.info(f"盈亏比: {results['metrics']['profit_loss_ratio']:.2f}")
 
     # 保存结果
-    output_dir = "data/processed"
-    Path(output_dir).mkdir(exist_ok=True)
-
-    output_file = f"{output_dir}/backtest_results_{datetime.now().strftime('%Y%m%d')}.csv"
+    output_dir = get_data_path("processed", ensure=True)
+    output_file = output_dir / f"backtest_results_{datetime.now().strftime('%Y%m%d')}.csv"
     pd.DataFrame([results["metrics"]]).to_csv(output_file, index=False)
     logger.info(f"回测结果已保存到: {output_file}")
 

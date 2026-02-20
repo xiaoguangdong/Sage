@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
-from scripts.data._shared.runtime import get_data_root
+from scripts.data._shared.runtime import get_data_path
 from scripts.stock.run_stock_selector_monthly import (
     _build_training_panel,
     _find_latest_trade_date,
@@ -96,9 +96,7 @@ def main() -> None:
     args = parser.parse_args()
 
     data_root = _resolve_tushare_root(args.data_dir)
-    output_root = (
-        Path(args.output_root) if args.output_root else (get_data_root() / "signals" / "stock_selector" / "monthly")
-    )
+    output_root = Path(args.output_root) if args.output_root else get_data_path("signals", "stock_selector", "monthly")
     if not output_root.is_absolute():
         output_root = ROOT / output_root
     output_root.mkdir(parents=True, exist_ok=True)

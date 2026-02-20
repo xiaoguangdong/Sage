@@ -20,7 +20,7 @@ from apscheduler.triggers.cron import CronTrigger
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from scripts.data._shared.runtime import get_tushare_root, setup_logger
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, setup_logger
 from scripts.models.export_trend_signal import export_trend_main_signal
 
 
@@ -35,7 +35,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["once", "cron", "interval"], default="cron")
     parser.add_argument("--timeframe", choices=["daily", "weekly"], default="daily")
-    parser.add_argument("--output-dir", default="data/signals")
+    parser.add_argument("--output-dir", default=None)
     parser.add_argument("--data-dir", default=None, help="Tushare数据根目录")
     parser.add_argument("--hour", type=int, default=18)
     parser.add_argument("--minute", type=int, default=0)
@@ -43,7 +43,7 @@ def main():
     parser.add_argument("--interval-minutes", type=int, default=120)
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir)
+    output_dir = Path(args.output_dir) if args.output_dir else get_data_path("signals", ensure=True)
     data_dir = args.data_dir or str(get_tushare_root())
 
     if args.mode == "once":

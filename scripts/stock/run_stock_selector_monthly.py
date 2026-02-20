@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
-from scripts.data._shared.runtime import get_data_root, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_data_root, get_tushare_root
 
 
 def _load_yaml(path: Path) -> Dict[str, Any]:
@@ -741,9 +741,7 @@ def main() -> None:
 
     importance = _extract_feature_importance(selector)
 
-    output_root = (
-        Path(args.output_root) if args.output_root else (get_data_root() / "signals" / "stock_selector" / "monthly")
-    )
+    output_root = Path(args.output_root) if args.output_root else get_data_path("signals", "stock_selector", "monthly")
     if not output_root.is_absolute():
         output_root = ROOT / output_root
     output_root.mkdir(parents=True, exist_ok=True)

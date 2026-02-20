@@ -27,6 +27,7 @@ data:
     processed: "processed"
     features: "features"
     labels: "labels"
+    signals: "signals"
     backtest: "backtest"
     cache: "cache"
     states: "states"

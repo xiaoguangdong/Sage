@@ -19,6 +19,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from sage_core.industry.signal_indicators import IndustryProsperity, MacroSignal, NorthboundFlow
+from scripts.data._shared.runtime import get_data_path
 from scripts.data.macro.aggregate_northbound_industry_flow import aggregate as aggregate_northbound_industry_flow
 
 
@@ -133,7 +134,7 @@ def export_macro_signals(
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--output-dir", default="data/signals")
+    parser.add_argument("--output-dir", default=None)
     parser.add_argument("--delay-days", type=int, default=2)
     parser.add_argument("--spread-threshold", type=float, default=0.5)
     parser.add_argument("--spread-mode", type=str, default="threshold", choices=["threshold", "bollinger"])
@@ -143,8 +144,9 @@ def main():
     args = parser.parse_args()
 
     tushare_root = Path(args.tushare_root) if args.tushare_root else None
+    output_dir = Path(args.output_dir) if args.output_dir else get_data_path("signals", ensure=True)
     outputs = export_macro_signals(
-        output_dir=Path(args.output_dir),
+        output_dir=output_dir,
         delay_days=args.delay_days,
         spread_threshold=args.spread_threshold,
         spread_mode=args.spread_mode,

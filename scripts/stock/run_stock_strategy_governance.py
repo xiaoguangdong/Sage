@@ -137,7 +137,7 @@ def main() -> None:
     )
 
     output_root = (
-        Path(args.output_root) if args.output_root else get_data_path("features", "stock_selector", ensure=True)
+        Path(args.output_root) if args.output_root else get_data_path("signals", "stock_selector", ensure=True)
     )
     if not output_root.is_absolute():
         output_root = ROOT / output_root
