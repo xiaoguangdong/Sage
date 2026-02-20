@@ -1044,6 +1044,20 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         active_champion_id,
         promotion_decision.get("reason"),
     )
+    supported_champions = set(governance_engine.governance_config.normalized_challengers())
+    supported_champions.add("seed_balance_strategy")
+    if active_champion_id not in supported_champions:
+        logger.warning(
+            "冠军策略未在可用列表中，已回退 seed_balance_strategy: %s",
+            active_champion_id,
+        )
+        promotion_decision = {
+            **promotion_decision,
+            "next_champion": "seed_balance_strategy",
+            "promoted": False,
+            "reason": f"fallback:unsupported:{active_champion_id}",
+        }
+        active_champion_id = "seed_balance_strategy"
     decision_path = Path(auto_cfg.get("decision_path", "data/backtest/governance/promotion_decisions.jsonl"))
     decision_record = {
         "trade_date": latest_trade_date,
@@ -1276,7 +1290,10 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         latest_week_return=latest_week_return,
         portfolio_drawdown=risk_control.current_drawdown,
     )
-    trend_position = float(trend_result.get("position_suggestion", 1.0))
+    if isinstance(trend_result, dict):
+        trend_position = float(trend_result.get("position_suggestion", 1.0))
+    else:
+        trend_position = float(getattr(trend_result, "position_suggestion", 1.0))
     target_exposure = min(position_info["final_position"], trend_position)
     # 宏观风险因子调整目标仓位
     if macro_result.get("available", False) and macro_exposure_factor < 1.0:
