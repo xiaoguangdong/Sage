@@ -10,6 +10,10 @@ from pathlib import Path
 
 import yaml
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from scripts.data._shared.runtime import get_log_dir, get_tushare_root
 from scripts.data.data_integrity_checker import DataIntegrityChecker
 
