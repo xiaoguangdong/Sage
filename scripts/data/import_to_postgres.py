@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, List, Optional
 
 import pandas as pd
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT))
 
 try:
     import pyarrow.dataset as ds
@@ -29,7 +33,11 @@ except Exception:  # pragma: no cover - pyarrow 为可选依赖
 
 try:
     import psycopg
-    from psycopg.extras import execute_values
+
+    try:
+        from psycopg.extras import execute_values
+    except Exception:
+        execute_values = None
 except Exception:  # pragma: no cover - 运行时报错提示
     psycopg = None
     execute_values = None
@@ -66,7 +74,7 @@ def load_db_config(args: argparse.Namespace) -> DbConfig:
 
 
 def _require_psycopg() -> None:
-    if psycopg is None or execute_values is None:
+    if psycopg is None:
         raise RuntimeError("缺少 psycopg 依赖，请先安装：pip install 'psycopg[binary]'")
 
 
@@ -116,14 +124,21 @@ def _insert_dataframe(
         logger.info("[dry-run] %s rows=%d", table, total)
         return total
 
-    sql = f"INSERT INTO {table} ({', '.join(columns)}) VALUES %s ON CONFLICT DO NOTHING"
+    cols_sql = ", ".join(columns)
     with conn.cursor() as cur:
         for start in range(0, total, batch_size):
             chunk = df.iloc[start : start + batch_size]
+            chunk = chunk.astype(object).where(pd.notna(chunk), None)
             rows = list(chunk.itertuples(index=False, name=None))
             if not rows:
                 continue
-            execute_values(cur, sql, rows, page_size=min(batch_size, 5000))
+            if execute_values is not None:
+                sql = f"INSERT INTO {table} ({cols_sql}) VALUES %s ON CONFLICT DO NOTHING"
+                execute_values(cur, sql, rows, page_size=min(batch_size, 5000))
+            else:
+                placeholders = ", ".join(["%s"] * len(columns))
+                sql = f"INSERT INTO {table} ({cols_sql}) VALUES ({placeholders}) ON CONFLICT DO NOTHING"
+                cur.executemany(sql, rows)
         conn.commit()
     return total
 
@@ -620,6 +635,10 @@ def _apply_task_transforms(task: str, df: pd.DataFrame) -> pd.DataFrame:
         for col in ["total_mv", "float_mv", "pe"]:
             if col not in df.columns:
                 df[col] = pd.NA
+    if task == "ths_index":
+        df = _normalize_date_col(df, "list_date")
+        if "count" in df.columns:
+            df["count"] = pd.to_numeric(df["count"], errors="coerce").astype("Int64")
     if task == "ths_member":
         if "con_name" in df.columns and "name" not in df.columns:
             df["name"] = df["con_name"]

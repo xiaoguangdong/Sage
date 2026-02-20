@@ -20,10 +20,10 @@ CREATE SCHEMA IF NOT EXISTS meta;
 CREATE TABLE market.daily_kline (
     ts_code      VARCHAR(12)    NOT NULL,
     trade_date   DATE           NOT NULL,
-    open         NUMERIC(12,4),
-    high         NUMERIC(12,4),
-    low          NUMERIC(12,4),
-    close        NUMERIC(12,4),
+    open         NUMERIC(20,4),
+    high         NUMERIC(20,4),
+    low          NUMERIC(20,4),
+    close        NUMERIC(20,4),
     pre_close    NUMERIC(12,4),
     change       NUMERIC(12,4),
     pct_chg      NUMERIC(10,4),
@@ -174,9 +174,9 @@ CREATE TABLE fundamental.fina_indicator (
     bps            NUMERIC(12,4),
     cfps           NUMERIC(12,4),
     ocfps          NUMERIC(12,4),
-    or_yoy         NUMERIC(12,4),
-    op_yoy         NUMERIC(12,4),
-    netprofit_yoy  NUMERIC(12,4),
+    or_yoy         NUMERIC(20,6),
+    op_yoy         NUMERIC(20,6),
+    netprofit_yoy  NUMERIC(20,6),
     PRIMARY KEY (ts_code, end_date)
 );
 
@@ -301,7 +301,7 @@ CREATE TABLE concept.ths_daily (
     high         NUMERIC(12,4),
     low          NUMERIC(12,4),
     close        NUMERIC(12,4),
-    pct_change   NUMERIC(10,4),
+    pct_change   NUMERIC(20,4),
     vol          NUMERIC(18,2),
     turnover_rate NUMERIC(10,4),
     total_mv     NUMERIC(18,4),
