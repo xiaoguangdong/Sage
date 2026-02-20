@@ -51,8 +51,10 @@ from sage_core.governance.strategy_governance import (
 from sage_core.portfolio.construction import PortfolioConstruction
 from sage_core.portfolio.portfolio_manager import PortfolioManager
 from sage_core.portfolio.risk_control import RiskControl
+from sage_core.stock_selection.growth_stock_selector import GrowthStockSelector
 from sage_core.stock_selection.hybrid_stock_selector import HybridStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig
+from sage_core.stock_selection.value_stock_selector import ValueStockSelector
 
 try:
     from sage_core.industry.macro_predictor import MacroPredictor
@@ -459,33 +461,71 @@ def _run_long_term_selectors(
     growth_model_path = Path(lt_cfg.get("growth_model_path", "data/models/hybrid_growth.pkl"))
     value_top_n = int(lt_cfg.get("value_top_n", 20))
     growth_top_n = int(lt_cfg.get("growth_top_n", 20))
+    rule_only = bool(lt_cfg.get("rule_only", False))
+    rule_fallback = bool(lt_cfg.get("rule_fallback", True))
+    min_candidates = int(lt_cfg.get("min_candidates", 5))
+    rule_top_n = int(lt_cfg.get("rule_top_n", max(value_top_n, growth_top_n)))
 
     value_candidates = pd.DataFrame()
     growth_candidates = pd.DataFrame()
 
-    # 价值股选股器
-    if value_model_path.exists():
+    def _run_rule_selector(selector, top_n: int) -> pd.DataFrame:
         try:
-            value_selector = HybridStockSelector("value", data_root=data_root, model_path=value_model_path)
-            value_selector.load_model()
-            value_candidates = value_selector.select(df_features, top_n=value_top_n)
-            logger.info("价值股选股完成: %d 只候选", len(value_candidates))
+            filtered = selector.hard_filter(df_features)
+            if filtered.empty:
+                return pd.DataFrame()
+            scored = selector.calculate_score(filtered)
+            return scored.head(top_n)
         except Exception as exc:
-            logger.warning("价值股选股失败: %s", exc)
-    else:
-        logger.info("价值股模型不存在: %s，跳过", value_model_path)
+            logger.warning("规则选股失败: %s", exc)
+            return pd.DataFrame()
 
-    # 成长股选股器
-    if growth_model_path.exists():
-        try:
-            growth_selector = HybridStockSelector("growth", data_root=data_root, model_path=growth_model_path)
-            growth_selector.load_model()
-            growth_candidates = growth_selector.select(df_features, top_n=growth_top_n)
-            logger.info("成长股选股完成: %d 只候选", len(growth_candidates))
-        except Exception as exc:
-            logger.warning("成长股选股失败: %s", exc)
-    else:
-        logger.info("成长股模型不存在: %s，跳过", growth_model_path)
+    value_rule_candidates = pd.DataFrame()
+    growth_rule_candidates = pd.DataFrame()
+
+    if rule_only or rule_fallback:
+        value_rule_candidates = _run_rule_selector(ValueStockSelector(data_root=data_root), rule_top_n)
+        growth_rule_candidates = _run_rule_selector(GrowthStockSelector(data_root=data_root), rule_top_n)
+        if not value_rule_candidates.empty:
+            logger.info("价值股规则候选: %d 只", len(value_rule_candidates))
+        if not growth_rule_candidates.empty:
+            logger.info("成长股规则候选: %d 只", len(growth_rule_candidates))
+
+    if not rule_only:
+        # 价值股选股器（模型选优）
+        if value_model_path.exists():
+            try:
+                value_selector = HybridStockSelector("value", data_root=data_root, model_path=value_model_path)
+                value_selector.load_model()
+                value_candidates = value_selector.select(df_features, top_n=value_top_n)
+                logger.info("价值股选股完成: %d 只候选", len(value_candidates))
+            except Exception as exc:
+                logger.warning("价值股选股失败: %s", exc)
+        else:
+            logger.info("价值股模型不存在: %s，跳过", value_model_path)
+
+        # 成长股选股器（模型选优）
+        if growth_model_path.exists():
+            try:
+                growth_selector = HybridStockSelector("growth", data_root=data_root, model_path=growth_model_path)
+                growth_selector.load_model()
+                growth_candidates = growth_selector.select(df_features, top_n=growth_top_n)
+                logger.info("成长股选股完成: %d 只候选", len(growth_candidates))
+            except Exception as exc:
+                logger.warning("成长股选股失败: %s", exc)
+        else:
+            logger.info("成长股模型不存在: %s，跳过", growth_model_path)
+
+    if rule_only:
+        value_candidates = value_rule_candidates
+        growth_candidates = growth_rule_candidates
+    elif rule_fallback:
+        if value_candidates.empty or len(value_candidates) < min_candidates:
+            logger.info("价值股候选不足，回退规则候选池")
+            value_candidates = value_rule_candidates
+        if growth_candidates.empty or len(growth_candidates) < min_candidates:
+            logger.info("成长股候选不足，回退规则候选池")
+            growth_candidates = growth_rule_candidates
 
     return value_candidates, growth_candidates
 

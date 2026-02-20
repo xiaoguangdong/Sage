@@ -65,21 +65,24 @@ class GrowthStockSelector:
         filtered = df.copy()
 
         # 1. 营收CAGR > 20%（高增长底线）
-        filtered = filtered[filtered["revenue_cagr_3y"] > self.min_revenue_cagr]
+        if "revenue_cagr_3y" in filtered.columns:
+            filtered = filtered[filtered["revenue_cagr_3y"] > self.min_revenue_cagr]
 
         # 2. 研发费用率 > 5%（创新投入底线）
-        filtered = filtered[filtered["rd_ratio"] > self.min_rd_ratio]
+        if "rd_ratio" in filtered.columns:
+            filtered = filtered[filtered["rd_ratio"] > self.min_rd_ratio]
 
         # 3. 负债率 < 60%（财务安全底线）
-        filtered = filtered[filtered["debt_ratio"] < self.max_debt_ratio]
+        if "debt_ratio" in filtered.columns:
+            filtered = filtered[filtered["debt_ratio"] < self.max_debt_ratio]
 
         # 4. 非ST股
         if "is_st" in filtered.columns:
-            filtered = filtered[not filtered["is_st"]]
+            filtered = filtered[~filtered["is_st"]]
 
         # 5. 非退市股
         if "is_delisted" in filtered.columns:
-            filtered = filtered[not filtered["is_delisted"]]
+            filtered = filtered[~filtered["is_delisted"]]
 
         # 6. 利润正增长（盈利能力底线）
         if "profit_cagr_3y" in filtered.columns:

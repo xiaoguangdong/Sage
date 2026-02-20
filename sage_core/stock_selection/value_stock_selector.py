@@ -66,21 +66,24 @@ class ValueStockSelector:
         filtered = df.copy()
 
         # 1. ROE > 15%（盈利能力底线）
-        filtered = filtered[filtered["roe"] > self.min_roe]
+        if "roe" in filtered.columns:
+            filtered = filtered[filtered["roe"] > self.min_roe]
 
         # 2. 负债率 < 60%（财务安全底线）
-        filtered = filtered[filtered["debt_ratio"] < self.max_debt_ratio]
+        if "debt_ratio" in filtered.columns:
+            filtered = filtered[filtered["debt_ratio"] < self.max_debt_ratio]
 
         # 3. 连续分红5年+（现金流稳定）
-        filtered = filtered[filtered["consecutive_dividend"] >= self.min_consecutive_dividend]
+        if "consecutive_dividend" in filtered.columns:
+            filtered = filtered[filtered["consecutive_dividend"] >= self.min_consecutive_dividend]
 
         # 4. 非ST股
         if "is_st" in filtered.columns:
-            filtered = filtered[not filtered["is_st"]]
+            filtered = filtered[~filtered["is_st"]]
 
         # 5. 非退市股
         if "is_delisted" in filtered.columns:
-            filtered = filtered[not filtered["is_delisted"]]
+            filtered = filtered[~filtered["is_delisted"]]
 
         # 6. 营收正增长（成长性底线）
         if "revenue_growth" in filtered.columns:
