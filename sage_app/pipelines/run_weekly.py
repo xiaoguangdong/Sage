@@ -1227,12 +1227,13 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     entry_model = _build_entry_model(entry_cfg, df_features)
     entry_report = pd.DataFrame()
     entry_summary = {}
+    entry_dir = None
     if entry_model is not None:
         champion_contract, entry_report = _apply_entry_model_filter(
             champion_contract, df_features, entry_model, latest_trade_date
         )
+        entry_dir = get_data_path("signals", "entry_model", ensure=True)
         if not entry_report.empty:
-            entry_dir = get_data_path("signals", "entry_model", ensure=True)
             entry_path = entry_dir / f"entry_signal_{latest_trade_date}.parquet"
             entry_latest = entry_dir / "entry_signal_latest.parquet"
             entry_report.to_parquet(entry_path, index=False)
@@ -1249,6 +1250,12 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
             }
         else:
             entry_summary = {"enabled": True, "rows": 0, "pass_rate": None}
+        if entry_dir is not None:
+            summary_path = entry_dir / f"entry_summary_{latest_trade_date}.json"
+            summary_latest = entry_dir / "entry_summary_latest.json"
+            summary_path.write_text(json.dumps(entry_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            summary_latest.write_text(json.dumps(entry_summary, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info("EntryModel摘要: %s", entry_summary)
     else:
         entry_summary = {"enabled": False}
     strategy_cfg = config.get("strategy_governance", {}) if isinstance(config, dict) else {}
