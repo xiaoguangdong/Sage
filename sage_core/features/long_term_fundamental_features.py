@@ -812,43 +812,43 @@ class LongTermFundamentalFeatures:
         print(f"计算长周期基本面特征: {start_date} ~ {end_date}")
 
         # 1. 研发费用率
-        print("  [1/7] 计算研发费用率...")
+        print("  [1/11] 计算研发费用率...")
         df_rd = self.calculate_rd_expense_ratio_ttm(start_date, end_date)
 
         # 2. ROE 5年均值
-        print("  [2/7] 计算ROE 5年均值...")
+        print("  [2/11] 计算ROE 5年均值...")
         df_roe = self.calculate_roe_5y_avg(start_date, end_date)
 
         # 3. 营收3年CAGR
-        print("  [3/7] 计算营收3年CAGR...")
+        print("  [3/11] 计算营收3年CAGR...")
         df_revenue_cagr = self.calculate_revenue_cagr_3y(start_date, end_date)
 
         # 4. 利润3年CAGR
-        print("  [4/7] 计算利润3年CAGR...")
+        print("  [4/11] 计算利润3年CAGR...")
         df_profit_cagr = self.calculate_profit_cagr_3y(start_date, end_date)
 
         # 5. 连续分红年数
-        print("  [5/7] 计算连续分红年数...")
+        print("  [5/11] 计算连续分红年数...")
         df_dividend = self.calculate_consecutive_dividend_years(start_date, end_date)
 
         # 6. 利息保障倍数
-        print("  [6/7] 计算利息保障倍数...")
+        print("  [6/11] 计算利息保障倍数...")
         df_interest = self.calculate_interest_coverage_ratio(start_date, end_date)
 
         # 7. 资产负债与净现金
-        print("  [7/10] 计算资产负债与净现金...")
+        print("  [7/11] 计算资产负债与净现金...")
         df_balance = self.calculate_balance_sheet_quality_metrics(start_date, end_date)
 
         # 8. 现金流质量
-        print("  [8/10] 计算现金流质量...")
+        print("  [8/11] 计算现金流质量...")
         df_cashflow = self.calculate_cashflow_quality_metrics(start_date, end_date)
 
         # 9. 费用率
-        print("  [9/10] 计算费用率...")
+        print("  [9/11] 计算费用率...")
         df_expense = self.calculate_expense_ratio_ttm(start_date, end_date)
 
         # 10. 扣非净利润质量
-        print("  [10/10] 计算扣非净利润质量...")
+        print("  [10/11] 计算扣非净利润质量...")
         df_sustainable = self.calculate_sustainable_profit_metrics(start_date, end_date)
 
         # 11. 合并所有特征
