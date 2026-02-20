@@ -26,6 +26,8 @@ JOB_SCRIPTS = {
     "ths_daily_completeness": PROJECT_ROOT / "scripts" / "monitoring" / "check_ths_daily_completeness.py",
     "ths_daily_monthly_full": PROJECT_ROOT / "scripts" / "data" / "run_ths_daily_monthly_full.py",
     "champion_challenger_backtest": PROJECT_ROOT / "scripts" / "backtest" / "backtest_champion_challenger.py",
+    "attribution_report": PROJECT_ROOT / "scripts" / "backtest" / "run_attribution_report.py",
+    "dag_runner": PROJECT_ROOT / "sage_app" / "pipelines" / "dag_runner.py",
     "db_import": PROJECT_ROOT / "scripts" / "data" / "import_to_postgres.py",
 }
 

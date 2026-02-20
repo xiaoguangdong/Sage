@@ -1,0 +1,24 @@
+pipelines:
+  weekly_default:
+    description: "周度默认流水线"
+    stop_on_fail: true
+    tasks:
+      - id: industry_signal_contract
+        job: industry_signal_contract
+        args: []
+      - id: weekly_pipeline
+        job: weekly_pipeline
+        depends_on: [industry_signal_contract]
+        args: []
+
+  daily_default:
+    description: "日度默认流水线"
+    stop_on_fail: true
+    tasks:
+      - id: trend_scheduler
+        job: trend_scheduler
+        args: ["--mode", "once"]
+      - id: stock_scheduler
+        job: stock_scheduler
+        depends_on: [trend_scheduler]
+        args: ["--mode", "once_weekly"]
