@@ -800,31 +800,67 @@ def _apply_entry_model_filter(
     champion_contract: pd.DataFrame,
     df_features: pd.DataFrame,
     entry_model: EntryModelLR | None,
-) -> pd.DataFrame:
+    trade_date: str | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     if entry_model is None or champion_contract is None or champion_contract.empty:
-        return champion_contract
+        return champion_contract, pd.DataFrame()
     if df_features is None or df_features.empty:
-        return champion_contract
+        return champion_contract, pd.DataFrame()
     if "ts_code" not in df_features.columns:
         logger.warning("EntryModel 缺少 ts_code 字段，跳过过滤")
-        return champion_contract
+        return champion_contract, pd.DataFrame()
 
     candidate_codes = champion_contract["ts_code"].astype(str).unique().tolist()
     subset = df_features[df_features["ts_code"].astype(str).isin(candidate_codes)].copy()
     if subset.empty:
-        return champion_contract
+        return champion_contract, pd.DataFrame()
 
     if "trade_date" in subset.columns:
         subset = subset.sort_values(["ts_code", "trade_date"])
     histories = {code: frame for code, frame in subset.groupby("ts_code")}
-    entry_map = entry_model.predict_batch(histories, existing_holdings=set())
 
+    records = []
+    entry_map = {}
+    for code, hist in histories.items():
+        try:
+            pred = entry_model.predict(hist)
+            if pred.empty:
+                entry_signal = True
+                entry_prob = None
+                above_ma = None
+                low_vol = None
+            else:
+                last = pred.iloc[-1]
+                entry_signal = bool(last.get("entry_signal", 1) == 1)
+                entry_prob = float(last.get("entry_prob")) if pd.notna(last.get("entry_prob")) else None
+                above_ma = bool(last.get("above_ma")) if "above_ma" in last else None
+                low_vol = bool(last.get("low_vol")) if "low_vol" in last else None
+        except Exception as exc:
+            logger.debug("EntryModel预测失败(%s): %s", code, exc)
+            entry_signal = True
+            entry_prob = None
+            above_ma = None
+            low_vol = None
+
+        entry_map[str(code)] = entry_signal
+        records.append(
+            {
+                "trade_date": trade_date,
+                "ts_code": str(code),
+                "entry_prob": entry_prob,
+                "entry_signal": int(entry_signal),
+                "above_ma": above_ma,
+                "low_vol": low_vol,
+            }
+        )
+
+    entry_report = pd.DataFrame(records)
     filtered = champion_contract.copy()
     filtered["entry_signal"] = filtered["ts_code"].astype(str).map(lambda x: entry_map.get(x, True))
     before = len(filtered)
     filtered = filtered[filtered["entry_signal"]].copy()
     logger.info("EntryModel 过滤完成: before=%d, after=%d", before, len(filtered))
-    return filtered.reset_index(drop=True)
+    return filtered.reset_index(drop=True), entry_report
 
 
 def _load_evaluation_frame(evaluation_path: Path) -> pd.DataFrame:
@@ -1189,8 +1225,17 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     )
     entry_cfg = _resolve_entry_model_config(config)
     entry_model = _build_entry_model(entry_cfg, df_features)
+    entry_report = pd.DataFrame()
     if entry_model is not None:
-        champion_contract = _apply_entry_model_filter(champion_contract, df_features, entry_model)
+        champion_contract, entry_report = _apply_entry_model_filter(
+            champion_contract, df_features, entry_model, latest_trade_date
+        )
+        if not entry_report.empty:
+            entry_dir = get_data_path("signals", "entry_model", ensure=True)
+            entry_path = entry_dir / f"entry_signal_{latest_trade_date}.parquet"
+            entry_latest = entry_dir / "entry_signal_latest.parquet"
+            entry_report.to_parquet(entry_path, index=False)
+            entry_report.to_parquet(entry_latest, index=False)
     strategy_cfg = config.get("strategy_governance", {}) if isinstance(config, dict) else {}
     industry_cfg = (strategy_cfg.get("industry_signals") or {}) if isinstance(strategy_cfg, dict) else {}
     lookback_days = industry_cfg.get("signal_lookback_days")

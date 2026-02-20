@@ -111,6 +111,40 @@ def _train_entry_model(entry_model: EntryModelLR, panel: pd.DataFrame) -> bool:
         return False
 
 
+def _build_entry_report(entry_model: EntryModelLR, histories: dict[str, pd.DataFrame], trade_date: str) -> pd.DataFrame:
+    records = []
+    for code, hist in histories.items():
+        try:
+            pred = entry_model.predict(hist)
+            if pred.empty:
+                entry_signal = True
+                entry_prob = None
+                above_ma = None
+                low_vol = None
+            else:
+                last = pred.iloc[-1]
+                entry_signal = bool(last.get("entry_signal", 1) == 1)
+                entry_prob = float(last.get("entry_prob")) if pd.notna(last.get("entry_prob")) else None
+                above_ma = bool(last.get("above_ma")) if "above_ma" in last else None
+                low_vol = bool(last.get("low_vol")) if "low_vol" in last else None
+        except Exception:
+            entry_signal = True
+            entry_prob = None
+            above_ma = None
+            low_vol = None
+        records.append(
+            {
+                "trade_date": trade_date,
+                "ts_code": str(code),
+                "entry_prob": entry_prob,
+                "entry_signal": int(entry_signal),
+                "above_ma": above_ma,
+                "low_vol": low_vol,
+            }
+        )
+    return pd.DataFrame(records)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="加载最新模型并导出最新周选股信号")
     parser.add_argument("--as-of-date", type=str, default=None, help="截止日期 YYYYMMDD，默认最新交易日")
@@ -167,11 +201,22 @@ def main() -> None:
             if "trade_date" in subset.columns:
                 subset = subset.sort_values(["ts_code", "trade_date"])
             histories = {code: frame for code, frame in subset.groupby("ts_code")}
-            entry_map = entry_model.predict_batch(histories, existing_holdings=set())
-            signals["entry_signal"] = signals["ts_code"].astype(str).map(lambda x: entry_map.get(x, True)).astype(int)
+            entry_report = _build_entry_report(entry_model, histories, _to_yyyymmdd(signal_trade_date))
+            entry_map = (
+                entry_report.set_index("ts_code")["entry_signal"].astype(int).to_dict()
+                if not entry_report.empty
+                else {}
+            )
+            signals["entry_signal"] = signals["ts_code"].astype(str).map(lambda x: entry_map.get(x, 1)).astype(int)
             before = len(signals)
             signals = signals[signals["entry_signal"] == 1].copy()
             print(f"EntryModel过滤完成: before={before}, after={len(signals)}")
+            if not entry_report.empty:
+                entry_dir = get_data_path("signals", "entry_model", ensure=True)
+                entry_path = entry_dir / f"entry_signal_{signal_trade_date}.parquet"
+                entry_latest = entry_dir / "entry_signal_latest.parquet"
+                entry_report.to_parquet(entry_path, index=False)
+                entry_report.to_parquet(entry_latest, index=False)
         else:
             print("EntryModel训练失败或数据不足，跳过过滤")
 
