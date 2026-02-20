@@ -1226,6 +1226,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
     entry_cfg = _resolve_entry_model_config(config)
     entry_model = _build_entry_model(entry_cfg, df_features)
     entry_report = pd.DataFrame()
+    entry_summary = {}
     if entry_model is not None:
         champion_contract, entry_report = _apply_entry_model_filter(
             champion_contract, df_features, entry_model, latest_trade_date
@@ -1236,6 +1237,20 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
             entry_latest = entry_dir / "entry_signal_latest.parquet"
             entry_report.to_parquet(entry_path, index=False)
             entry_report.to_parquet(entry_latest, index=False)
+            entry_summary = {
+                "enabled": True,
+                "rows": int(len(entry_report)),
+                "pass_rate": (
+                    float(entry_report["entry_signal"].mean())
+                    if "entry_signal" in entry_report.columns and len(entry_report) > 0
+                    else None
+                ),
+                "entry_signal_path": str(entry_path),
+            }
+        else:
+            entry_summary = {"enabled": True, "rows": 0, "pass_rate": None}
+    else:
+        entry_summary = {"enabled": False}
     strategy_cfg = config.get("strategy_governance", {}) if isinstance(config, dict) else {}
     industry_cfg = (strategy_cfg.get("industry_signals") or {}) if isinstance(strategy_cfg, dict) else {}
     lookback_days = industry_cfg.get("signal_lookback_days")
@@ -1553,6 +1568,7 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
             "opportunity_industries_count": len(macro_result.get("opportunity_industries", [])),
             "industry_tilts_injected": len(macro_industry_tilts),
         },
+        "entry_model": entry_summary,
     }
     context_payload = _json_safe(context_payload)
     with open(context_file, "w", encoding="utf-8") as f:
