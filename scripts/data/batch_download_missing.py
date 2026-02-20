@@ -22,9 +22,11 @@ def log(msg: str):
     print(f"[{timestamp}] {msg}", flush=True)
 
 
-def load_download_plan(plan_name: str = None):
+def load_download_plan(plan_name: str = None, plan_file: str | None = None):
     """从配置文件加载下载计划"""
-    plan_path = project_root / "config" / "download_plans.yaml"
+    plan_path = Path(plan_file) if plan_file else project_root / "config" / "download_plans.yaml"
+    if not plan_path.is_absolute():
+        plan_path = (project_root / plan_path).resolve()
     plan_config = _load_yaml(plan_path)
 
     if plan_name is None:
@@ -41,7 +43,8 @@ def main():
     """批量下载缺失数据"""
 
     parser = argparse.ArgumentParser(description="Tushare 批量下载脚本")
-    parser.add_argument("--plan", type=str, help="下载计划名称（从 download_plans.yaml 读取）")
+    parser.add_argument("--plan", type=str, help="下载计划名称（从下载计划文件读取）")
+    parser.add_argument("--plan-file", type=str, default=None, help="下载计划文件路径")
     parser.add_argument("--tasks", type=str, help="任务列表，逗号分隔（如: sw_valuation,forecast）")
     parser.add_argument("--start-date", type=str, help="开始日期 YYYYMMDD")
     parser.add_argument("--end-date", type=str, help="结束日期 YYYYMMDD")
@@ -85,7 +88,7 @@ def main():
         plan_name = "命令行参数"
     else:
         # 配置文件模式
-        plan_name, download_plan = load_download_plan(args.plan)
+        plan_name, download_plan = load_download_plan(args.plan, args.plan_file)
 
     total = len(download_plan)
     log(f"开始批量下载，计划: {plan_name}")
