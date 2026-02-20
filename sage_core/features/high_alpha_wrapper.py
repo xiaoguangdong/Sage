@@ -124,51 +124,57 @@ class HighAlphaFeaturesWrapper(FeatureGenerator):
 
         # 按日期计算因子
         for trade_date in trade_dates:
-            date_features = {"trade_date": trade_date}
+            # 统一转换为 YYYYMMDD 字符串（HighAlphaFeatures 要求）
+            if hasattr(trade_date, "strftime"):
+                date_str = trade_date.strftime("%Y%m%d")
+            else:
+                date_str = str(trade_date).replace("-", "")[:8]
+
+            date_features = {"trade_date": trade_date, "date_str": date_str}
 
             # 1. 资金流因子
             if "moneyflow" in self.enabled_groups:
                 try:
                     moneyflow_feat = self.calculator.compute_moneyflow_features(
-                        trade_date=trade_date, lookback_days=self.lookback_days
+                        trade_date=date_str, lookback_days=self.lookback_days
                     )
                     if not moneyflow_feat.empty:
                         date_features["moneyflow"] = moneyflow_feat
                 except Exception as e:
-                    print(f"⚠️  计算资金流因子失败 ({trade_date}): {e}")
+                    print(f"⚠️  计算资金流因子失败 ({date_str}): {e}")
 
             # 2. 北向资金因子
             if "northbound" in self.enabled_groups:
                 try:
                     northbound_feat = self.calculator.compute_northbound_features(
-                        trade_date=trade_date, lookback_days=self.lookback_days * 3  # 北向数据用更长周期
+                        trade_date=date_str, lookback_days=self.lookback_days * 3  # 北向数据用更长周期
                     )
                     if not northbound_feat.empty:
                         date_features["northbound"] = northbound_feat
                 except Exception as e:
-                    print(f"⚠️  计算北向资金因子失败 ({trade_date}): {e}")
+                    print(f"⚠️  计算北向资金因子失败 ({date_str}): {e}")
 
             # 3. 融资融券因子
             if "margin" in self.enabled_groups:
                 try:
                     margin_feat = self.calculator.compute_margin_features(
-                        trade_date=trade_date, lookback_days=self.lookback_days
+                        trade_date=date_str, lookback_days=self.lookback_days
                     )
                     if not margin_feat.empty:
                         date_features["margin"] = margin_feat
                 except Exception as e:
-                    print(f"⚠️  计算融资融券因子失败 ({trade_date}): {e}")
+                    print(f"⚠️  计算融资融券因子失败 ({date_str}): {e}")
 
             # 4. 分析师预期因子
             if "analyst" in self.enabled_groups:
                 try:
-                    analyst_feat = self.calculator.compute_analyst_features(
-                        trade_date=trade_date, lookback_days=self.lookback_days * 6  # 分析师数据用更长周期
+                    analyst_feat = self.calculator.compute_analyst_expectation_features(
+                        trade_date=date_str, lookback_months=self.lookback_days // 20 * 3 or 3  # 转换为月数
                     )
                     if not analyst_feat.empty:
                         date_features["analyst"] = analyst_feat
                 except Exception as e:
-                    print(f"⚠️  计算分析师预期因子失败 ({trade_date}): {e}")
+                    print(f"⚠️  计算分析师预期因子失败 ({date_str}): {e}")
 
             all_features.append(date_features)
 
@@ -180,13 +186,21 @@ class HighAlphaFeaturesWrapper(FeatureGenerator):
             mask = df["trade_date"] == trade_date
 
             # 合并各类因子
-            for feat_type in ["moneyflow", "northbound", "margin", "analyst"]:
+            for feat_type in ["moneyflow", "northbound", "analyst"]:
                 if feat_type in date_feat:
                     feat_df = date_feat[feat_type]
-                    # 按 ts_code 合并
-                    for col in feat_df.columns:
-                        if col != "ts_code":
-                            df.loc[mask, col] = df.loc[mask, "ts_code"].map(feat_df.set_index("ts_code")[col])
+                    if "ts_code" in feat_df.columns:
+                        # 按 ts_code 合并个股级别因子
+                        for col in feat_df.columns:
+                            if col != "ts_code":
+                                df.loc[mask, col] = df.loc[mask, "ts_code"].map(feat_df.set_index("ts_code")[col])
+
+            # margin 是市场级别因子，广播到所有股票
+            if "margin" in date_feat:
+                margin_df = date_feat["margin"]
+                for col in margin_df.columns:
+                    if col not in ("trade_date", "ts_code"):
+                        df.loc[mask, col] = margin_df[col].iloc[0]
 
         return df
 

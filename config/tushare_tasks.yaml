@@ -15,19 +15,6 @@ tasks:
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/ths_daily.json"
     output: "concepts/ths_daily.parquet"
-
-  dc_index:
-    api: dc_index
-    mode: date_range
-    start_field: start_date
-    end_field: end_date
-    split: month
-    pagination: offset
-    limit: 5000
-    dedup_keys: ["ts_code", "trade_date"]
-    state: "data/states/dc_index.json"
-    output: "concepts/dc_index.parquet"
-
   daily_basic:
     api: daily_basic
     mode: date_range
@@ -118,17 +105,16 @@ tasks:
     output: "sw_industry/sw_industry_l1.parquet"
 
   sw_industry_daily:
-    api: daily
-    mode: list
-    list_file: "data/tushare/sw_industry/sw_industry_l1.parquet"
-    list_column: "index_code"
-    list_param: ts_code
+    api: sw_daily
+    mode: date_range
     start_field: start_date
     end_field: end_date
     split: month
+    pagination: offset
+    limit: 3000
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/sw_industry_daily.json"
-    output: "sw_industry/sw_industry_daily.parquet"
+    output: "sectors/sw_daily_all.parquet"
 
   sw_index_member:
     api: index_member
@@ -155,14 +141,14 @@ tasks:
     output: "options/opt_daily.parquet"
 
   fina_indicator:
-    api: fina_indicator
-    mode: list
-    list_file: "data/tushare/filtered_stocks_list.csv"
-    list_columns: ["tushare", "ts_code"]
-    list_param: ts_code
+    api: fina_indicator_vip
+    mode: date_range
     start_field: start_date
     end_field: end_date
-    split: year
+    split: quarter
+    pagination: offset
+    limit: 5000
+    dedup_keys: ["ts_code", "end_date", "update_flag"]
     state: "data/states/fina_indicator.json"
     output: "fina_indicator/fina_indicator_all.parquet"
 
@@ -365,13 +351,14 @@ tasks:
 
   # P1 高 Alpha 因子数据（分析师预期）
   forecast:
-    api: forecast
-    mode: year_quarters
-    list_param: period
-    start_year: 2016
-    end_year: 2026
-    quarters: ["0331", "0630", "0930", "1231"]
-    dedup_keys: ["ts_code", "end_date", "type"]
+    api: forecast_vip
+    mode: date_range
+    start_field: ann_date
+    end_field: ann_date
+    split: quarter
+    pagination: offset
+    limit: 5000
+    dedup_keys: ["ts_code", "ann_date", "end_date"]
     state: "data/states/forecast.json"
     output: "fundamental/forecast/forecast_all.parquet"
 

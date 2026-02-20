@@ -67,6 +67,33 @@ def _daily_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, d
         current += timedelta(days=1)
 
 
+def _quarter_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
+    quarter_starts = [(1, 1), (4, 1), (7, 1), (10, 1)]
+    quarter_ends = [(3, 31), (6, 30), (9, 30), (12, 31)]
+    current_year = start.year
+    current_q = (start.month - 1) // 3
+    while True:
+        m_start, d_start = quarter_starts[current_q]
+        m_end, d_end = quarter_ends[current_q]
+        q_start = datetime(current_year, m_start, d_start)
+        q_end = datetime(current_year, m_end, d_end)
+        if q_end < start:
+            current_q += 1
+            if current_q > 3:
+                current_q = 0
+                current_year += 1
+            continue
+        if q_start > end:
+            break
+        window_start = q_start if q_start > start else start
+        window_end = q_end if q_end < end else end
+        yield window_start, window_end
+        current_q += 1
+        if current_q > 3:
+            current_q = 0
+            current_year += 1
+
+
 def _year_windows(start: datetime, end: datetime) -> Iterable[tuple[datetime, datetime]]:
     current = datetime(start.year, 1, 1)
     while current.year <= end.year:
@@ -86,7 +113,7 @@ def _ts() -> str:
 
 
 def _log(message: str) -> None:
-    print(f"[{_ts()}] {message}")
+    print(f"[{_ts()}] {message}", flush=True)
 
 
 def _load_state(path: Path) -> Dict[str, Any]:
@@ -255,6 +282,10 @@ def _iter_windows(
         for s, e in _month_windows(start, end):
             yield _format_date(s, date_format), _format_date(e, date_format)
         return
+    if split == "quarter":
+        for s, e in _quarter_windows(start, end):
+            yield _format_date(s, date_format), _format_date(e, date_format)
+        return
     if split == "year":
         for s, e in _year_windows(start, end):
             yield _format_date(s, date_format), _format_date(e, date_format)
@@ -403,7 +434,12 @@ def run_task(
             else:
                 combined = pd.concat([existing, df], ignore_index=True)
                 if task.dedup_keys:
-                    combined = combined.drop_duplicates(subset=task.dedup_keys)
+                    # 只对存在的列进行去重
+                    valid_dedup_keys = [k for k in task.dedup_keys if k in combined.columns]
+                    if valid_dedup_keys:
+                        combined = combined.drop_duplicates(subset=valid_dedup_keys)
+                    else:
+                        _log(f"⚠️  去重键 {task.dedup_keys} 在数据中不存在，跳过去重")
 
             _safe_to_parquet(combined, output_path)
             existing = combined

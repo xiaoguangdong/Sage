@@ -1,0 +1,55 @@
+# 数据下载计划配置
+# 用于批量补充缺失数据
+
+download_plans:
+  # 补充历史数据计划 - 2026-02-19（基于实际数据缺失统计）
+  补充历史数据_20260219:
+    - task: sw_industry_daily
+      desc: 申万行业日线 2016-2019（缺失年份）
+      start_date: "20160101"
+      end_date: "20191231"
+
+    - task: sw_valuation
+      desc: 申万估值 2016-2019（2016年不完整+2017-2019缺失）
+      start_date: "20160101"
+      end_date: "20191231"
+
+    - task: daily_kline
+      desc: 日线K线 2016-2019（2016不完整+2017-2019缺失）
+      start_date: "20160101"
+      end_date: "20191231"
+
+    - task: daily_basic
+      desc: 日线指标 2016-2019（缺失年份，多个回测程序依赖）
+      start_date: "20160101"
+      end_date: "20191231"
+
+    - task: ths_daily
+      desc: 同花顺概念日线 2016-2019（缺失年份）
+      start_date: "20160101"
+      end_date: "20191231"
+
+    - task: northbound_hold
+      desc: 北向持股 2021-2025（缺失年份）
+      start_date: "20210101"
+      end_date: "20251231"
+
+    - task: fina_indicator
+      desc: 财务指标 2016-2019（缺失年份）
+      start_date: "20160101"
+      end_date: "20191231"
+
+    - task: forecast
+      desc: 业绩预告 2016-2025（全部缺失）
+      start_date: "20160101"
+      end_date: "20251231"
+
+    - task: express
+      desc: 业绩快报 2016-2025（全部缺失）
+      start_date: "20160101"
+      end_date: "20251231"
+
+    - task: margin_detail
+      desc: 融资融券明细 2016-2026（全部缺失，每日数据）
+      start_date: "20160101"
+      end_date: "20260219"
