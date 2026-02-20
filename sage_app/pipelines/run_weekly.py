@@ -1117,8 +1117,8 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         logger.info(f"  {row[code_col]}: 权重 {row['weight']:.2%}{rank_str}{stype_str}")
 
     # 11. 保存结果
-    output_dir = "data/portfolio"
-    Path(output_dir).mkdir(exist_ok=True)
+    output_dir = "data/signals/portfolio"
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
     output_file = f"{output_dir}/portfolio_{datetime.now().strftime('%Y%m%d')}.csv"
     portfolio.to_csv(output_file, index=False)

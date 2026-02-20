@@ -81,7 +81,7 @@ python scripts/run_job.py broker_submit -- --broker pingan
 ```
 
 - 默认模式是 `dry-run`，输出提交回执：
-  - `data/portfolio/broker_submit_<YYYYMMDD_HHMMSS>.json`
+  - `data/signals/portfolio/broker_submit_<YYYYMMDD_HHMMSS>.json`
 - 使用 `--submit` 会尝试实盘提交；当前 PingAn 适配器为预留 stub，会显式报未实现。
 
 ## 统一信号契约（执行层单入口）

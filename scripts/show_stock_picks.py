@@ -245,7 +245,7 @@ def main():
 
     # 保存CSV
     df_picks = pd.DataFrame(all_picks)
-    out = os.path.join(os.path.dirname(__file__), "..", "data", "backtest_picks.csv")
+    out = os.path.join(os.path.dirname(__file__), "..", "data", "backtest", "backtest_picks.csv")
     os.makedirs(os.path.dirname(out), exist_ok=True)
     df_picks.to_csv(out, index=False, encoding="utf-8-sig")
     print(f"\n选股明细已保存: {out}")

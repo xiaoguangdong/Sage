@@ -47,7 +47,7 @@ def main() -> None:
     parser.add_argument("--output-path", type=str, default=None, help="执行回执输出路径")
     args = parser.parse_args()
 
-    portfolio_dir = PROJECT_ROOT / "data" / "portfolio"
+    portfolio_dir = PROJECT_ROOT / "data" / "signals" / "portfolio"
     portfolio_path = (
         Path(args.portfolio_path) if args.portfolio_path else _latest_file(portfolio_dir, "portfolio_*.csv")
     )
