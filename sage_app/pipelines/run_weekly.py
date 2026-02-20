@@ -18,6 +18,7 @@ sys.path.append(str(Path(__file__).resolve().parents[2]))
 from sage_app.data.data_loader import DataLoader
 from sage_app.pipelines.overlay_config import resolve_industry_overlay_config
 from sage_core.data.universe import Universe
+from sage_core.features.long_term_fundamental_features import LongTermFundamentalFeatures
 from sage_core.features.market_features import MarketFeatures
 from sage_core.features.price_features import PriceFeatures
 from sage_core.trend.trend_model import create_trend_model
@@ -328,6 +329,139 @@ def calculate_features(df: pd.DataFrame) -> pd.DataFrame:
     logger.info("特征计算完成")
 
     return df
+
+
+def _load_income_ann_date_map(tushare_root: Path) -> pd.DataFrame:
+    income_path = tushare_root / "fundamental" / "income" / "income_all.parquet"
+    if not income_path.exists():
+        return pd.DataFrame(columns=["ts_code", "end_date", "ann_date"])
+    try:
+        import pyarrow.parquet as pq
+
+        columns = ["ts_code", "end_date", "ann_date"]
+        table = pq.read_table(income_path, columns=columns)
+        ann_map = table.to_pandas()
+    except Exception as exc:
+        logger.warning("读取 income_all 失败: %s", exc)
+        return pd.DataFrame(columns=["ts_code", "end_date", "ann_date"])
+
+    ann_map = ann_map.dropna(subset=["ts_code", "end_date"]).copy()
+    ann_map["ann_date"] = pd.to_datetime(ann_map["ann_date"], errors="coerce")
+    ann_map["end_date"] = pd.to_datetime(ann_map["end_date"], errors="coerce")
+    ann_map = ann_map.sort_values(["ts_code", "end_date", "ann_date"])
+    ann_map = ann_map.drop_duplicates(subset=["ts_code", "end_date"], keep="last")
+    ann_map["ts_code"] = ann_map["ts_code"].astype(str)
+    return ann_map[["ts_code", "end_date", "ann_date"]]
+
+
+def _merge_long_term_fundamentals(df_features: pd.DataFrame) -> pd.DataFrame:
+    if df_features is None or df_features.empty:
+        return df_features
+
+    if "ts_code" not in df_features.columns:
+        if "code" in df_features.columns:
+            df_features["ts_code"] = df_features["code"]
+        elif "stock" in df_features.columns:
+            df_features["ts_code"] = df_features["stock"]
+
+    date_col = (
+        "trade_date" if "trade_date" in df_features.columns else "date" if "date" in df_features.columns else None
+    )
+    if date_col is None:
+        return df_features
+
+    trade_dates = pd.to_datetime(df_features[date_col], errors="coerce")
+    if trade_dates.isna().all():
+        return df_features
+
+    start_date = trade_dates.min().strftime("%Y%m%d")
+    end_date = trade_dates.max().strftime("%Y%m%d")
+    cache_path = get_data_path("processed") / "long_term_fundamental_features.parquet"
+
+    long_term_df = None
+    if cache_path.exists():
+        try:
+            long_term_df = pd.read_parquet(cache_path)
+        except Exception as exc:
+            logger.warning("读取长周期特征缓存失败: %s", exc)
+            long_term_df = None
+
+    if long_term_df is None or long_term_df.empty:
+        try:
+            calculator = LongTermFundamentalFeatures(get_tushare_root())
+            long_term_df = calculator.calculate_all_features(start_date, end_date)
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
+            long_term_df.to_parquet(cache_path, index=False)
+            logger.info("长周期特征已缓存: %s", cache_path)
+        except Exception as exc:
+            logger.warning("长周期特征计算失败: %s", exc)
+            return df_features
+
+    if long_term_df.empty or "end_date" not in long_term_df.columns:
+        return df_features
+
+    long_term_df = long_term_df.copy()
+    long_term_df["end_date"] = pd.to_datetime(long_term_df["end_date"], errors="coerce")
+    ann_map = _load_income_ann_date_map(get_tushare_root())
+    if not ann_map.empty:
+        long_term_df = long_term_df.merge(ann_map, on=["ts_code", "end_date"], how="left")
+        long_term_df["effective_date"] = long_term_df["ann_date"].fillna(long_term_df["end_date"])
+    else:
+        long_term_df["effective_date"] = long_term_df["end_date"]
+
+    long_term_df["effective_date"] = pd.to_datetime(long_term_df["effective_date"], errors="coerce") + pd.Timedelta(
+        days=2
+    )
+
+    long_term_df = long_term_df.dropna(subset=["ts_code", "effective_date"]).sort_values(["ts_code", "effective_date"])
+
+    merged = df_features.copy()
+    merged["_trade_date_dt"] = trade_dates
+    merged = merged.sort_values(["ts_code", "_trade_date_dt"])
+    long_term_df = long_term_df.sort_values(["ts_code", "effective_date"])
+
+    merged = pd.merge_asof(
+        merged,
+        long_term_df,
+        by="ts_code",
+        left_on="_trade_date_dt",
+        right_on="effective_date",
+        direction="backward",
+    )
+
+    merged = merged.drop(columns=["_trade_date_dt", "ann_date", "effective_date"], errors="ignore")
+    logger.info("长周期特征合并完成")
+    return merged
+
+
+def _ensure_industry_l1(df_features: pd.DataFrame, reference_trade_date: str | None) -> pd.DataFrame:
+    if df_features is None or df_features.empty:
+        return df_features
+
+    if "industry_l1" in df_features.columns:
+        return df_features
+    if "industry" in df_features.columns:
+        df_features = df_features.copy()
+        df_features["industry_l1"] = df_features["industry"]
+        return df_features
+    if "sector" in df_features.columns:
+        df_features = df_features.copy()
+        df_features["industry_l1"] = df_features["sector"]
+        return df_features
+
+    if "ts_code" not in df_features.columns:
+        if "code" in df_features.columns:
+            df_features["ts_code"] = df_features["code"]
+        elif "stock" in df_features.columns:
+            df_features["ts_code"] = df_features["stock"]
+
+    fallback = _load_stock_industry_map_fallback(reference_trade_date)
+    if fallback.empty:
+        return df_features
+
+    df_features = df_features.merge(fallback, on="ts_code", how="left")
+    logger.info("行业映射补齐完成: rows=%d", fallback.shape[0])
+    return df_features
 
 
 def _run_macro_prediction(trade_date: str) -> dict:
@@ -766,6 +900,19 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
 
     # 2. 计算特征
     df_features = calculate_features(df_filtered)
+    df_features = _merge_long_term_fundamentals(df_features)
+
+    latest_trade_date_hint = None
+    if "trade_date" in df_features.columns:
+        max_date = pd.to_datetime(df_features["trade_date"], errors="coerce").max()
+        if pd.notna(max_date):
+            latest_trade_date_hint = max_date.strftime("%Y%m%d")
+    elif "date" in df_features.columns:
+        max_date = pd.to_datetime(df_features["date"], errors="coerce").max()
+        if pd.notna(max_date):
+            latest_trade_date_hint = max_date.strftime("%Y%m%d")
+
+    df_features = _ensure_industry_l1(df_features, latest_trade_date_hint)
 
     # 3. 创建模型
     trend_model = create_trend_model(config.get("trend_model", {}).get("trend_model", {}).get("model_type", "rule"))
@@ -777,10 +924,6 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         df_features["code"] = df_features["stock"]
     if "stock" not in df_features.columns and "code" in df_features.columns:
         df_features["stock"] = df_features["code"]
-
-    latest_trade_date_hint = None
-    if "trade_date" in df_features.columns:
-        latest_trade_date_hint = pd.to_datetime(df_features["trade_date"].max(), errors="coerce").strftime("%Y%m%d")
 
     index_candidates = {"000300.SH", "sh.000300", "000300.SZ"}
     index_code = next((c for c in index_candidates if c in set(df_features["code"].values)), None)
