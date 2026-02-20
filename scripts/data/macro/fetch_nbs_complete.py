@@ -22,6 +22,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import Iterable, List, Optional
 
 import pandas as pd
 import requests
@@ -44,6 +45,43 @@ class CompleteNBSDataFetcher:
         }
         self.session = requests.session()
         self.api_delay = 3  # NBS API请求间隔3秒
+
+    @staticmethod
+    def _build_sj_ranges(start_year: Optional[int], end_year: Optional[int], span_years: int = 5) -> List[str]:
+        if not start_year or not end_year:
+            return []
+        if start_year > end_year:
+            start_year, end_year = end_year, start_year
+        ranges = []
+        year = start_year
+        while year <= end_year:
+            end = min(end_year, year + span_years - 1)
+            ranges.append(f"{year}-{end}")
+            year = end + 1
+        return ranges
+
+    @staticmethod
+    def _merge_wide_frames(frames: Iterable[pd.DataFrame], key: str = "名称") -> Optional[pd.DataFrame]:
+        merged: Optional[pd.DataFrame] = None
+        for df in frames:
+            if df is None or df.empty:
+                continue
+            if merged is None:
+                merged = df.copy()
+                continue
+            merged = merged.merge(df, on=key, how="outer", suffixes=("", "_dup"))
+            dup_cols = [c for c in merged.columns if c.endswith("_dup")]
+            for col in dup_cols:
+                base = col[: -len("_dup")]
+                if base in merged.columns:
+                    base_series = merged[base].replace("", pd.NA)
+                    dup_series = merged[col].replace("", pd.NA)
+                    merged[base] = base_series.fillna(dup_series)
+                    merged.drop(columns=[col], inplace=True)
+                else:
+                    merged.rename(columns={col: base}, inplace=True)
+            merged = merged.loc[:, ~merged.columns.duplicated()]
+        return merged
 
     def fetch_from_nbs(self, dbcode, rowcode, colcode, zb_code, sj_code="LAST24"):
         """
@@ -163,12 +201,23 @@ class CompleteNBSDataFetcher:
         print(f"[DEBUG] DataFrame创建成功: {len(df)}行 x {len(df.columns)}列")
         return df
 
-    def fetch_nbs_cpi_national(self):
+    def fetch_nbs_cpi_national(self, sj_ranges: Optional[List[str]] = None):
         """
         获取全国CPI数据
         """
         print("\n=== 获取全国CPI数据 ===")
-        df = self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0101", sj_code="LAST36")  # CPI
+        if sj_ranges:
+            dfs = []
+            for sj_code in sj_ranges:
+                dfs.append(
+                    self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0101", sj_code=sj_code)
+                )
+                time.sleep(self.api_delay)
+            df = self._merge_wide_frames(dfs)
+        else:
+            df = self.fetch_from_nbs(
+                dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0101", sj_code="LAST36"
+            )  # CPI
 
         if df is not None:
             # 重命名列并转换格式
@@ -179,12 +228,23 @@ class CompleteNBSDataFetcher:
             return df
         return None
 
-    def fetch_nbs_ppi_national(self):
+    def fetch_nbs_ppi_national(self, sj_ranges: Optional[List[str]] = None):
         """
         获取全国PPI数据
         """
         print("\n=== 获取全国PPI数据 ===")
-        df = self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A010203", sj_code="LAST36")  # PPI
+        if sj_ranges:
+            dfs = []
+            for sj_code in sj_ranges:
+                dfs.append(
+                    self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A010203", sj_code=sj_code)
+                )
+                time.sleep(self.api_delay)
+            df = self._merge_wide_frames(dfs)
+        else:
+            df = self.fetch_from_nbs(
+                dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A010203", sj_code="LAST36"
+            )  # PPI
 
         if df is not None:
             df = df.rename(columns={"名称": "指标"})
@@ -194,7 +254,7 @@ class CompleteNBSDataFetcher:
             return df
         return None
 
-    def fetch_nbs_ppi_industry(self):
+    def fetch_nbs_ppi_industry(self, sj_ranges: Optional[List[str]] = None, start_year: int = 2020):
         """
         获取分行业PPI数据（A010F）
 
@@ -203,13 +263,23 @@ class CompleteNBSDataFetcher:
         """
         print("\n=== 获取分行业PPI数据（A010F）===")
 
-        df = self.fetch_from_nbs(
-            dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A010F", sj_code="2020-2025"  # 获取2020-2025年的数据
-        )
+        dfs = []
+        if sj_ranges:
+            for sj_code in sj_ranges:
+                dfs.append(
+                    self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A010F", sj_code=sj_code)
+                )
+                time.sleep(self.api_delay)
+        else:
+            dfs.append(
+                self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A010F", sj_code="2020-2025")
+            )
 
-        if df is not None and len(df) > 0:
+        merged = self._merge_wide_frames(dfs)
+
+        if merged is not None and len(merged) > 0:
             # 转换为长格式
-            df_melted = df.melt(id_vars=["名称"], var_name="date", value_name="ppi_mom")  # 环比
+            df_melted = merged.melt(id_vars=["名称"], var_name="date", value_name="ppi_mom")  # 环比
 
             # 添加行业信息
             df_melted["industry"] = df_melted["名称"]
@@ -225,8 +295,8 @@ class CompleteNBSDataFetcher:
             df_melted["year"] = pd.to_datetime(df_melted["date"]).dt.year
             df_melted["month"] = pd.to_datetime(df_melted["date"]).dt.month
 
-            # 筛选2020年以后的数据
-            df_melted = df_melted[df_melted["year"] >= 2020]
+            # 筛选起始年份
+            df_melted = df_melted[df_melted["year"] >= start_year]
 
             # 转换数值
             df_melted["ppi_mom"] = pd.to_numeric(df_melted["ppi_mom"], errors="coerce")
@@ -235,7 +305,7 @@ class CompleteNBSDataFetcher:
             df_melted = df_melted.sort_values(["industry", "date"])
 
             # 保存
-            filepath = os.path.join(self.output_dir, "nbs_ppi_industry_2020.csv")
+            filepath = os.path.join(self.output_dir, f"nbs_ppi_industry_{start_year}.csv")
             df_melted.to_csv(filepath, index=False, encoding="utf-8-sig")
             print(f"\n✓ 分行业PPI数据已保存: {filepath}")
             print(f"  总行数: {len(df_melted)}")
@@ -245,7 +315,7 @@ class CompleteNBSDataFetcher:
             return df_melted
         return None
 
-    def fetch_nbs_fai_industry(self):
+    def fetch_nbs_fai_industry(self, sj_ranges: Optional[List[str]] = None, start_year: int = 2020):
         """
         获取分行业固定资产投资数据（A0403）
 
@@ -254,13 +324,23 @@ class CompleteNBSDataFetcher:
         """
         print("\n=== 获取分行业固定资产投资数据（A0403）===")
 
-        df = self.fetch_from_nbs(
-            dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0403", sj_code="2020-2025"  # 获取2020-2025年的数据
-        )
+        dfs = []
+        if sj_ranges:
+            for sj_code in sj_ranges:
+                dfs.append(
+                    self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0403", sj_code=sj_code)
+                )
+                time.sleep(self.api_delay)
+        else:
+            dfs.append(
+                self.fetch_from_nbs(dbcode="hgyd", rowcode="zb", colcode="sj", zb_code="A0403", sj_code="2020-2025")
+            )
 
-        if df is not None and len(df) > 0:
+        merged = self._merge_wide_frames(dfs)
+
+        if merged is not None and len(merged) > 0:
             # 转换为长格式
-            df_melted = df.melt(id_vars=["名称"], var_name="date", value_name="fai_yoy")  # 固定资产投资同比
+            df_melted = merged.melt(id_vars=["名称"], var_name="date", value_name="fai_yoy")  # 固定资产投资同比
 
             # 添加行业信息
             df_melted["industry"] = df_melted["名称"]
@@ -276,8 +356,8 @@ class CompleteNBSDataFetcher:
             df_melted["year"] = pd.to_datetime(df_melted["date"]).dt.year
             df_melted["month"] = pd.to_datetime(df_melted["date"]).dt.month
 
-            # 筛选2020年以后的数据
-            df_melted = df_melted[df_melted["year"] >= 2020]
+            # 筛选起始年份
+            df_melted = df_melted[df_melted["year"] >= start_year]
 
             # 转换数值
             df_melted["fai_yoy"] = pd.to_numeric(df_melted["fai_yoy"], errors="coerce")
@@ -286,7 +366,7 @@ class CompleteNBSDataFetcher:
             df_melted = df_melted.sort_values(["industry", "date"])
 
             # 保存
-            filepath = os.path.join(self.output_dir, "nbs_fai_industry_2020.csv")
+            filepath = os.path.join(self.output_dir, f"nbs_fai_industry_{start_year}.csv")
             df_melted.to_csv(filepath, index=False, encoding="utf-8-sig")
             print(f"\n✓ 固定资产投资数据已保存: {filepath}")
             print(f"  总行数: {len(df_melted)}")
@@ -296,7 +376,7 @@ class CompleteNBSDataFetcher:
             return df_melted
         return None
 
-    def fetch_nbs_output_products(self):
+    def fetch_nbs_output_products(self, sj_ranges: Optional[List[str]] = None, start_year: int = 2020):
         """
         获取工业品产量数据（A020901-A020929）
 
@@ -312,21 +392,37 @@ class CompleteNBSDataFetcher:
 
         for i, product_code in enumerate(product_codes):
             print(f"  [{i+1}/29] 获取 {product_code}...", end=" ")
+            dfs = []
+            if sj_ranges:
+                for sj_code in sj_ranges:
+                    dfs.append(
+                        self.fetch_from_nbs(
+                            dbcode="hgyd",
+                            rowcode="zb",
+                            colcode="sj",
+                            zb_code=product_code,
+                            sj_code=sj_code,
+                        )
+                    )
+                    time.sleep(self.api_delay)
+            else:
+                dfs.append(
+                    self.fetch_from_nbs(
+                        dbcode="hgyd",
+                        rowcode="zb",
+                        colcode="sj",
+                        zb_code=product_code,
+                        sj_code="2020-2025",
+                    )
+                )
 
-            df = self.fetch_from_nbs(
-                dbcode="hgyd",
-                rowcode="zb",
-                colcode="sj",
-                zb_code=product_code,
-                sj_code="2020-2025",  # 获取2020-2025年的数据
-            )
-
-            if df is not None and len(df) > 0:
+            merged = self._merge_wide_frames(dfs)
+            if merged is not None and len(merged) > 0:
                 # 提取产品名称
-                product_name = df.iloc[0, 0] if len(df) > 0 else product_code
+                product_name = merged.iloc[0, 0] if len(merged) > 0 else product_code
 
                 # 转换为长格式
-                df_melted = df.melt(id_vars=["名称"], var_name="date", value_name="output_value")  # 产量值
+                df_melted = merged.melt(id_vars=["名称"], var_name="date", value_name="output_value")  # 产量值
 
                 # 添加产品信息
                 df_melted["product"] = product_name
@@ -353,8 +449,8 @@ class CompleteNBSDataFetcher:
             result_df["year"] = pd.to_datetime(result_df["date"]).dt.year
             result_df["month"] = pd.to_datetime(result_df["date"]).dt.month
 
-            # 筛选2020年以后的数据
-            result_df = result_df[result_df["year"] >= 2020]
+            # 筛选起始年份
+            result_df = result_df[result_df["year"] >= start_year]
 
             # 转换数值
             result_df["output_value"] = pd.to_numeric(result_df["output_value"], errors="coerce")
@@ -363,7 +459,7 @@ class CompleteNBSDataFetcher:
             result_df = result_df.sort_values(["product", "date"])
 
             # 保存
-            filepath = os.path.join(self.output_dir, "nbs_output_2020.csv")
+            filepath = os.path.join(self.output_dir, f"nbs_output_{start_year}.csv")
             result_df.to_csv(filepath, index=False, encoding="utf-8-sig")
             print(f"\n✓ 工业品产量数据已保存: {filepath}")
             print(f"  总行数: {len(result_df)}")
@@ -424,7 +520,14 @@ class CompleteNBSDataFetcher:
         )
         return None
 
-    def fetch_all(self, start_date="20200101", end_date="20251231"):
+    def fetch_all(
+        self,
+        start_date="20200101",
+        end_date="20251231",
+        start_year: Optional[int] = None,
+        end_year: Optional[int] = None,
+        span_years: int = 5,
+    ):
         """
         获取所有NBS数据
 
@@ -434,7 +537,7 @@ class CompleteNBSDataFetcher:
         """
         print("=" * 80)
         print("开始获取完整的NBS宏观数据")
-        print("时间范围: 2020年至今")
+        print("时间范围:", start_date[:4], "至", end_date[:4])
         print("=" * 80)
 
         start_m = start_date[:6]
@@ -444,20 +547,22 @@ class CompleteNBSDataFetcher:
         print("\n【步骤1】从NBS获取数据")
         print("-" * 80)
 
+        sj_ranges = self._build_sj_ranges(start_year, end_year, span_years=span_years)
+
         # 1.1 全国CPI
-        self.fetch_nbs_cpi_national()
+        self.fetch_nbs_cpi_national(sj_ranges=sj_ranges)
 
         # 1.2 全国PPI
-        self.fetch_nbs_ppi_national()
+        self.fetch_nbs_ppi_national(sj_ranges=sj_ranges)
 
         # 1.3 分行业PPI（A010F - 41个行业）
-        self.fetch_nbs_ppi_industry()
+        self.fetch_nbs_ppi_industry(sj_ranges=sj_ranges, start_year=start_year or 2020)
 
         # 1.4 分行业固定资产投资（A0403 - 74个行业）
-        self.fetch_nbs_fai_industry()
+        self.fetch_nbs_fai_industry(sj_ranges=sj_ranges, start_year=start_year or 2020)
 
         # 1.5 工业品产量（A020901-A020929 - 29个产品）
-        self.fetch_nbs_output_products()
+        self.fetch_nbs_output_products(sj_ranges=sj_ranges, start_year=start_year or 2020)
 
         # 2. 从Tushare获取数据
         print("\n【步骤2】从Tushare获取数据")
@@ -478,8 +583,27 @@ class CompleteNBSDataFetcher:
 
 
 def main():
+    import argparse
+
+    parser = argparse.ArgumentParser(description="完整NBS数据获取")
+    parser.add_argument("--start-year", type=int, default=2016, help="起始年份")
+    parser.add_argument("--end-year", type=int, default=datetime.now().year, help="结束年份")
+    parser.add_argument("--span-years", type=int, default=5, help="时间分段跨度（年）")
+    args = parser.parse_args()
+
     fetcher = CompleteNBSDataFetcher()
-    fetcher.fetch_all(start_date="20200101", end_date="20251231")
+    start_year = args.start_year
+    end_year = args.end_year
+    start_date = f"{start_year}0101"
+    end_date = f"{end_year}1231"
+    fetcher.api_delay = max(fetcher.api_delay, 3)
+    fetcher.fetch_all(
+        start_date=start_date,
+        end_date=end_date,
+        start_year=start_year,
+        end_year=end_year,
+        span_years=args.span_years,
+    )
 
 
 if __name__ == "__main__":
