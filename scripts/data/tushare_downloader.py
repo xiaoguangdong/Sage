@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import time
 from dataclasses import dataclass
@@ -21,7 +22,13 @@ from typing import Any, Dict, Iterable, List, Optional
 
 import pandas as pd
 
-from scripts.data._shared.runtime import add_project_root, disable_proxy, get_tushare_root, get_tushare_token
+from scripts.data._shared.runtime import (
+    add_project_root,
+    disable_proxy,
+    get_data_path,
+    get_tushare_root,
+    get_tushare_token,
+)
 
 add_project_root()
 
@@ -39,6 +46,18 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         raise FileNotFoundError(f"配置文件不存在: {path}")
     with path.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
+
+
+def _load_base_download_config(project_root: Path) -> Dict[str, Any]:
+    config_path = project_root / "config" / "base.yaml"
+    if not config_path.exists() or yaml is None:
+        return {}
+    try:
+        with config_path.open("r", encoding="utf-8") as f:
+            payload = yaml.safe_load(f) or {}
+        return (payload.get("data") or {}).get("download") or {}
+    except Exception:
+        return {}
 
 
 def _parse_date(value: str, fmt: str = "%Y%m%d") -> datetime:
@@ -166,6 +185,10 @@ class TaskConfig:
     dedup_keys: Optional[List[str]] = None
     params: Optional[Dict[str, Any]] = None
     date_format: str = "%Y%m%d"
+    sleep_seconds: Optional[int] = None
+    max_retries: Optional[int] = None
+    backoff_seconds: Optional[int] = None
+    continue_on_error: bool = True
     list_file: Optional[str] = None
     list_format: Optional[str] = None
     list_column: Optional[str] = None
@@ -192,6 +215,10 @@ class TaskConfig:
             dedup_keys=list(payload.get("dedup_keys", [])) or None,
             params=payload.get("params") or {},
             date_format=payload.get("date_format", "%Y%m%d"),
+            sleep_seconds=payload.get("sleep_seconds"),
+            max_retries=payload.get("max_retries"),
+            backoff_seconds=payload.get("backoff_seconds"),
+            continue_on_error=payload.get("continue_on_error", True),
             list_file=payload.get("list_file"),
             list_format=payload.get("list_format"),
             list_column=payload.get("list_column"),
@@ -205,25 +232,34 @@ class TaskConfig:
 
 
 class TushareClient:
-    def __init__(self, token: Optional[str] = None, sleep_seconds: int = 40, disable_proxy_flag: bool = True) -> None:
+    def __init__(
+        self,
+        token: Optional[str] = None,
+        sleep_seconds: int = 40,
+        disable_proxy_flag: bool = True,
+        max_retries: int = 3,
+        backoff_seconds: int = 30,
+    ) -> None:
         if disable_proxy_flag:
             disable_proxy()
         import tushare as ts  # local import
 
         self.pro = ts.pro_api(get_tushare_token(token))
         self.sleep_seconds = sleep_seconds
+        self.max_retries = max_retries
+        self.backoff_seconds = backoff_seconds
 
-    def request(self, api: str, params: Dict[str, Any], retries: int = 3, backoff: int = 30) -> pd.DataFrame:
-        for attempt in range(retries):
+    def request(self, api: str, params: Dict[str, Any]) -> pd.DataFrame:
+        for attempt in range(self.max_retries):
             try:
                 func = getattr(self.pro, api)
                 df = func(**params)
                 time.sleep(self.sleep_seconds)
                 return df
             except Exception as exc:
-                if attempt >= retries - 1:
+                if attempt >= self.max_retries - 1:
                     raise
-                wait = (attempt + 1) * backoff
+                wait = (attempt + 1) * self.backoff_seconds
                 _log(f"请求失败: {exc}，{wait}s 后重试...")
                 time.sleep(wait)
         return pd.DataFrame()
@@ -262,6 +298,10 @@ def _resolve_state(path_str: Optional[str]) -> Optional[Path]:
     if path.is_dir():
         return path / "state.json"
     return path
+
+
+def _default_state_path(task_name: str) -> Path:
+    return get_data_path("states", "tushare", f"{task_name}.json", ensure=True)
 
 
 def _iter_windows(
@@ -331,6 +371,24 @@ def _iter_quarters(task: TaskConfig) -> List[str]:
     return periods
 
 
+def _item_key(item: Any) -> str:
+    if item is None:
+        return "None"
+    if isinstance(item, dict):
+        return json.dumps(item, ensure_ascii=False, sort_keys=True)
+    return str(item)
+
+
+def _build_signature(task_name: str, windows: List[tuple[str, str]], items: List[Any]) -> str:
+    payload = {
+        "task": task_name,
+        "windows": windows,
+        "items": [_item_key(i) for i in items],
+    }
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True)
+    return hashlib.md5(raw.encode("utf-8")).hexdigest()
+
+
 def run_task(
     task: TaskConfig,
     start_date: Optional[str],
@@ -339,10 +397,11 @@ def run_task(
     sleep_seconds: int,
     resume: bool,
     dry_run: bool,
+    retry_failed: bool = False,
 ) -> None:
     _log(f"开始任务: {task.name}, start_date={start_date}, end_date={end_date}, resume={resume}")
     output_path = _resolve_output(task.output, output_root)
-    state_path = _resolve_state(task.state) if task.state else None
+    state_path = _resolve_state(task.state) if task.state else _default_state_path(task.name)
 
     project_root = add_project_root()
 
@@ -365,10 +424,18 @@ def run_task(
             end_dt = _parse_date(end_date, task.date_format)
 
     last_end = None
+    cursor_index = None
+    state_signature = None
+    failed_items: List[Dict[str, Any]] = []
     if resume and state_path:
         state = _load_state(state_path)
         last_end = state.get("last_end")
-        _log(f"读取断点: state={state_path}, last_end={last_end}")
+        cursor_index = state.get("cursor_index")
+        state_signature = state.get("signature")
+        failed_items = state.get("failed", [])
+        _log(
+            f"读取断点: state={state_path}, last_end={last_end}, cursor_index={cursor_index}, failed={len(failed_items)}"
+        )
 
     if task.mode in ("year_quarters",) or (task.mode == "list" and not start_date and not end_date):
         windows = [("", "")]
@@ -383,7 +450,11 @@ def run_task(
         return
 
     _log("初始化 Tushare 客户端...")
-    client = TushareClient(sleep_seconds=sleep_seconds)
+    client = TushareClient(
+        sleep_seconds=sleep_seconds,
+        max_retries=task.max_retries or 3,
+        backoff_seconds=task.backoff_seconds or 30,
+    )
     _log("Tushare 客户端初始化完成")
 
     if output_path.exists():
@@ -401,51 +472,129 @@ def run_task(
     if task.mode == "year_quarters":
         list_items = _iter_quarters(task)
 
-    total_steps = len(windows) * len(list_items)
-    step = 0
+    work_items: List[Dict[str, Any]] = []
     for item in list_items:
         for win_start, win_end in windows:
-            step += 1
-            params = dict(task.params or {})
-            if task.start_field:
-                params[task.start_field] = win_start
-            if task.end_field:
-                params[task.end_field] = win_end
-            if item is not None:
-                if isinstance(item, dict):
-                    params.update(item)
-                elif task.list_param:
-                    params[task.list_param] = item
+            work_items.append(
+                {
+                    "item": item,
+                    "item_key": _item_key(item),
+                    "win_start": win_start,
+                    "win_end": win_end,
+                }
+            )
+    current_signature = _build_signature(task.name, windows, list_items)
 
-            _log(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
+    if resume and state_signature and cursor_index is not None:
+        if state_signature == current_signature:
+            work_items = work_items[cursor_index + 1 :]
+        else:
+            _log("断点签名不一致，回退到 last_end 过滤")
+            if last_end:
+                work_items = [item for item in work_items if item["win_end"] > last_end]
+
+    if resume and retry_failed and failed_items:
+        _log(f"优先重试失败窗口: {len(failed_items)}")
+        retry_items = []
+        for failure in failed_items:
+            retry_items.append(
+                {
+                    "item": failure.get("item"),
+                    "item_key": failure.get("item_key", _item_key(failure.get("item"))),
+                    "win_start": failure.get("win_start"),
+                    "win_end": failure.get("win_end"),
+                }
+            )
+        work_items = retry_items + work_items
+        failed_items = []
+
+    total_steps = len(work_items)
+    signature = current_signature
+    for step, work in enumerate(work_items, 1):
+        item = work["item"]
+        win_start = work["win_start"]
+        win_end = work["win_end"]
+        params = dict(task.params or {})
+        if task.start_field:
+            params[task.start_field] = win_start
+        if task.end_field:
+            params[task.end_field] = win_end
+        if item is not None:
+            if isinstance(item, dict):
+                params.update(item)
+            elif task.list_param:
+                params[task.list_param] = item
+
+        _log(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
+        try:
             if task.pagination == "offset":
                 df = client.request_paged(task.api, params, limit=task.limit)
             else:
                 df = client.request(task.api, params)
-
-            if df is None or df.empty:
-                _log("无数据")
-                if state_path:
-                    _save_state(state_path, {"last_end": win_end})
-                continue
-
-            if existing.empty:
-                combined = df
-            else:
-                combined = pd.concat([existing, df], ignore_index=True)
-                if task.dedup_keys:
-                    # 只对存在的列进行去重
-                    valid_dedup_keys = [k for k in task.dedup_keys if k in combined.columns]
-                    if valid_dedup_keys:
-                        combined = combined.drop_duplicates(subset=valid_dedup_keys)
-                    else:
-                        _log(f"⚠️  去重键 {task.dedup_keys} 在数据中不存在，跳过去重")
-
-            _safe_to_parquet(combined, output_path)
-            existing = combined
-
+        except Exception as exc:
+            _log(f"❌ 请求失败: {exc}")
             if state_path:
-                _save_state(state_path, {"last_end": win_end})
+                failed_items.append(
+                    {
+                        "item": item,
+                        "item_key": work["item_key"],
+                        "win_start": win_start,
+                        "win_end": win_end,
+                        "error": str(exc),
+                    }
+                )
+                _save_state(
+                    state_path,
+                    {
+                        "last_end": win_end,
+                        "cursor_index": step - 1,
+                        "signature": signature,
+                        "failed": failed_items[-200:],
+                    },
+                )
+            if task.continue_on_error:
+                continue
+            raise
+
+        if df is None or df.empty:
+            _log("无数据")
+            if state_path:
+                _save_state(
+                    state_path,
+                    {
+                        "last_end": win_end,
+                        "cursor_index": step - 1,
+                        "signature": signature,
+                        "failed": failed_items[-200:],
+                    },
+                )
+            continue
+
+        if existing.empty:
+            combined = df
+        else:
+            combined = pd.concat([existing, df], ignore_index=True)
+            if task.dedup_keys:
+                # 只对存在的列进行去重
+                valid_dedup_keys = [k for k in task.dedup_keys if k in combined.columns]
+                if valid_dedup_keys:
+                    combined = combined.drop_duplicates(subset=valid_dedup_keys)
+                else:
+                    _log(f"⚠️  去重键 {task.dedup_keys} 在数据中不存在，跳过去重")
+
+        _safe_to_parquet(combined, output_path)
+        existing = combined
+
+        if state_path:
+            _save_state(
+                state_path,
+                {
+                    "last_end": win_end,
+                    "cursor_index": step - 1,
+                    "signature": signature,
+                    "failed": failed_items[-200:],
+                },
+            )
 
     if output_path.exists():
         _log(f"✅ 输出: {output_path}")
@@ -457,9 +606,10 @@ def main() -> None:
     parser.add_argument("--config", default="config/tushare_tasks.yaml")
     parser.add_argument("--start-date", help="YYYYMMDD")
     parser.add_argument("--end-date", help="YYYYMMDD")
-    parser.add_argument("--sleep-seconds", type=int, default=40)
+    parser.add_argument("--sleep-seconds", type=int)
     parser.add_argument("--output-root", help="覆盖输出根目录")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--disable-proxy", action="store_true", default=True)
     args = parser.parse_args()
@@ -472,6 +622,13 @@ def main() -> None:
     task = TaskConfig.from_dict(args.task, tasks[args.task])
 
     output_root = Path(args.output_root) if args.output_root else get_tushare_root(ensure=True)
+    base_download = _load_base_download_config(add_project_root())
+    sleep_seconds = args.sleep_seconds or task.sleep_seconds or int(base_download.get("sleep_seconds", 40))
+    if task.max_retries is None:
+        task.max_retries = int(base_download.get("max_retries", 3))
+    if task.backoff_seconds is None:
+        backoff_factor = float(base_download.get("backoff_factor", 2.0))
+        task.backoff_seconds = max(10, int(sleep_seconds * backoff_factor))
 
     if args.disable_proxy:
         disable_proxy()
@@ -481,9 +638,10 @@ def main() -> None:
         start_date=args.start_date,
         end_date=args.end_date,
         output_root=output_root,
-        sleep_seconds=args.sleep_seconds,
+        sleep_seconds=sleep_seconds,
         resume=args.resume,
         dry_run=args.dry_run,
+        retry_failed=args.retry_failed,
     )
 
 
