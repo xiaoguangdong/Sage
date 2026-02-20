@@ -24,12 +24,12 @@ def log(msg: str):
 
 def load_download_plan(plan_name: str = None):
     """从配置文件加载下载计划"""
-    plan_path = project_root / "config" / "download_plans_20260219.yaml"
+    plan_path = project_root / "config" / "download_plans_20260220.yaml"
     plan_config = _load_yaml(plan_path)
 
     if plan_name is None:
         # 使用最新的计划
-        plan_name = "补充历史数据_20260219"
+        plan_name = "补充历史数据_20260220"
 
     if plan_name not in plan_config["download_plans"]:
         raise ValueError(f"计划 {plan_name} 不存在")
@@ -41,7 +41,7 @@ def main():
     """批量下载缺失数据"""
 
     parser = argparse.ArgumentParser(description="Tushare 批量下载脚本")
-    parser.add_argument("--plan", type=str, help="下载计划名称（从 download_plans_20260219.yaml 读取）")
+    parser.add_argument("--plan", type=str, help="下载计划名称（从 download_plans_20260220.yaml 读取）")
     parser.add_argument("--tasks", type=str, help="任务列表，逗号分隔（如: sw_valuation,forecast）")
     parser.add_argument("--start-date", type=str, help="开始日期 YYYYMMDD")
     parser.add_argument("--end-date", type=str, help="结束日期 YYYYMMDD")
