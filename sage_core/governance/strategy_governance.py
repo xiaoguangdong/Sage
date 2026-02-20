@@ -1269,8 +1269,10 @@ class MultiAlphaChallengerStrategies:
                 return fallback.copy()
             return {k: max(v, 0.0) / total for k, v in cleaned.items()}
 
-        def _safe_numeric(frame: pd.DataFrame, column: str) -> pd.Series:
+        def _safe_numeric(frame: pd.DataFrame, column: str, fallback: Optional[pd.Series] = None) -> pd.Series:
             if column not in frame.columns:
+                if fallback is not None:
+                    return pd.to_numeric(fallback, errors="coerce").fillna(0.0)
                 return pd.Series(0.0, index=frame.index, dtype=float)
             return pd.to_numeric(frame[column], errors="coerce").fillna(0.0)
 

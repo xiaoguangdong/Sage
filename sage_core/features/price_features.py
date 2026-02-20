@@ -347,6 +347,12 @@ class PriceFeatures(FeatureGenerator):
 
         # 计算各类特征
         df = self.calculate_momentum_features(df, industry_data=industry_data)
+        if "momentum_20d" in df.columns and "mom_4w" not in df.columns:
+            df["mom_4w"] = df["momentum_20d"]
+        if "excess_return_vs_industry_20d" in df.columns and "relative_strength" not in df.columns:
+            df["relative_strength"] = df["excess_return_vs_industry_20d"]
+        elif "momentum_20d" in df.columns and "relative_strength" not in df.columns:
+            df["relative_strength"] = df["momentum_20d"]
         df = self.calculate_liquidity_features(df)
         df = self.calculate_stability_features(df)
         df = self.calculate_technical_features(df)
@@ -388,6 +394,8 @@ class PriceFeatures(FeatureGenerator):
         """返回生成的特征名称列表（豆包四因子体系）"""
         return [
             # 动量因子（20%）
+            "mom_4w",
+            "relative_strength",
             "momentum_20d",
             "momentum_60d",
             "excess_return_vs_industry_20d",

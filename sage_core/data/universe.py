@@ -45,13 +45,13 @@ class Universe:
         # 剔除ST股票
         if exclude_st and "is_st" in df.columns:
             before_count = len(df)
-            df = df[not df["is_st"]]
+            df = df[~df["is_st"]]
             logger.info(f"剔除ST股票: {before_count - len(df)} 只")
 
         # 剔除停牌股票
         if exclude_suspended and "is_suspended" in df.columns:
             before_count = len(df)
-            df = df[not df["is_suspended"]]
+            df = df[~df["is_suspended"]]
             logger.info(f"剔除停牌股票: {before_count - len(df)} 只")
 
         # 换手率过滤

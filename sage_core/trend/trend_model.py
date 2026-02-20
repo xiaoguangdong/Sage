@@ -44,6 +44,17 @@ class TrendState:
     reasons: List[str] = field(default_factory=list)  # 状态原因
     diagnostics: Dict = field(default_factory=dict)  # 诊断信息
 
+    def __getitem__(self, key: str):
+        if key == "state_name" and self.state_name == "NEUTRAL":
+            return "震荡"
+        if key == "is_up_trend":
+            return self.state == 2
+        if key == "is_low_vol":
+            return self.state == 2
+        if key == "is_down_trend":
+            return self.state == 0
+        return getattr(self, key)
+
 
 @dataclass
 class TrendModelConfig:
@@ -355,13 +366,17 @@ class TrendModelRule(TrendModelRuleV2):
         ma_short: int = 20,
         ma_medium: int = 60,
         ma_long: int = 120,
+        config: Optional[TrendModelConfig] = None,
         **kwargs,
     ):
-        config = TrendModelConfig(
-            ma_short=ma_short,
-            ma_medium=ma_medium,
-            ma_long=ma_long,
-        )
+        if isinstance(ma_short, TrendModelConfig):
+            config = ma_short
+        if config is None:
+            config = TrendModelConfig(
+                ma_short=ma_short,
+                ma_medium=ma_medium,
+                ma_long=ma_long,
+            )
         super().__init__(config)
 
 
@@ -578,7 +593,7 @@ def create_trend_model(
                 exit_tolerance=params.get("exit_tolerance", 5),
                 min_hold_periods=params.get("min_hold_periods", 7),
             )
-        return TrendModelRuleV2(model_config)
+        return TrendModelRule(model_config)
 
     elif model_type == "hmm":
         return TrendModelHMM(config.get("hmm_params", {}))
