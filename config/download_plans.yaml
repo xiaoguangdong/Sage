@@ -12,6 +12,10 @@ download_plans:
     desc: margin 补齐缺口/全量回补
     start_date: '20160101'
     end_date: '20260213'
+  - task: margin_detail
+    desc: margin_detail 补齐缺口
+    start_date: '20250901'
+    end_date: '20260220'
   - task: daily_kline
     desc: daily_kline 缺少早期数据
     start_date: '20160101'
