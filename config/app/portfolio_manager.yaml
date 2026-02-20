@@ -20,7 +20,7 @@ portfolio_manager:
     rule_only: true           # 仅规则选股（跳过模型）
     rule_fallback: true       # 模型失败或候选不足时回退规则
     rule_top_n: 20            # 规则候选池大小
-    min_candidates: 5         # 模型候选不足时触发回退
+    min_candidates: 5         # 模型候选不足时触发回退（仅 rule_only=false 时生效）
     rule_config:
       value:
         hard_filters:
