@@ -3,6 +3,7 @@
 """
 
 import logging
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -10,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from sage_core.utils.column_normalizer import normalize_security_columns
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -171,24 +173,34 @@ class DataLoader:
 
 
 if __name__ == "__main__":
-    # 测试数据加载器
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("data")
+    try:
+        loader = DataLoader("/Users/dongxg/SourceCode/deep_final_kp/data")
 
-    loader = DataLoader("/Users/dongxg/SourceCode/deep_final_kp/data")
+        # 获取Baostock数据目录中的股票代码
+        baostock_dir = Path("/Users/dongxg/SourceCode/deep_final_kp/data/baostock")
+        stock_files = list(baostock_dir.glob("*.parquet"))
+        stock_codes = [f.stem for f in stock_files[:10]]  # 测试前10只股票
 
-    # 获取Baostock数据目录中的股票代码
-    baostock_dir = Path("/Users/dongxg/SourceCode/deep_final_kp/data/baostock")
-    stock_files = list(baostock_dir.glob("*.parquet"))
-    stock_codes = [f.stem for f in stock_files[:10]]  # 测试前10只股票
+        print(f"测试加载 {len(stock_codes)} 只股票...")
+        df = loader.load_all_baostock_data(stock_codes)
 
-    print(f"测试加载 {len(stock_codes)} 只股票...")
-    df = loader.load_all_baostock_data(stock_codes)
+        if not df.empty:
+            print("\n数据预览:")
+            print(df.head())
 
-    if not df.empty:
-        print("\n数据预览:")
-        print(df.head())
-
-        print("\n数据质量报告:")
-        report = loader.check_data_quality(df)
-        for key, value in report.items():
-            print(f"{key}: {value}")
+            print("\n数据质量报告:")
+            report = loader.check_data_quality(df)
+            for key, value in report.items():
+                print(f"{key}: {value}")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "data_loader_demo", window=None, elapsed_s=datetime.now().timestamp() - start_time, error=failure_reason
+            )
+        )

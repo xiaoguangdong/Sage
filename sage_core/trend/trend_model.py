@@ -16,10 +16,13 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -610,49 +613,63 @@ def create_trend_model(
 # ============================================================================
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("trend")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2020-01-01", "2023-12-31", freq="D")
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2020-01-01", "2023-12-31", freq="D")
+        # 模拟指数数据（带趋势+噪声）
+        trend = np.concatenate(
+            [
+                np.linspace(3000, 4000, 500),  # 上涨
+                np.linspace(4000, 3500, 300),  # 回调
+                np.linspace(3500, 3800, 400),  # 震荡上行
+                np.linspace(3800, 3200, 300),  # 下跌
+                np.linspace(3200, 3400, 200),  # 反弹
+            ]
+        )
+        noise = np.random.randn(len(dates)) * 20
+        close = trend[: len(dates)] + noise
 
-    # 模拟指数数据（带趋势+噪声）
-    trend = np.concatenate(
-        [
-            np.linspace(3000, 4000, 500),  # 上涨
-            np.linspace(4000, 3500, 300),  # 回调
-            np.linspace(3500, 3800, 400),  # 震荡上行
-            np.linspace(3800, 3200, 300),  # 下跌
-            np.linspace(3200, 3400, 200),  # 反弹
-        ]
-    )
-    noise = np.random.randn(len(dates)) * 20
-    close = trend[: len(dates)] + noise
+        df = pd.DataFrame(
+            {
+                "date": dates,
+                "close": close,
+                "high": close + np.abs(np.random.randn(len(dates))) * 10,
+                "low": close - np.abs(np.random.randn(len(dates))) * 10,
+            }
+        )
 
-    df = pd.DataFrame(
-        {
-            "date": dates,
-            "close": close,
-            "high": close + np.abs(np.random.randn(len(dates))) * 10,
-            "low": close - np.abs(np.random.randn(len(dates))) * 10,
-        }
-    )
+        # 测试规则模型
+        print("=" * 60)
+        print("测试趋势模型 V2")
+        print("=" * 60)
 
-    # 测试规则模型
-    print("=" * 60)
-    print("测试趋势模型 V2")
-    print("=" * 60)
+        model = create_trend_model("rule")
+        result = model.predict(df, return_history=True)
 
-    model = create_trend_model("rule")
-    result = model.predict(df, return_history=True)
-
-    print("\n预测结果:")
-    print(f"  状态: {result.state_name} ({result.state})")
-    print(f"  置信度: {result.confidence:.2%}")
-    print(f"  趋势强度: {result.trend_strength:.2f}")
-    print(f"  建议仓位: {result.position_suggestion:.2%}")
-    print(f"  牛市概率: {result.prob_risk_on:.2%}")
-    print(f"  震荡概率: {result.prob_neutral:.2%}")
-    print(f"  熊市概率: {result.prob_risk_off:.2%}")
-    print(f"  原因: {result.reasons}")
-    print(f"\n  诊断信息: {result.diagnostics}")
+        print("\n预测结果:")
+        print(f"  状态: {result.state_name} ({result.state})")
+        print(f"  置信度: {result.confidence:.2%}")
+        print(f"  趋势强度: {result.trend_strength:.2f}")
+        print(f"  建议仓位: {result.position_suggestion:.2%}")
+        print(f"  牛市概率: {result.prob_risk_on:.2%}")
+        print(f"  震荡概率: {result.prob_neutral:.2%}")
+        print(f"  熊市概率: {result.prob_risk_off:.2%}")
+        print(f"  原因: {result.reasons}")
+        print(f"\n  诊断信息: {result.diagnostics}")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "trend_model_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
+        )

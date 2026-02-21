@@ -3,12 +3,15 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -370,24 +373,38 @@ class EntryModelLR:
 
 
 if __name__ == "__main__":
-    # 测试买卖点模型
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("execution")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
+        # 模拟股票数据
+        close = 10 + np.cumsum(np.random.randn(len(dates)) * 0.1)
+        turnover = np.random.uniform(0.01, 0.1, len(dates))
 
-    # 模拟股票数据
-    close = 10 + np.cumsum(np.random.randn(len(dates)) * 0.1)
-    turnover = np.random.uniform(0.01, 0.1, len(dates))
+        data = []
+        for i, date in enumerate(dates):
+            data.append({"date": date, "code": "sh.600000", "close": close[i], "turnover": turnover[i]})
 
-    data = []
-    for i, date in enumerate(dates):
-        data.append({"date": date, "code": "sh.600000", "close": close[i], "turnover": turnover[i]})
+        df = pd.DataFrame(data)
 
-    df = pd.DataFrame(data)
-
-    # 测试模型
+        # 测试模型
+        logger.info("开始测试买卖点模型")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "entry_model_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
+        )
     print("测试买卖点模型...")
     config = {
         "rules": {"prob_threshold": 0.6, "ma_period": 20, "vol_threshold": 0.05},

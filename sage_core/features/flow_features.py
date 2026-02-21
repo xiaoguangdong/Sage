@@ -3,10 +3,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 from .base import FeatureGenerator, FeatureSpec
 from .registry import register_feature
@@ -293,43 +296,56 @@ class FlowFeatures(FeatureGenerator):
 
 
 if __name__ == "__main__":
-    # 测试资金流向特征提取
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("features")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2023-01-01", "2024-12-31", freq="D")
+        stocks = ["600519.SH", "000858.SZ"]
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2023-01-01", "2024-12-31", freq="D")
-    stocks = ["600519.SH", "000858.SZ"]
+        data = []
+        for stock in stocks:
+            for i, date in enumerate(dates):
+                data.append(
+                    {
+                        "ts_code": stock,
+                        "date": date.strftime("%Y%m%d"),
+                        "stock": stock,
+                        "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.01,
+                    }
+                )
 
-    data = []
-    for stock in stocks:
-        for i, date in enumerate(dates):
-            data.append(
-                {
-                    "ts_code": stock,
-                    "date": date.strftime("%Y%m%d"),
-                    "stock": stock,
-                    "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.01,
-                }
+        df = pd.DataFrame(data)
+
+        # 模拟港资持股数据
+        hk_hold = pd.DataFrame(
+            {
+                "ts_code": ["600519.SH"] * len(dates),
+                "trade_date": [d.strftime("%Y%m%d") for d in dates],
+                "hold_ratio": np.random.uniform(0.01, 0.1, len(dates)),
+                "hold_amount": np.random.uniform(1e8, 1e9, len(dates)),
+            }
+        )
+
+        feature_extractor = FlowFeatures()
+        df_with_features = feature_extractor.calculate_all_features(df, hk_hold=hk_hold)
+
+        print("\n生成的特征列:")
+        print([c for c in df_with_features.columns if c in feature_extractor.get_feature_names()])
+
+        print("\n数据预览:")
+        print(df_with_features[["ts_code", "date", "northbound_hold_ratio", "northbound_score"]].tail(10))
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "flow_features_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
             )
-
-    df = pd.DataFrame(data)
-
-    # 模拟港资持股数据
-    hk_hold = pd.DataFrame(
-        {
-            "ts_code": ["600519.SH"] * len(dates),
-            "trade_date": [d.strftime("%Y%m%d") for d in dates],
-            "hold_ratio": np.random.uniform(0.01, 0.1, len(dates)),
-            "hold_amount": np.random.uniform(1e8, 1e9, len(dates)),
-        }
-    )
-
-    feature_extractor = FlowFeatures()
-    df_with_features = feature_extractor.calculate_all_features(df, hk_hold=hk_hold)
-
-    print("\n生成的特征列:")
-    print([c for c in df_with_features.columns if c in feature_extractor.get_feature_names()])
-
-    print("\n数据预览:")
-    print(df_with_features[["ts_code", "date", "northbound_hold_ratio", "northbound_score"]].tail(10))
+        )

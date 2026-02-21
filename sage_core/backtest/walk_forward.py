@@ -3,11 +3,13 @@ Walk-forward回测模块
 """
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 from .types import BacktestResult
 
@@ -408,26 +410,40 @@ class WalkForwardBacktest:
 
 
 if __name__ == "__main__":
-    # 测试回测
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("backtest")
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2018-01-01", "2020-12-31", freq="D")
-    stock_codes = ["sh.600000", "sh.600004", "sh.600006", "sh.600007", "sh.600008"]
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2018-01-01", "2020-12-31", freq="D")
+        stock_codes = ["sh.600000", "sh.600004", "sh.600006", "sh.600007", "sh.600008"]
 
-    all_data = []
-    for code in stock_codes:
-        close = 10 + np.cumsum(np.random.randn(len(dates)) * 0.1)
-        turnover = np.random.uniform(0.01, 0.1, len(dates))
+        all_data = []
+        for code in stock_codes:
+            close = 10 + np.cumsum(np.random.randn(len(dates)) * 0.1)
+            turnover = np.random.uniform(0.01, 0.1, len(dates))
 
-        for i, date in enumerate(dates):
-            all_data.append({"date": date, "code": code, "close": close[i], "turnover": turnover[i]})
+            for i, date in enumerate(dates):
+                all_data.append({"date": date, "code": code, "close": close[i], "turnover": turnover[i]})
 
-    df = pd.DataFrame(all_data)
+        df = pd.DataFrame(all_data)
 
-    # 测试回测
-    print("测试Walk-forward回测...")
+        # 测试回测
+        print("测试Walk-forward回测...")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "walk_forward_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
+        )
 
     from models.entry_model import EntryModelLR
     from models.trend_model import TrendModelRule

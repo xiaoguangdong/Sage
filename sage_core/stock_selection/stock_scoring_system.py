@@ -11,10 +11,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -1084,14 +1087,14 @@ class TradingDecisionEngine:
 
 
 if __name__ == "__main__":
-    # 测试代码
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("stock_selection")
 
     print("=" * 70)
     print("股票评分和交易决策系统测试")
     print("=" * 70)
 
-    # 读取测试数据
     try:
         df = pd.read_parquet("/Users/dongxg/SourceCode/deep_final_kp/data/processed/stocks_2025.parquet")
         df_stock = df[df["code"] == "sh.600000"].copy().sort_values("date").reset_index(drop=True)
@@ -1100,10 +1103,8 @@ if __name__ == "__main__":
         print(f"数据范围: {df_stock['date'].min()} ~ {df_stock['date'].max()}")
         print(f"数据点数: {len(df_stock)}")
 
-        # 创建评分系统
         scoring_system = StockScoringSystem()
 
-        # 计算评分
         print("\n计算股票评分...")
         score_result = scoring_system.calculate_score(df_stock, "sh.600000")
 
@@ -1119,10 +1120,8 @@ if __name__ == "__main__":
         print(f"  技术面: {score_result['technical_score']:.2f}/30")
         print(f"  风险质量: {score_result['risk_score']:.2f}/20")
 
-        # 创建决策引擎
         decision_engine = TradingDecisionEngine()
 
-        # 生成交易决策
         print("\n生成交易决策...")
         decision = decision_engine.make_decision(df_stock, "sh.600000")
 
@@ -1161,8 +1160,20 @@ if __name__ == "__main__":
         print("测试完成！")
         print("=" * 70)
 
-    except Exception as e:
-        print(f"测试失败: {e}")
+    except Exception as exc:
+        failure_reason = str(exc)
+        print(f"测试失败: {exc}")
         import traceback
 
         traceback.print_exc()
+        raise
+    finally:
+        elapsed_s = datetime.now().timestamp() - start_time
+        logger.info(
+            format_task_summary(
+                "stock_scoring_system_demo",
+                window=None,
+                elapsed_s=elapsed_s,
+                error=failure_reason,
+            )
+        )

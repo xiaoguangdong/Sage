@@ -3,10 +3,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 from .base import FeatureGenerator, FeatureSpec
 from .registry import register_feature
@@ -336,51 +339,69 @@ class IndustryFeatures(FeatureGenerator):
 
 
 if __name__ == "__main__":
-    # 测试行业特征提取
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("features")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2023-01-01", "2024-12-31", freq="W-FRI")  # 周频
+        stocks = ["600519.SH", "000858.SZ", "000001.SZ", "600036.SH"]
+        industries = {"600519.SH": "食品饮料", "000858.SZ": "食品饮料", "000001.SZ": "银行", "600036.SH": "银行"}
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2023-01-01", "2024-12-31", freq="W-FRI")  # 周频
-    stocks = ["600519.SH", "000858.SZ", "000001.SZ", "600036.SH"]
-    industries = {"600519.SH": "食品饮料", "000858.SZ": "食品饮料", "000001.SZ": "银行", "600036.SH": "银行"}
+        data = []
+        for stock in stocks:
+            for i, date in enumerate(dates):
+                data.append(
+                    {
+                        "ts_code": stock,
+                        "date": date.strftime("%Y%m%d"),
+                        "stock": stock,
+                        "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.05,
+                        "industry_l1": industries.get(stock, "其他"),
+                        "ret_4w": np.random.uniform(-0.1, 0.1),
+                        "ret_12w": np.random.uniform(-0.2, 0.2),
+                        "total_mv": np.random.uniform(1e9, 1e11),
+                    }
+                )
 
-    data = []
-    for stock in stocks:
-        for i, date in enumerate(dates):
-            data.append(
-                {
-                    "ts_code": stock,
-                    "date": date.strftime("%Y%m%d"),
-                    "stock": stock,
-                    "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.05,
-                    "industry_l1": industries.get(stock, "其他"),
-                    "ret_4w": np.random.uniform(-0.1, 0.1),
-                    "ret_12w": np.random.uniform(-0.2, 0.2),
-                    "total_mv": np.random.uniform(1e9, 1e11),
-                }
+        df = pd.DataFrame(data)
+
+        # 模拟行业指数数据
+        industry_index = pd.DataFrame(
+            {
+                "industry_code": ["食品饮料"] * len(dates) + ["银行"] * len(dates),
+                "date": [d.strftime("%Y%m%d") for d in dates] * 2,
+                "close": np.concatenate(
+                    [
+                        3000 + np.cumsum(np.random.randn(len(dates)) * 10),
+                        2000 + np.cumsum(np.random.randn(len(dates)) * 8),
+                    ]
+                ),
+            }
+        )
+
+        feature_extractor = IndustryFeatures()
+        df_with_features = feature_extractor.calculate_all_features(
+            df, industry_index=industry_index, industry_col="industry_l1"
+        )
+
+        print("\n生成的特征列:")
+        print([c for c in df_with_features.columns if c in feature_extractor.get_feature_names()])
+
+        print("\n数据预览:")
+        print(
+            df_with_features[["ts_code", "date", "industry_l1", "industry_ret_4w", "industry_momentum_score"]].tail(10)
+        )
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "industry_features_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
             )
-
-    df = pd.DataFrame(data)
-
-    # 模拟行业指数数据
-    industry_index = pd.DataFrame(
-        {
-            "industry_code": ["食品饮料"] * len(dates) + ["银行"] * len(dates),
-            "date": [d.strftime("%Y%m%d") for d in dates] * 2,
-            "close": np.concatenate(
-                [3000 + np.cumsum(np.random.randn(len(dates)) * 10), 2000 + np.cumsum(np.random.randn(len(dates)) * 8)]
-            ),
-        }
-    )
-
-    feature_extractor = IndustryFeatures()
-    df_with_features = feature_extractor.calculate_all_features(
-        df, industry_index=industry_index, industry_col="industry_l1"
-    )
-
-    print("\n生成的特征列:")
-    print([c for c in df_with_features.columns if c in feature_extractor.get_feature_names()])
-
-    print("\n数据预览:")
-    print(df_with_features[["ts_code", "date", "industry_l1", "industry_ret_4w", "industry_momentum_score"]].tail(10))
+        )

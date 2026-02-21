@@ -3,10 +3,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -378,45 +381,58 @@ class RiskControl:
 
 
 if __name__ == "__main__":
-    # 测试风险控制
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("portfolio")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        stock_codes = ["sh.600000", "sh.600004", "sh.600006", "sh.600007", "sh.600008"]
 
-    # 创建测试数据
-    np.random.seed(42)
-    stock_codes = ["sh.600000", "sh.600004", "sh.600006", "sh.600007", "sh.600008"]
+        data = []
+        for i, code in enumerate(stock_codes):
+            data.append(
+                {
+                    "code": code,
+                    "weight": np.random.uniform(0.02, 0.1),
+                    "sector": ["金融", "金融", "科技", "科技", "消费"][i],
+                }
+            )
 
-    data = []
-    for i, code in enumerate(stock_codes):
-        data.append(
-            {
-                "code": code,
-                "weight": np.random.uniform(0.02, 0.1),
-                "sector": ["金融", "金融", "科技", "科技", "消费"][i],
-            }
+        df_portfolio = pd.DataFrame(data)
+
+        # 测试风险控制
+        print("测试风险控制...")
+        risk_control = RiskControl()
+
+        # 测试组合风险检查
+        print("\n组合风险检查:")
+        risk_checks = risk_control.check_portfolio_risk(df_portfolio)
+        for check, result in risk_checks.items():
+            print(f"  {check}: {'通过' if result else '未通过'}")
+
+        # 测试权重调整
+        print("\n调整前权重:")
+        print(df_portfolio[["code", "sector", "weight"]])
+
+        df_adjusted = risk_control.adjust_weights(df_portfolio)
+        print("\n调整后权重:")
+        print(df_adjusted[["code", "sector", "weight"]])
+
+        # 测试回撤检查
+        print("\n测试回撤检查:")
+        for value in [1.0, 0.95, 0.90, 0.85, 0.80]:
+            triggered = risk_control.check_drawdown(value)
+            print(f"  组合价值: {value:.2f}, 回撤: {risk_control.current_drawdown:.2%}, 触发控制: {triggered}")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "risk_control_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
         )
-
-    df_portfolio = pd.DataFrame(data)
-
-    # 测试风险控制
-    print("测试风险控制...")
-    risk_control = RiskControl()
-
-    # 测试组合风险检查
-    print("\n组合风险检查:")
-    risk_checks = risk_control.check_portfolio_risk(df_portfolio)
-    for check, result in risk_checks.items():
-        print(f"  {check}: {'通过' if result else '未通过'}")
-
-    # 测试权重调整
-    print("\n调整前权重:")
-    print(df_portfolio[["code", "sector", "weight"]])
-
-    df_adjusted = risk_control.adjust_weights(df_portfolio)
-    print("\n调整后权重:")
-    print(df_adjusted[["code", "sector", "weight"]])
-
-    # 测试回撤检查
-    print("\n测试回撤检查:")
-    for value in [1.0, 0.95, 0.90, 0.85, 0.80]:
-        triggered = risk_control.check_drawdown(value)
-        print(f"  组合价值: {value:.2f}, 回撤: {risk_control.current_drawdown:.2%}, 触发控制: {triggered}")

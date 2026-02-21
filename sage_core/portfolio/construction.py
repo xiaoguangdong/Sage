@@ -3,10 +3,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -196,32 +199,45 @@ class PortfolioConstruction:
 
 
 if __name__ == "__main__":
-    # 测试组合构建
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("portfolio")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        stock_codes = ["sh.600000", "sh.600004", "sh.600006", "sh.600007", "sh.600008"]
 
-    # 创建测试数据
-    np.random.seed(42)
-    stock_codes = ["sh.600000", "sh.600004", "sh.600006", "sh.600007", "sh.600008"]
+        data = []
+        for i, code in enumerate(stock_codes):
+            data.append(
+                {
+                    "code": code,
+                    "rank_score": np.random.rand(),
+                    "rank": i + 1,
+                    "sector": ["金融", "金融", "科技", "科技", "消费"][i],
+                }
+            )
 
-    data = []
-    for i, code in enumerate(stock_codes):
-        data.append(
-            {
-                "code": code,
-                "rank_score": np.random.rand(),
-                "rank": i + 1,
-                "sector": ["金融", "金融", "科技", "科技", "消费"][i],
-            }
+        df_ranked = pd.DataFrame(data)
+
+        # 测试组合构建
+        print("测试组合构建...")
+        constructor = PortfolioConstruction()
+
+        # 测试不同趋势状态
+        for state, state_name in [(0, "RISK_OFF"), (1, "震荡"), (2, "RISK_ON")]:
+            print(f"\n测试{state_name}状态:")
+            portfolio = constructor.construct_portfolio(df_ranked, state)
+            print(portfolio[["code", "rank", "weight"]])
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "portfolio_construction_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
         )
-
-    df_ranked = pd.DataFrame(data)
-
-    # 测试组合构建
-    print("测试组合构建...")
-    constructor = PortfolioConstruction()
-
-    # 测试不同趋势状态
-    for state, state_name in [(0, "RISK_OFF"), (1, "震荡"), (2, "RISK_ON")]:
-        print(f"\n测试{state_name}状态:")
-        portfolio = constructor.construct_portfolio(df_ranked, state)
-        print(portfolio[["code", "rank", "weight"]])

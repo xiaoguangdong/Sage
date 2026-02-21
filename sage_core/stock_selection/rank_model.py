@@ -3,6 +3,7 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Optional, Tuple
 
 import lightgbm as lgb
@@ -10,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from sage_core.features import FlowFeatures, FundamentalFeatures, IndustryFeatures, PriceFeatures
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -441,50 +443,63 @@ class RankModelLGBM:
 
 
 if __name__ == "__main__":
-    # 测试排序模型
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("stock_selection")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
+        # 模拟多只股票的数据
+        stock_codes = ["sh.600000", "sh.600004", "sh.600006"]
+        all_data = []
 
-    # 模拟多只股票的数据
-    stock_codes = ["sh.600000", "sh.600004", "sh.600006"]
-    all_data = []
+        for code in stock_codes:
+            close = 10 + np.cumsum(np.random.randn(len(dates)) * 0.1)
+            turnover = np.random.uniform(0.01, 0.1, len(dates))
 
-    for code in stock_codes:
-        close = 10 + np.cumsum(np.random.randn(len(dates)) * 0.1)
-        turnover = np.random.uniform(0.01, 0.1, len(dates))
+            for i, date in enumerate(dates):
+                all_data.append({"date": date, "code": code, "close": close[i], "turnover": turnover[i]})
 
-        for i, date in enumerate(dates):
-            all_data.append({"date": date, "code": code, "close": close[i], "turnover": turnover[i]})
+        df = pd.DataFrame(all_data)
 
-    df = pd.DataFrame(all_data)
+        # 测试模型
+        print("测试排序模型...")
+        config = {"lgbm_params": {"num_leaves": 16, "max_depth": 4}}
 
-    # 测试模型
-    print("测试排序模型...")
-    config = {"lgbm_params": {"num_leaves": 16, "max_depth": 4}}
+        model = RankModelLGBM(config)
 
-    model = RankModelLGBM(config)
+        # 创建标签
+        labels = model.create_ranking_label(df)
+        df = df.dropna()
+        labels = labels.loc[df.index]
 
-    # 创建标签
-    labels = model.create_ranking_label(df)
-    df = df.dropna()
-    labels = labels.loc[df.index]
+        # 创建分组信息
+        group_info = df.groupby("date").size()
 
-    # 创建分组信息
-    group_info = df.groupby("date").size()
+        # 训练模型
+        model.train(df, labels, group_info)
 
-    # 训练模型
-    model.train(df, labels, group_info)
+        # 预测
+        df_predict = model.predict(df.tail(30))
 
-    # 预测
-    df_predict = model.predict(df.tail(30))
+        print("\n预测结果（最后30条）:")
+        print(df_predict[["date", "code", "rank_score", "rank"]].head(10))
 
-    print("\n预测结果（最后30条）:")
-    print(df_predict[["date", "code", "rank_score", "rank"]].head(10))
-
-    # 特征重要性
-    importance = model.get_feature_importance()
-    print("\n特征重要性（Top 10）:")
-    print(importance.head(10))
+        # 特征重要性
+        importance = model.get_feature_importance()
+        print("\n特征重要性（Top 10）:")
+        print(importance.head(10))
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "rank_model_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
+        )

@@ -3,10 +3,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import List
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 from .base import FeatureGenerator, FeatureSpec
 from .registry import register_feature
@@ -305,28 +308,44 @@ class MarketFeatures(FeatureGenerator):
 
 
 if __name__ == "__main__":
-    # 测试市场特征提取
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("features")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
+        data = []
+        close_series = 3000 + np.cumsum(np.random.randn(len(dates)) * 10)
+        for i, date in enumerate(dates):
+            close = close_series[i]
+            data.append(
+                {
+                    "date": date,
+                    "close": close,
+                    "high": close * (1 + abs(np.random.randn() * 0.01)),
+                    "low": close * (1 - abs(np.random.randn() * 0.01)),
+                    "amount": close * 1e8 * np.random.uniform(0.8, 1.2),
+                }
+            )
 
-    data = []
-    close_series = 3000 + np.cumsum(np.random.randn(len(dates)) * 10)
-    for i, date in enumerate(dates):
-        close = close_series[i]
-        data.append(
-            {
-                "date": date,
-                "close": close,
-                "high": close * (1 + abs(np.random.randn() * 0.01)),
-                "low": close * (1 - abs(np.random.randn() * 0.01)),
-                "amount": close * 1e8 * np.random.uniform(0.8, 1.2),
-            }
+        df = pd.DataFrame(data)
+        feature_extractor = MarketFeatures()
+        df_with_features = feature_extractor.calculate_all_features(df)
+        print(df_with_features.head())
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "market_features_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
         )
-
-    df = pd.DataFrame(data)
 
     feature_extractor = MarketFeatures("000300.SH")
     df_with_features = feature_extractor.calculate_all_features(df)

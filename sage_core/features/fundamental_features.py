@@ -9,10 +9,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 from .base import FeatureGenerator, FeatureSpec
 from .registry import register_feature
@@ -504,38 +507,52 @@ class FundamentalFeatures(FeatureGenerator):
 
 
 if __name__ == "__main__":
-    # 测试基本面特征提取
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("features")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2023-01-01", "2024-12-31", freq="D")
+        stocks = ["600519.SH", "000858.SZ"]
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2023-01-01", "2024-12-31", freq="D")
-    stocks = ["600519.SH", "000858.SZ"]
+        data = []
+        for stock in stocks:
+            for i, date in enumerate(dates):
+                data.append(
+                    {
+                        "ts_code": stock,
+                        "date": date.strftime("%Y%m%d"),
+                        "stock": stock,
+                        "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.01,
+                        "pe_ttm": np.random.uniform(10, 50),
+                        "pb": np.random.uniform(1, 5),
+                        "roe": np.random.uniform(0.05, 0.25),
+                        "gross_margin": np.random.uniform(0.2, 0.5),
+                        "roic": np.random.uniform(0.05, 0.2),
+                    }
+                )
 
-    data = []
-    for stock in stocks:
-        for i, date in enumerate(dates):
-            data.append(
-                {
-                    "ts_code": stock,
-                    "date": date.strftime("%Y%m%d"),
-                    "stock": stock,
-                    "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.01,
-                    "pe_ttm": np.random.uniform(10, 50),
-                    "pb": np.random.uniform(1, 5),
-                    "roe": np.random.uniform(0.05, 0.25),
-                    "gross_margin": np.random.uniform(0.2, 0.5),
-                    "roic": np.random.uniform(0.05, 0.2),
-                }
+        df = pd.DataFrame(data)
+
+        feature_extractor = FundamentalFeatures()
+        df_with_features = feature_extractor.calculate_all_features(df)
+
+        print("\n生成的特征列:")
+        print([c for c in df_with_features.columns if c in feature_extractor.get_feature_names()])
+
+        print("\n数据预览:")
+        print(df_with_features.head())
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "fundamental_features_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
             )
-
-    df = pd.DataFrame(data)
-
-    feature_extractor = FundamentalFeatures()
-    df_with_features = feature_extractor.calculate_all_features(df)
-
-    print("\n生成的特征列:")
-    print([c for c in df_with_features.columns if c in feature_extractor.get_feature_names()])
-
-    print("\n数据预览:")
+        )
     print(df_with_features[["ts_code", "date", "pe_percentile", "pb_percentile", "quality_score"]].tail(10))

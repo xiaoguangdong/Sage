@@ -15,10 +15,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 from .base import FeatureGenerator, FeatureSpec
 from .registry import register_feature
@@ -614,30 +617,54 @@ class SatelliteFeatures(FeatureGenerator):
 
 
 if __name__ == "__main__":
-    # 测试卫星策略特征提取
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("features")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2023-01-01", "2024-12-31", freq="D")
+        stocks = ["600519.SH", "000858.SZ", "300750.SZ"]
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2023-01-01", "2024-12-31", freq="D")
-    stocks = ["600519.SH", "000858.SZ", "300750.SZ"]
+        data = []
+        for stock in stocks:
+            for i, date in enumerate(dates):
+                data.append(
+                    {
+                        "ts_code": stock,
+                        "date": date.strftime("%Y%m%d"),
+                        "stock": stock,
+                        "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.01,
+                        "volume": np.random.randint(1000000, 10000000),
+                    }
+                )
 
-    data = []
-    for stock in stocks:
-        for i, date in enumerate(dates):
-            data.append(
-                {
-                    "ts_code": stock,
-                    "date": date.strftime("%Y%m%d"),
-                    "stock": stock,
-                    "close": 100 + np.cumsum(np.random.randn(len(dates)))[i] * 0.01,
-                    "volume": np.random.randint(1000000, 10000000),
-                }
+        df = pd.DataFrame(data)
+
+        feature_extractor = SatelliteFeatures()
+        df = feature_extractor.calculate_volume_features(df)
+        df = feature_extractor.calculate_price_features(df)
+        df = feature_extractor.calculate_momentum_factor(df)
+        df = feature_extractor.calculate_satellite_score(df)
+
+        print("\n生成的特征列:")
+        print([c for c in df.columns if c in feature_extractor.get_feature_names()])
+
+        print("\n最新数据预览:")
+        latest = df[df["date"] == df["date"].max()]
+        print(latest[["ts_code", "satellite_score", "stock_type", "in_select_pool"]].head())
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "satellite_features_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
             )
-
-    df = pd.DataFrame(data)
-
-    feature_extractor = SatelliteFeatures()
+        )
     df = feature_extractor.calculate_momentum_factor(df)
     df = feature_extractor.calculate_satellite_score(df)
 

@@ -10,6 +10,8 @@ from typing import Dict, List
 import pandas as pd
 import requests
 
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
+
 try:
     import baostock as bs  # type: ignore
 except ModuleNotFoundError:
@@ -447,57 +449,69 @@ class DataProvider:
 
 
 if __name__ == "__main__":
-    # 测试代码
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("data")
+    try:
+        print("=" * 70)
+        print("数据提供商测试")
+        print("=" * 70)
 
-    print("=" * 70)
-    print("数据提供商测试")
-    print("=" * 70)
+        # 创建数据提供商（不提供Tushare token）
+        provider = DataProvider()
 
-    # 创建数据提供商（不提供Tushare token）
-    provider = DataProvider()
+        # 测试Baostock
+        print("\n测试Baostock接口...")
 
-    # 测试Baostock
-    print("\n测试Baostock接口...")
+        # 获取股票日线数据
+        print("\n1. 获取股票日线数据 (sh.600000)...")
+        df_stock = provider.get_stock_daily_baostock("sh.600000", "2025-12-01", "2025-12-31")
+        print(f"获取到 {len(df_stock)} 条数据")
+        if not df_stock.empty:
+            print(df_stock.head())
 
-    # 获取股票日线数据
-    print("\n1. 获取股票日线数据 (sh.600000)...")
-    df_stock = provider.get_stock_daily_baostock("sh.600000", "2025-12-01", "2025-12-31")
-    print(f"获取到 {len(df_stock)} 条数据")
-    if not df_stock.empty:
-        print(df_stock.head())
+        # 获取指数日线数据
+        print("\n2. 获取指数日线数据 (sh.000300)...")
+        df_index = provider.get_index_daily_baostock("sh.000300", "2025-12-01", "2025-12-31")
+        print(f"获取到 {len(df_index)} 条数据")
+        if not df_index.empty:
+            print(df_index.head())
 
-    # 获取指数日线数据
-    print("\n2. 获取指数日线数据 (sh.000300)...")
-    df_index = provider.get_index_daily_baostock("sh.000300", "2025-12-01", "2025-12-31")
-    print(f"获取到 {len(df_index)} 条数据")
-    if not df_index.empty:
-        print(df_index.head())
+        # 获取股票列表
+        print("\n3. 获取股票列表...")
+        df_stocks = provider.get_all_stocks_baostock()
+        print(f"获取到 {len(df_stocks)} 只股票")
+        print(df_stocks.head())
 
-    # 获取股票列表
-    print("\n3. 获取股票列表...")
-    df_stocks = provider.get_all_stocks_baostock()
-    print(f"获取到 {len(df_stocks)} 只股票")
-    print(df_stocks.head())
+        # 计算市场广度
+        print("\n4. 计算市场广度 (2025-12-30)...")
+        breadth = provider.calculate_market_breadth("2025-12-30")
+        print(f"上涨: {breadth.get('up_count', 0)}")
+        print(f"下跌: {breadth.get('down_count', 0)}")
+        print(f"平盘: {breadth.get('flat_count', 0)}")
+        print(f"上涨比例: {breadth.get('up_ratio', 0):.2%}")
 
-    # 计算市场广度
-    print("\n4. 计算市场广度 (2025-12-30)...")
-    breadth = provider.calculate_market_breadth("2025-12-30")
-    print(f"上涨: {breadth.get('up_count', 0)}")
-    print(f"下跌: {breadth.get('down_count', 0)}")
-    print(f"平盘: {breadth.get('flat_count', 0)}")
-    print(f"上涨比例: {breadth.get('up_ratio', 0):.2%}")
+        # 测试新浪实时行情
+        print("\n5. 获取新浪实时行情...")
+        realtime = provider.get_realtime_quote_sina(["sh000300", "sz000001"])
+        print(f"获取到 {len(realtime)} 只股票的实时行情")
+        for code, data in realtime.items():
+            print(f"{code}: {data[:50]}...")
 
-    # 测试新浪实时行情
-    print("\n5. 获取新浪实时行情...")
-    realtime = provider.get_realtime_quote_sina(["sh000300", "sz000001"])
-    print(f"获取到 {len(realtime)} 只股票的实时行情")
-    for code, data in realtime.items():
-        print(f"{code}: {data[:50]}...")
+        provider.close()
 
-    # 关闭连接
-    provider.close()
-
-    print("\n" + "=" * 70)
-    print("测试完成！")
-    print("=" * 70)
+        print("\n" + "=" * 70)
+        print("测试完成！")
+        print("=" * 70)
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "data_provider_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
+        )

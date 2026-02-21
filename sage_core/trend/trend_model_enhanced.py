@@ -9,10 +9,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -424,71 +427,84 @@ def create_enhanced_trend_model(config: dict = None) -> TrendModelEnhanced:
 
 
 if __name__ == "__main__":
-    # 测试增强版趋势模型
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("trend")
+    try:
+        print("=" * 70)
+        print("测试增强版趋势模型（12状态分类）")
+        print("=" * 70)
 
-    print("=" * 70)
-    print("测试增强版趋势模型（12状态分类）")
-    print("=" * 70)
+        # 加载测试数据（使用沪深300指数）
+        print("\n正在加载沪深300指数数据...")
 
-    # 加载测试数据（使用沪深300指数）
-    print("\n正在加载沪深300指数数据...")
+        # 从合并的数据中获取沪深300指数
+        df_2025 = pd.read_parquet("/Users/dongxg/SourceCode/deep_final_kp/data/processed/stocks_2025.parquet")
 
-    # 从合并的数据中获取沪深300指数
-    df_2025 = pd.read_parquet("/Users/dongxg/SourceCode/deep_final_kp/data/processed/stocks_2025.parquet")
+        # 筛选沪深300指数（sh.000300）
+        df_index = df_2025[df_2025["code"] == "sh.000300"].copy()
+        df_index = df_index.sort_values("date").reset_index(drop=True)
 
-    # 筛选沪深300指数（sh.000300）
-    df_index = df_2025[df_2025["code"] == "sh.000300"].copy()
-    df_index = df_index.sort_values("date").reset_index(drop=True)
+        print(f"数据范围: {df_index['date'].min()} ~ {df_index['date'].max()}")
+        print(f"数据点数: {len(df_index)}")
 
-    print(f"数据范围: {df_index['date'].min()} ~ {df_index['date'].max()}")
-    print(f"数据点数: {len(df_index)}")
+        # 创建模型
+        model = create_enhanced_trend_model()
 
-    # 创建模型
-    model = create_enhanced_trend_model()
+        # 预测所有状态
+        print("\n开始预测所有时间点的市场状态...")
+        result_df = model.predict_all(df_index)
 
-    # 预测所有状态
-    print("\n开始预测所有时间点的市场状态...")
-    result_df = model.predict_all(df_index)
+        # 统计各状态出现次数
+        print("\n" + "=" * 70)
+        print("市场状态统计")
+        print("=" * 70)
+        state_counts = result_df["state_name"].value_counts()
+        for state, count in state_counts.items():
+            percentage = count / len(result_df) * 100
+            print(f"{state}: {count}次 ({percentage:.2f}%)")
 
-    # 统计各状态出现次数
-    print("\n" + "=" * 70)
-    print("市场状态统计")
-    print("=" * 70)
-    state_counts = result_df["state_name"].value_counts()
-    for state, count in state_counts.items():
-        percentage = count / len(result_df) * 100
-        print(f"{state}: {count}次 ({percentage:.2f}%)")
+        # 按类别统计
+        print("\n按类别统计:")
+        category_counts = result_df["category"].value_counts()
+        for category, count in category_counts.items():
+            percentage = count / len(result_df) * 100
+            print(f"{category}: {count}次 ({percentage:.2f}%)")
 
-    # 按类别统计
-    print("\n按类别统计:")
-    category_counts = result_df["category"].value_counts()
-    for category, count in category_counts.items():
-        percentage = count / len(result_df) * 100
-        print(f"{category}: {count}次 ({percentage:.2f}%)")
+        # 显示最近10天的预测结果
+        print("\n" + "=" * 70)
+        print("最近10天的市场状态")
+        print("=" * 70)
+        recent_results = result_df[["date", "close", "state_name", "category", "confidence"]].tail(10)
+        print(recent_results.to_string(index=False))
 
-    # 显示最近10天的预测结果
-    print("\n" + "=" * 70)
-    print("最近10天的市场状态")
-    print("=" * 70)
-    recent_results = result_df[["date", "close", "state_name", "category", "confidence"]].tail(10)
-    print(recent_results.to_string(index=False))
+        # 计算状态转移矩阵
+        print("\n" + "=" * 70)
+        print("状态转移矩阵（最近10次转移）")
+        print("=" * 70)
+        state_sequence = result_df["state_name"].values
+        transitions = {}
+        for i in range(len(state_sequence) - 1):
+            from_state = state_sequence[i]
+            to_state = state_sequence[i + 1]
+            key = f"{from_state} -> {to_state}"
+            transitions[key] = transitions.get(key, 0) + 1
 
-    # 计算状态转移矩阵
-    print("\n" + "=" * 70)
-    print("状态转移矩阵（最近10次转移）")
-    print("=" * 70)
-    state_sequence = result_df["state_name"].values
-    transitions = {}
-    for i in range(len(state_sequence) - 1):
-        from_state = state_sequence[i]
-        to_state = state_sequence[i + 1]
-        key = f"{from_state} -> {to_state}"
-        transitions[key] = transitions.get(key, 0) + 1
+        # 显示最常见的转移
+        sorted_transitions = sorted(transitions.items(), key=lambda x: x[1], reverse=True)
+        for transition, count in sorted_transitions[:10]:
+            print(f"{transition}: {count}次")
 
-    # 显示最常见的转移
-    sorted_transitions = sorted(transitions.items(), key=lambda x: x[1], reverse=True)
-    for transition, count in sorted_transitions[:10]:
-        print(f"{transition}: {count}次")
-
-    print("\n测试完成！")
+        print("\n测试完成！")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "trend_model_enhanced_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
+        )

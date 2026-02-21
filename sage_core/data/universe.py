@@ -3,10 +3,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 logger = logging.getLogger(__name__)
 
@@ -84,35 +87,45 @@ class Universe:
 
 
 if __name__ == "__main__":
-    # 测试股票池筛选
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("data")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2020-01-01", "2020-12-31", freq="D")
+        stocks = ["sh.600000", "sh.600001", "sh.600002", "sh.600003", "sh.600004"]
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2020-01-01", "2020-12-31", freq="D")
-    stocks = ["sh.600000", "sh.600001", "sh.600002", "sh.600003", "sh.600004"]
+        data = []
+        for stock in stocks:
+            for date in dates:
+                data.append(
+                    {
+                        "date": date,
+                        "stock": stock,
+                        "close": np.random.uniform(10, 100),
+                        "is_st": np.random.choice([True, False], p=[0.1, 0.9]),
+                        "is_suspended": np.random.choice([True, False], p=[0.05, 0.95]),
+                        "turnover": np.random.uniform(0.5, 5),
+                        "market_cap": np.random.uniform(50, 500) * 1e8,
+                    }
+                )
 
-    data = []
-    for stock in stocks:
-        for date in dates:
-            data.append(
-                {
-                    "date": date,
-                    "stock": stock,
-                    "close": np.random.uniform(10, 100),
-                    "is_st": np.random.choice([True, False], p=[0.1, 0.9]),
-                    "is_suspended": np.random.choice([True, False], p=[0.05, 0.95]),
-                    "turnover": np.random.uniform(0.5, 5),
-                    "market_cap": np.random.uniform(50, 500) * 1e8,
-                }
+        df = pd.DataFrame(data)
+
+        universe = Universe()
+        filtered_df = universe.filter_stocks(
+            df, exclude_st=True, exclude_suspended=True, min_turnover=1.0, min_market_cap=100e8
+        )
+
+        print("\n筛选结果:")
+        print(filtered_df.head())
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "universe_demo", window=None, elapsed_s=datetime.now().timestamp() - start_time, error=failure_reason
             )
-
-    df = pd.DataFrame(data)
-
-    universe = Universe()
-    filtered_df = universe.filter_stocks(
-        df, exclude_st=True, exclude_suspended=True, min_turnover=1.0, min_market_cap=100e8
-    )
-
-    print("\n筛选结果:")
-    print(filtered_df.head())
+        )

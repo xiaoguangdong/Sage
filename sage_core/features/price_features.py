@@ -9,10 +9,13 @@
 """
 
 import logging
+from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
 import pandas as pd
+
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 
 from .base import FeatureGenerator, FeatureSpec
 from .registry import register_feature
@@ -433,40 +436,53 @@ class PriceFeatures(FeatureGenerator):
 
 
 if __name__ == "__main__":
-    # 测试价格特征提取
-    logging.basicConfig(level=logging.INFO)
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    setup_logging("features")
+    try:
+        # 创建测试数据
+        np.random.seed(42)
+        dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
+        stocks = ["sh.600000", "sh.600001"]
 
-    # 创建测试数据
-    np.random.seed(42)
-    dates = pd.date_range("2020-01-01", "2020-03-31", freq="D")
-    stocks = ["sh.600000", "sh.600001"]
+        data = []
+        for stock in stocks:
+            close = 100 + np.cumsum(np.random.randn(len(dates)) * 0.01)
+            for i, date in enumerate(dates):
+                data.append(
+                    {
+                        "date": date,
+                        "stock": stock,
+                        "open": close[i] * (1 + np.random.randn() * 0.01),
+                        "high": close[i] * (1 + abs(np.random.randn() * 0.02)),
+                        "low": close[i] * (1 - abs(np.random.randn() * 0.02)),
+                        "close": close[i],
+                        "volume": np.random.randint(1000000, 10000000),
+                        "amount": close[i] * np.random.randint(1000000, 10000000),
+                        "float_shares": 100000000,
+                        "market_cap": close[i] * 100000000,
+                    }
+                )
 
-    data = []
-    for stock in stocks:
-        close = 100 + np.cumsum(np.random.randn(len(dates)) * 0.01)
-        for i, date in enumerate(dates):
-            data.append(
-                {
-                    "date": date,
-                    "stock": stock,
-                    "open": close[i] * (1 + np.random.randn() * 0.01),
-                    "high": close[i] * (1 + abs(np.random.randn() * 0.02)),
-                    "low": close[i] * (1 - abs(np.random.randn() * 0.02)),
-                    "close": close[i],
-                    "volume": np.random.randint(1000000, 10000000),
-                    "amount": close[i] * np.random.randint(1000000, 10000000),
-                    "float_shares": 100000000,
-                    "market_cap": close[i] * 100000000,
-                }
+        df = pd.DataFrame(data)
+
+        feature_extractor = PriceFeatures()
+        df_with_features = feature_extractor.calculate_all_features(df)
+
+        print("\n特征列:")
+        print(df_with_features.columns.tolist())
+
+        print("\n数据预览:")
+        print(df_with_features.head())
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "price_features_demo",
+                window=None,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
             )
-
-    df = pd.DataFrame(data)
-
-    feature_extractor = PriceFeatures()
-    df_with_features = feature_extractor.calculate_all_features(df)
-
-    print("\n特征列:")
-    print(df_with_features.columns.tolist())
-
-    print("\n数据预览:")
-    print(df_with_features.head())
+        )
