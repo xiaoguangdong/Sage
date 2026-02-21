@@ -55,6 +55,30 @@ python scripts/data/tushare_downloader.py --task dc_index \
 > 说明：理想版统一入口以 `config/tushare_tasks.yaml` 为唯一任务清单，
 > 后续新增接口只需追加配置，不再新增脚本。
 
+## 每日 T-1 增量任务（建议定时）
+
+脚本：`scripts/data/daily_tminus1_update.py`
+
+<span style="color:red">重要：该任务建议使用 launchd 定时在每天 16:00 运行，用于补齐 T-1 日数据。</span>
+
+```bash
+# 手动运行（默认 T-1）
+python scripts/data/daily_tminus1_update.py
+
+# 指定日期（YYYYMMDD）
+python scripts/data/daily_tminus1_update.py --date 20260221
+```
+
+安装定时任务（launchd）：
+```bash
+./scripts/schedule/install_daily_tminus1_launchd.sh
+```
+
+日志：
+- `logs/data/daily_tminus1_launchd.log`
+- `logs/data/daily_tminus1_launchd.out`
+- `logs/data/daily_tminus1_launchd.err`
+
 ## Akshare 统一脚本
 
 脚本：`scripts/data/akshare_suite.py`

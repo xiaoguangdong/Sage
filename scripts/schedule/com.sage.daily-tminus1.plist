@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.sage.daily-tminus1</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/bin/zsh</string>
+      <string>-lc</string>
+      <string>cd /Users/dongxg/SourceCode/Sage &amp;&amp; /opt/homebrew/Caskroom/miniconda/base/bin/python -u scripts/data/daily_tminus1_update.py &gt;&gt; logs/data/daily_tminus1_launchd.log 2&gt;&amp;1</string>
+    </array>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Hour</key>
+      <integer>16</integer>
+      <key>Minute</key>
+      <integer>0</integer>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/Users/dongxg/SourceCode/Sage/logs/data/daily_tminus1_launchd.out</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dongxg/SourceCode/Sage/logs/data/daily_tminus1_launchd.err</string>
+
+    <key>RunAtLoad</key>
+    <false/>
+  </dict>
+</plist>
