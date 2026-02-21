@@ -399,7 +399,7 @@ tasks:
     end_field: end_date
     split: month
     pagination: offset
-    limit: 5000
+    limit: 6000
     dedup_keys: ["trade_date", "ts_code"]
     state: "data/states/margin_detail.json"
     output: "margin_detail/margin_detail_all.parquet"
