@@ -5,6 +5,7 @@
 import json
 import logging
 import sys
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -15,6 +16,7 @@ import yaml
 # 导入项目模块
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from sage_app.data.data_access import get_data_path, get_tushare_root
 from sage_app.data.data_loader import DataLoader
 from sage_app.pipelines.overlay_config import resolve_industry_overlay_config
 from sage_core.data.universe import Universe
@@ -23,8 +25,7 @@ from sage_core.features.market_features import MarketFeatures
 from sage_core.features.price_features import PriceFeatures
 from sage_core.trend.trend_model import create_trend_model
 from sage_core.utils.column_normalizer import normalize_security_columns
-from sage_core.utils.logging_utils import setup_logging
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from sage_core.utils.logging_utils import format_task_summary, setup_logging
 from scripts.strategy.build_industry_signal_contract import build_industry_signal_contract_artifacts
 
 try:
@@ -47,6 +48,7 @@ from sage_core.governance.strategy_governance import (
     SeedBalanceStrategy,
     StrategyGovernanceConfig,
     decide_auto_promotion,
+    execute_auto_downgrade,
     normalize_strategy_id,
     save_strategy_outputs,
 )
@@ -1150,6 +1152,36 @@ def run_weekly_workflow(config: dict, df: pd.DataFrame):
         active_champion_id,
         promotion_decision.get("reason"),
     )
+
+    auto_downgrade_cfg = governance_cfg.get("auto_downgrade", {})
+    if bool(auto_downgrade_cfg.get("enabled", False)):
+        evaluation_path = Path(
+            auto_downgrade_cfg.get("evaluation_path", "data/backtest/governance/shadow_eval.parquet")
+        )
+        try:
+            evaluation_df = _load_evaluation_frame(evaluation_path)
+            downgrade_config = replace(governance_engine.governance_config, active_champion_id=active_champion_id)
+            thresholds = auto_downgrade_cfg.get("thresholds") or {}
+            lookback_periods = int(auto_downgrade_cfg.get("lookback_periods", 3))
+            updated_cfg, audit = execute_auto_downgrade(
+                config=downgrade_config,
+                evaluation_df=evaluation_df,
+                thresholds=thresholds,
+                lookback_periods=lookback_periods,
+                effective_date=latest_trade_date,
+            )
+            if audit:
+                logger.info(
+                    "自动降级决策: enabled=%s, triggered=%s, champion=%s -> %s, reason=%s",
+                    True,
+                    True,
+                    active_champion_id,
+                    updated_cfg.active_champion_id,
+                    audit.reason,
+                )
+                active_champion_id = updated_cfg.active_champion_id
+        except Exception as exc:
+            logger.warning("自动降级评估失败，保持当前冠军: %s", exc)
     supported_champions = set(governance_engine.governance_config.normalized_challengers())
     supported_champions.add("seed_balance_strategy")
     if active_champion_id not in supported_champions:
@@ -1649,6 +1681,8 @@ def run_backtest_workflow(config: dict, df: pd.DataFrame):
 
 def main():
     """主函数"""
+    start_time = datetime.now().timestamp()
+    failure_reason = None
     logger.info("程序启动")
 
     # 加载配置
@@ -1658,7 +1692,9 @@ def main():
     df = load_data()
 
     if df is None or len(df) == 0:
+        failure_reason = "数据加载失败"
         logger.error("数据加载失败，程序退出")
+        logger.info(format_task_summary("weekly_pipeline", window="weekly", elapsed_s=0.0, error=failure_reason))
         return
 
     # 选择运行模式
@@ -1667,17 +1703,30 @@ def main():
     if len(sys.argv) > 1:
         mode = sys.argv[1]
 
-    if mode == "backtest":
-        # 回测模式
-        run_backtest_workflow(config, df)
-    elif mode == "weekly":
-        # 每周运行模式
-        run_weekly_workflow(config, df)
-    else:
-        logger.error(f"未知模式: {mode}")
-        logger.info("使用方法: python run_weekly.py [weekly|backtest]")
-
-    logger.info("程序结束")
+    try:
+        if mode == "backtest":
+            # 回测模式
+            run_backtest_workflow(config, df)
+        elif mode == "weekly":
+            # 每周运行模式
+            run_weekly_workflow(config, df)
+        else:
+            failure_reason = f"未知模式:{mode}"
+            logger.error(f"未知模式: {mode}")
+            logger.info("使用方法: python run_weekly.py [weekly|backtest]")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        logger.info(
+            format_task_summary(
+                "weekly_pipeline",
+                window=mode,
+                elapsed_s=datetime.now().timestamp() - start_time,
+                error=failure_reason,
+            )
+        )
+        logger.info("程序结束")
 
 
 if __name__ == "__main__":

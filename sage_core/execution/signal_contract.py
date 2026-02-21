@@ -14,6 +14,9 @@ BASE_SIGNAL_COLUMNS = [
     "model_version",
 ]
 
+SIGNAL_SCHEMA_VERSION = "v1"
+SIGNAL_FREQUENCY = "W"
+
 CONTRACT_COLUMNS = [
     "trade_date",
     "strategy_id",
@@ -25,6 +28,8 @@ CONTRACT_COLUMNS = [
     "rank",
     "confidence",
     "model_version",
+    "frequency",
+    "schema_version",
 ]
 
 
@@ -41,6 +46,8 @@ def _ensure_base_schema(frame: pd.DataFrame, strategy_id: str, trade_date: str, 
     out["score"] = pd.to_numeric(out["score"], errors="coerce")
     out["rank"] = pd.to_numeric(out["rank"], errors="coerce")
     out["confidence"] = pd.to_numeric(out["confidence"], errors="coerce").clip(lower=0.0, upper=1.0)
+    out["frequency"] = SIGNAL_FREQUENCY
+    out["schema_version"] = SIGNAL_SCHEMA_VERSION
     out = out.dropna(subset=["ts_code", "score", "rank", "confidence"])
     return out[CONTRACT_COLUMNS].reset_index(drop=True)
 

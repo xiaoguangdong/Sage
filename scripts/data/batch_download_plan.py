@@ -16,6 +16,7 @@ sys.path.insert(0, str(project_root))
 
 import pandas as pd
 
+from scripts.data._shared.runtime import log_task_summary, setup_logger
 from scripts.data.data_integrity_checker import DataIntegrityChecker
 from scripts.data.tushare_downloader import TaskConfig, _load_yaml, run_task
 
@@ -157,10 +158,11 @@ def _should_skip_by_missing_rule(plan: dict, task_name: str, skip_rules: dict) -
     return False, ""
 
 
+logger = setup_logger("batch_download_plan", module="data")
+
+
 def log(msg: str):
-    """带时间戳的日志"""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] {msg}", flush=True)
+    logger.info(msg)
 
 
 def load_download_plan(plan_name: str = None):
@@ -253,6 +255,7 @@ def main():
 
         task_start = time.time()
 
+        failure_reason = None
         try:
             # 从配置中获取任务
             if task_name not in all_tasks:
@@ -293,10 +296,20 @@ def main():
             break
         except Exception as e:
             task_elapsed = time.time() - task_start
+            failure_reason = str(e)
             log(f"❌ {task_name} 失败: {e}")
             log(f"   耗时: {task_elapsed/60:.1f} 分钟")
             failed_tasks.append(task_name)
             continue
+        finally:
+            task_elapsed = time.time() - task_start
+            log_task_summary(
+                logger,
+                task_name=task_name,
+                window=f"{start_date}~{end_date}",
+                elapsed_s=task_elapsed,
+                error=failure_reason,
+            )
 
     # 总结
     total_elapsed = time.time() - start_time
@@ -308,6 +321,13 @@ def main():
     if failed_tasks:
         log(f"失败: {', '.join(failed_tasks)}")
     log("=" * 60)
+    log_task_summary(
+        logger,
+        task_name="batch_download_plan",
+        window=plan_name,
+        elapsed_s=total_elapsed,
+        error=",".join(failed_tasks) if failed_tasks else None,
+    )
 
 
 if __name__ == "__main__":

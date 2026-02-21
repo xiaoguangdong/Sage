@@ -2,11 +2,16 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import sys
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from sage_app.data.data_access import get_data_path as _data_access_get_data_path
+from sage_app.data.data_access import get_data_root as _data_access_get_data_root
+from sage_app.data.data_access import get_log_dir as _data_access_get_log_dir
+from sage_app.data.data_access import get_tushare_root as _data_access_get_tushare_root
+from sage_app.data.data_access import next_log_path as _data_access_next_log_path
+from sage_app.data.data_access import setup_task_logger
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _ENV_LOADED = False
@@ -82,20 +87,7 @@ def _has_content(path: Path) -> bool:
 
 
 def get_data_root(kind: str = "primary") -> Path:
-    env_key = "SAGE_DATA_ROOT_PRIMARY" if kind == "primary" else "SAGE_DATA_ROOT_SECONDARY"
-    env_value = os.getenv(env_key)
-    cfg = _load_base_config()
-    roots_cfg = (cfg.get("data") or {}).get("roots") or {}
-    root_value = env_value or roots_cfg.get(kind)
-
-    resolved = _resolve_root_path(root_value)
-    if resolved and resolved.exists():
-        return resolved
-
-    # fallback to repo data dir
-    fallback = PROJECT_ROOT / "data"
-    fallback.mkdir(parents=True, exist_ok=True)
-    return fallback
+    return _data_access_get_data_root(kind=kind)
 
 
 def get_data_layout() -> Dict[str, str]:
@@ -124,82 +116,23 @@ def get_data_dir(*parts: str, root_kind: str = "primary", ensure: bool = False) 
 
 
 def get_data_path(section: str, *parts: str, root_kind: str = "primary", ensure: bool = False) -> Path:
-    layout = get_data_layout()
-    base = layout.get(section, section)
-    return get_data_dir(base, *parts, root_kind=root_kind, ensure=ensure)
+    return _data_access_get_data_path(section, *parts, root_kind=root_kind, ensure=ensure)
 
 
 def get_tushare_root(root_kind: str = "primary", ensure: bool = False) -> Path:
-    cfg = _load_base_config()
-    paths_cfg = (cfg.get("data") or {}).get("paths") or {}
-
-    env_key = "SAGE_TUSHARE_ROOT" if root_kind == "primary" else "SAGE_TUSHARE_ROOT_SECONDARY"
-    cfg_key = "tushare" if root_kind == "primary" else "tushare_secondary"
-
-    candidates = _dedupe_paths(
-        [
-            _resolve_root_path(os.getenv(env_key)),
-            _resolve_root_path(paths_cfg.get(cfg_key)),
-            get_data_root(root_kind) / "tushare",
-            get_data_path("raw", "tushare", root_kind=root_kind, ensure=False),
-        ]
-    )
-    if not candidates:
-        candidates = [get_data_root(root_kind) / "tushare"]
-
-    if ensure:
-        candidates[0].mkdir(parents=True, exist_ok=True)
-        return candidates[0]
-
-    canonical = candidates[0]
-    legacy = candidates[-1]
-    if canonical.exists():
-        if legacy == canonical or not legacy.exists() or _has_content(canonical):
-            return canonical
-    if legacy.exists():
-        return legacy
-    for path in candidates[1:]:
-        if path.exists():
-            return path
-    return canonical
+    return _data_access_get_tushare_root(root_kind=root_kind, ensure=ensure)
 
 
 def get_log_dir(module: str = "data") -> Path:
-    log_dir = PROJECT_ROOT / "logs" / module
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir
+    return _data_access_get_log_dir(module=module)
 
 
 def next_log_path(name: str, module: str = "data") -> Path:
-    log_dir = get_log_dir(module)
-    date_str = datetime.now().strftime("%Y%m%d")
-    pattern = re.compile(rf"^{date_str}_(\d{{3}})_{re.escape(name)}\.log$")
-    next_seq = 1
-    for path in log_dir.iterdir():
-        match = pattern.match(path.name)
-        if match:
-            next_seq = max(next_seq, int(match.group(1)) + 1)
-    return log_dir / f"{date_str}_{next_seq:03d}_{name}.log"
+    return _data_access_next_log_path(name=name, module=module)
 
 
 def setup_logger(name: str, module: str = "data", level: int = logging.INFO) -> logging.Logger:
-    logger = logging.getLogger(name)
-    logger.setLevel(level)
-    if logger.handlers:
-        return logger
-
-    log_path = next_log_path(name, module)
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-
-    stream_handler = logging.StreamHandler(sys.stdout)
-    stream_handler.setFormatter(formatter)
-
-    file_handler = logging.FileHandler(log_path, encoding="utf-8")
-    file_handler.setFormatter(formatter)
-
-    logger.addHandler(stream_handler)
-    logger.addHandler(file_handler)
-    return logger
+    return setup_task_logger(name=name, module=module, level=level)
 
 
 def disable_proxy() -> None:

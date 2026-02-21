@@ -28,6 +28,18 @@ auto_promotion:
   min_sharpe_diff: 0.0
   min_data_quality: 0.95
 
+# 自动降级（Champion回退基线）配置
+auto_downgrade:
+  enabled: false
+  evaluation_path: config/app/shadow_eval.json
+  lookback_periods: 3
+  thresholds:
+    max_drawdown_limit: -0.15
+    min_sharpe: 0.0
+    max_turnover: 2.0
+    consecutive_loss_periods: 3
+    min_cost_return: -0.05
+
 # 挑战者正向策略（positive）的组合权重
 challenger_weights:
   positive_growth_weight: 0.7

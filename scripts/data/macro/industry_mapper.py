@@ -12,7 +12,6 @@
 日期：2026-02-11
 """
 
-import logging
 from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Dict, List, Optional
@@ -21,9 +20,9 @@ import numpy as np
 import pandas as pd
 import yaml
 
-# 设置日志
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+from scripts.data._shared.runtime import setup_logger
+
+logger = setup_logger("industry_mapper", module="macro")
 
 
 class IndustryMapper:

@@ -14,6 +14,7 @@ import pandas as pd
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from sage_core.execution.signal_contract import SIGNAL_FREQUENCY, SIGNAL_SCHEMA_VERSION
 from scripts.data._shared.runtime import get_data_path
 
 DEFAULT_SIGNAL_LOOKBACK_DAYS = {
@@ -266,6 +267,8 @@ def _normalize_contract(contract: pd.DataFrame) -> pd.DataFrame:
     contract["direction"] = pd.to_numeric(contract["direction"], errors="coerce").fillna(0).astype(int)
     contract["source"] = contract["source"].astype(str)
     contract["model_version"] = contract["model_version"].astype(str)
+    contract["frequency"] = SIGNAL_FREQUENCY
+    contract["schema_version"] = SIGNAL_SCHEMA_VERSION
     contract["meta"] = contract["meta"].apply(
         lambda x: json.dumps(x, ensure_ascii=False) if not isinstance(x, str) else x
     )
@@ -279,6 +282,8 @@ def _normalize_contract(contract: pd.DataFrame) -> pd.DataFrame:
             "direction",
             "source",
             "model_version",
+            "frequency",
+            "schema_version",
             "meta",
         ]
     ]

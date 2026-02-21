@@ -7,6 +7,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 
 def _next_log_path(module_name: str, log_root: str = "logs") -> Path:
@@ -41,3 +42,18 @@ def setup_logging(module_name: str, level: int = logging.INFO, log_root: str = "
     root_logger.addHandler(file_handler)
 
     return log_path
+
+
+def format_task_summary(
+    task_name: str,
+    window: Optional[str] = None,
+    elapsed_s: Optional[float] = None,
+    error: Optional[str] = None,
+) -> str:
+    parts = [f"任务名={task_name}"]
+    if window:
+        parts.append(f"窗口={window}")
+    if elapsed_s is not None:
+        parts.append(f"耗时={elapsed_s:.1f}s")
+    parts.append(f"失败原因={error or '无'}")
+    return " | ".join(parts)

@@ -12,7 +12,6 @@
 日期：2026-02-11
 """
 
-import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -23,15 +22,10 @@ import pandas as pd
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+from scripts.data._shared.runtime import log_task_summary, setup_logger
 from scripts.macro.industry_mapper import IndustryMapper
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s",
-    handlers=[logging.FileHandler("logs/macro/map_nbs_to_sw.log", encoding="utf-8"), logging.StreamHandler()],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger("map_nbs_to_sw", module="macro")
 
 
 class NBSMapper:
@@ -176,14 +170,28 @@ class NBSMapper:
 
 def main():
     """主函数"""
-    # 创建映射器
-    mapper = NBSMapper()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        # 创建映射器
+        mapper = NBSMapper()
 
-    # 处理NBS PPI数据
-    sw_data = mapper.process()
+        # 处理NBS PPI数据
+        sw_data = mapper.process()
 
-    # 显示结果
-    mapper.display_results(sw_data)
+        # 显示结果
+        mapper.display_results(sw_data)
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="map_nbs_to_sw",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

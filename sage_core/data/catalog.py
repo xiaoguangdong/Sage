@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, Optional
@@ -37,6 +38,7 @@ class DataCatalog:
 
     def __init__(self, specs: Optional[Iterable[DatasetSpec]] = None):
         self._specs: Dict[str, DatasetSpec] = {}
+        self._warned_raw = False
         for spec in specs or self._default_specs():
             self.register(spec)
 
@@ -55,6 +57,9 @@ class DataCatalog:
 
     def get_path(self, name: str, root_kind: str = "primary", ensure: bool = False) -> Path:
         spec = self.get_spec(name)
+        if spec.section == "raw" and not self._warned_raw:
+            logging.getLogger(__name__).warning("core 访问 raw 数据：%s，请使用 sage_app/data 统一读取入口", spec.name)
+            self._warned_raw = True
         return get_data_path(spec.section, spec.relative_path, root_kind=root_kind, ensure=ensure)
 
     def resolve_path(self, name: str) -> Path:

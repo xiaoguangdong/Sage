@@ -29,6 +29,8 @@ from scripts.data._shared.runtime import (
     get_data_path,
     get_tushare_root,
     get_tushare_token,
+    log_task_summary,
+    setup_logger,
 )
 
 add_project_root()
@@ -145,7 +147,10 @@ def _ts() -> str:
 
 
 def _log(message: str) -> None:
-    print(f"[{_ts()}] {message}", flush=True)
+    logger.info(message)
+
+
+logger = setup_logger("tushare_downloader", module="data")
 
 
 def _load_state(path: Path) -> Dict[str, Any]:
@@ -474,6 +479,8 @@ def run_task(
     retry_failed: bool = False,
     disable_proxy_flag: bool = True,
 ) -> None:
+    task_start_time = time.time()
+    failure_reason = None
     _log(f"开始任务: {task.name}, start_date={start_date}, end_date={end_date}, resume={resume}")
     output_path = _resolve_output(task.output, output_root)
     project_root = add_project_root()
@@ -531,6 +538,13 @@ def run_task(
 
     if dry_run:
         _log(f"任务 {task.name} 将处理 {len(windows)} 个窗口")
+        log_task_summary(
+            logger,
+            task_name=task.name,
+            window=f"{start_date or ''}~{end_date or ''}",
+            elapsed_s=time.time() - task_start_time,
+            error=None,
+        )
         return
 
     _log("初始化 Tushare 客户端...")
@@ -613,104 +627,116 @@ def run_task(
 
     total_steps = len(work_items)
     signature = current_signature
-    for step, work in enumerate(work_items, 1):
-        item = work["item"]
-        win_start = work["win_start"]
-        win_end = work["win_end"]
-        params = dict(task.params or {})
-        if task.start_field:
-            params[task.start_field] = win_start
-        if task.end_field:
-            params[task.end_field] = win_end
-        if item is not None:
-            if isinstance(item, dict):
-                params.update(item)
-            elif task.list_param:
-                params[task.list_param] = item
+    try:
+        for step, work in enumerate(work_items, 1):
+            item = work["item"]
+            win_start = work["win_start"]
+            win_end = work["win_end"]
+            params = dict(task.params or {})
+            if task.start_field:
+                params[task.start_field] = win_start
+            if task.end_field:
+                params[task.end_field] = win_end
+            if item is not None:
+                if isinstance(item, dict):
+                    params.update(item)
+                elif task.list_param:
+                    params[task.list_param] = item
 
-        _log(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
-        try:
-            if task.pagination == "offset":
-                df = client.request_paged(task.api, params, limit=task.limit)
-            else:
-                df = client.request(task.api, params)
-        except Exception as exc:
-            _log(f"❌ 请求失败: {exc}")
-            if state_path:
-                failed_items.append(
-                    {
-                        "item": item,
-                        "item_key": work["item_key"],
-                        "win_start": win_start,
-                        "win_end": win_end,
-                        "error": str(exc),
-                    }
-                )
-                _save_state(
-                    state_path,
-                    {
-                        "last_end": _state_last_end(win_end),
-                        "cursor_index": step - 1,
-                        "signature": signature,
-                        "failed": failed_items[-200:],
-                    },
-                )
-            if task.continue_on_error:
-                continue
-            raise
-
-        if df is None or df.empty:
-            _log("无数据")
-            if state_path:
-                _save_state(
-                    state_path,
-                    {
-                        "last_end": _state_last_end(win_end),
-                        "cursor_index": step - 1,
-                        "signature": signature,
-                        "failed": failed_items[-200:],
-                    },
-                )
-            continue
-
-        if filter_items and task.filter_field in df.columns:
-            before = len(df)
-            df = df[df[task.filter_field].astype(str).isin(filter_items)]
-            _log(f"过滤 {task.filter_field}: {before} -> {len(df)}")
-        elif filter_items and task.filter_field not in df.columns:
-            _log(f"⚠️  过滤字段不存在: {task.filter_field}")
-
-        if existing.empty:
-            combined = df
-        else:
-            combined = pd.concat([existing, df], ignore_index=True)
-            if task.dedup_keys:
-                # 只对存在的列进行去重
-                valid_dedup_keys = [k for k in task.dedup_keys if k in combined.columns]
-                if valid_dedup_keys:
-                    for key in valid_dedup_keys:
-                        if key in DATE_LIKE_COLUMNS:
-                            combined[key] = _to_text_series(combined[key])
-                    combined = combined.drop_duplicates(subset=valid_dedup_keys)
+            _log(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
+            try:
+                if task.pagination == "offset":
+                    df = client.request_paged(task.api, params, limit=task.limit)
                 else:
-                    _log(f"⚠️  去重键 {task.dedup_keys} 在数据中不存在，跳过去重")
+                    df = client.request(task.api, params)
+            except Exception as exc:
+                _log(f"❌ 请求失败: {exc}")
+                if state_path:
+                    failed_items.append(
+                        {
+                            "item": item,
+                            "item_key": work["item_key"],
+                            "win_start": win_start,
+                            "win_end": win_end,
+                            "error": str(exc),
+                        }
+                    )
+                    _save_state(
+                        state_path,
+                        {
+                            "last_end": _state_last_end(win_end),
+                            "cursor_index": step - 1,
+                            "signature": signature,
+                            "failed": failed_items[-200:],
+                        },
+                    )
+                if task.continue_on_error:
+                    continue
+                raise
 
-        _safe_to_parquet(combined, output_path)
-        existing = combined
+            if df is None or df.empty:
+                _log("无数据")
+                if state_path:
+                    _save_state(
+                        state_path,
+                        {
+                            "last_end": _state_last_end(win_end),
+                            "cursor_index": step - 1,
+                            "signature": signature,
+                            "failed": failed_items[-200:],
+                        },
+                    )
+                continue
 
-        if state_path:
-            _save_state(
-                state_path,
-                {
-                    "last_end": _state_last_end(win_end),
-                    "cursor_index": step - 1,
-                    "signature": signature,
-                    "failed": failed_items[-200:],
-                },
-            )
+            if filter_items and task.filter_field in df.columns:
+                before = len(df)
+                df = df[df[task.filter_field].astype(str).isin(filter_items)]
+                _log(f"过滤 {task.filter_field}: {before} -> {len(df)}")
+            elif filter_items and task.filter_field not in df.columns:
+                _log(f"⚠️  过滤字段不存在: {task.filter_field}")
 
-    if output_path.exists():
-        _log(f"✅ 输出: {output_path}")
+            if existing.empty:
+                combined = df
+            else:
+                combined = pd.concat([existing, df], ignore_index=True)
+                if task.dedup_keys:
+                    # 只对存在的列进行去重
+                    valid_dedup_keys = [k for k in task.dedup_keys if k in combined.columns]
+                    if valid_dedup_keys:
+                        for key in valid_dedup_keys:
+                            if key in DATE_LIKE_COLUMNS:
+                                combined[key] = _to_text_series(combined[key])
+                        combined = combined.drop_duplicates(subset=valid_dedup_keys)
+                    else:
+                        _log(f"⚠️  去重键 {task.dedup_keys} 在数据中不存在，跳过去重")
+
+            _safe_to_parquet(combined, output_path)
+            existing = combined
+
+            if state_path:
+                _save_state(
+                    state_path,
+                    {
+                        "last_end": _state_last_end(win_end),
+                        "cursor_index": step - 1,
+                        "signature": signature,
+                        "failed": failed_items[-200:],
+                    },
+                )
+
+        if output_path.exists():
+            _log(f"✅ 输出: {output_path}")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name=task.name,
+            window=f"{start_date or ''}~{end_date or ''}",
+            elapsed_s=time.time() - task_start_time,
+            error=failure_reason,
+        )
 
 
 def main() -> None:
