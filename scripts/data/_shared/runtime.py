@@ -10,6 +10,7 @@ from sage_app.data.data_access import get_data_path as _data_access_get_data_pat
 from sage_app.data.data_access import get_data_root as _data_access_get_data_root
 from sage_app.data.data_access import get_log_dir as _data_access_get_log_dir
 from sage_app.data.data_access import get_tushare_root as _data_access_get_tushare_root
+from sage_app.data.data_access import log_task_summary as _data_access_log_task_summary
 from sage_app.data.data_access import next_log_path as _data_access_next_log_path
 from sage_app.data.data_access import setup_task_logger
 
@@ -133,6 +134,16 @@ def next_log_path(name: str, module: str = "data") -> Path:
 
 def setup_logger(name: str, module: str = "data", level: int = logging.INFO) -> logging.Logger:
     return setup_task_logger(name=name, module=module, level=level)
+
+
+def log_task_summary(
+    logger: logging.Logger,
+    task_name: str,
+    window: Optional[str] = None,
+    elapsed_s: Optional[float] = None,
+    error: Optional[str] = None,
+) -> None:
+    _data_access_log_task_summary(logger, task_name, window=window, elapsed_s=elapsed_s, error=error)
 
 
 def disable_proxy() -> None:
