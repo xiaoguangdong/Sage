@@ -437,11 +437,21 @@ def run_task(
             f"读取断点: state={state_path}, last_end={last_end}, cursor_index={cursor_index}, failed={len(failed_items)}"
         )
 
+    backfill_only = False
+    if last_end and end_date:
+        try:
+            last_end_dt = _parse_date(last_end, task.date_format)
+            if end_dt <= last_end_dt:
+                backfill_only = True
+                _log(f"检测到回补模式: end_date={end_date} <= last_end={last_end}")
+        except Exception:
+            _log(f"⚠️  断点 last_end={last_end} 解析失败，跳过回补判断")
+
     if task.mode in ("year_quarters",) or (task.mode == "list" and not start_date and not end_date):
         windows = [("", "")]
     else:
         windows = list(_iter_windows(task.mode, task.split, start_dt, end_dt, task.date_format))
-    if last_end:
+    if last_end and not backfill_only:
         windows = [win for win in windows if win[1] > last_end]
     _log(f"待处理窗口数量: {len(windows)}")
 
@@ -490,7 +500,7 @@ def run_task(
             work_items = work_items[cursor_index + 1 :]
         else:
             _log("断点签名不一致，回退到 last_end 过滤")
-            if last_end:
+            if last_end and not backfill_only:
                 work_items = [item for item in work_items if item["win_end"] > last_end]
 
     if resume and retry_failed and failed_items:
@@ -507,6 +517,15 @@ def run_task(
             )
         work_items = retry_items + work_items
         failed_items = []
+
+    def _state_last_end(win_end: str) -> str:
+        nonlocal last_end
+        if not backfill_only:
+            last_end = win_end
+            return win_end
+        if last_end is None or win_end > last_end:
+            last_end = win_end
+        return last_end
 
     total_steps = len(work_items)
     signature = current_signature
@@ -546,7 +565,7 @@ def run_task(
                 _save_state(
                     state_path,
                     {
-                        "last_end": win_end,
+                        "last_end": _state_last_end(win_end),
                         "cursor_index": step - 1,
                         "signature": signature,
                         "failed": failed_items[-200:],
@@ -562,7 +581,7 @@ def run_task(
                 _save_state(
                     state_path,
                     {
-                        "last_end": win_end,
+                        "last_end": _state_last_end(win_end),
                         "cursor_index": step - 1,
                         "signature": signature,
                         "failed": failed_items[-200:],
@@ -589,7 +608,7 @@ def run_task(
             _save_state(
                 state_path,
                 {
-                    "last_end": win_end,
+                    "last_end": _state_last_end(win_end),
                     "cursor_index": step - 1,
                     "signature": signature,
                     "failed": failed_items[-200:],
