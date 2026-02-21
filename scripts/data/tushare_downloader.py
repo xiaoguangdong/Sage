@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -31,6 +32,18 @@ from scripts.data._shared.runtime import (
 )
 
 add_project_root()
+
+DATE_LIKE_COLUMNS = {
+    "trade_date",
+    "ann_date",
+    "end_date",
+    "cal_date",
+    "f_ann_date",
+    "month",
+    "period",
+    "list_date",
+    "delist_date",
+}
 
 
 try:
@@ -158,16 +171,35 @@ def _safe_to_parquet(df: pd.DataFrame, path: Path) -> None:
         return
     except Exception as exc:
         message = str(exc)
-        col_name = None
-        if "column" in message:
-            parts = message.split("column")
-            if len(parts) > 1:
-                col_name = parts[-1].strip().strip("'").strip('"')
-        if col_name and col_name in df.columns:
-            df[col_name] = df[col_name].astype(str)
-            df.to_parquet(path, index=False)
+        retry_df = df.copy()
+        fallback_cols = set()
+
+        # pyarrow 常见报错："Conversion failed for column trade_date with type object"
+        m = re.search(r"column\s+([A-Za-z0-9_]+)", message)
+        if m:
+            fallback_cols.add(m.group(1))
+
+        # 日期类字段最容易出现 int/str 混合，统一转为文本。
+        fallback_cols.update(col for col in DATE_LIKE_COLUMNS if col in retry_df.columns)
+        for col in fallback_cols:
+            if col in retry_df.columns:
+                retry_df[col] = _to_text_series(retry_df[col])
+        if fallback_cols:
+            retry_df.to_parquet(path, index=False)
             return
         raise
+
+
+def _to_text_series(series: pd.Series) -> pd.Series:
+    def _normalize(value: Any) -> Optional[str]:
+        if pd.isna(value):
+            return None
+        text = str(value).strip()
+        if text.endswith(".0"):
+            text = text[:-2]
+        return text
+
+    return series.map(_normalize)
 
 
 @dataclass
@@ -603,6 +635,9 @@ def run_task(
                 # 只对存在的列进行去重
                 valid_dedup_keys = [k for k in task.dedup_keys if k in combined.columns]
                 if valid_dedup_keys:
+                    for key in valid_dedup_keys:
+                        if key in DATE_LIKE_COLUMNS:
+                            combined[key] = _to_text_series(combined[key])
                     combined = combined.drop_duplicates(subset=valid_dedup_keys)
                 else:
                     _log(f"⚠️  去重键 {task.dedup_keys} 在数据中不存在，跳过去重")
