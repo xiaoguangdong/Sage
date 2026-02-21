@@ -291,10 +291,12 @@ def _resolve_output(path_str: str, output_root: Path) -> Path:
     return path
 
 
-def _resolve_state(path_str: Optional[str]) -> Optional[Path]:
+def _resolve_state(path_str: Optional[str], project_root: Optional[Path] = None) -> Optional[Path]:
     if not path_str:
         return None
     path = Path(path_str)
+    if not path.is_absolute() and project_root is not None:
+        path = project_root / path
     if path.is_dir():
         return path / "state.json"
     return path
@@ -330,7 +332,7 @@ def _iter_windows(
         for s, e in _year_windows(start, end):
             yield _format_date(s, date_format), _format_date(e, date_format)
         return
-    yield _format_date(start), _format_date(end)
+    yield _format_date(start, date_format), _format_date(end, date_format)
 
 
 def _load_list_items(task: TaskConfig, project_root: Path) -> List[Any]:
@@ -398,12 +400,12 @@ def run_task(
     resume: bool,
     dry_run: bool,
     retry_failed: bool = False,
+    disable_proxy_flag: bool = True,
 ) -> None:
     _log(f"开始任务: {task.name}, start_date={start_date}, end_date={end_date}, resume={resume}")
     output_path = _resolve_output(task.output, output_root)
-    state_path = _resolve_state(task.state) if task.state else _default_state_path(task.name)
-
     project_root = add_project_root()
+    state_path = _resolve_state(task.state, project_root=project_root) if task.state else _default_state_path(task.name)
 
     start_dt = datetime.now()
     end_dt = start_dt
@@ -462,6 +464,7 @@ def run_task(
     _log("初始化 Tushare 客户端...")
     client = TushareClient(
         sleep_seconds=sleep_seconds,
+        disable_proxy_flag=disable_proxy_flag,
         max_retries=task.max_retries or 3,
         backoff_seconds=task.backoff_seconds or 30,
     )
@@ -503,8 +506,11 @@ def run_task(
             if last_end and not backfill_only:
                 work_items = [item for item in work_items if item["win_end"] > last_end]
 
-    if resume and retry_failed and failed_items:
-        _log(f"优先重试失败窗口: {len(failed_items)}")
+    if resume and failed_items:
+        if retry_failed:
+            _log(f"优先重试失败窗口: {len(failed_items)}")
+        else:
+            _log(f"检测到失败窗口，自动重试: {len(failed_items)}")
         retry_items = []
         for failure in failed_items:
             retry_items.append(
@@ -630,7 +636,9 @@ def main() -> None:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--retry-failed", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--disable-proxy", action="store_true", default=True)
+    parser.add_argument("--disable-proxy", dest="disable_proxy", action="store_true", help="禁用代理（默认）")
+    parser.add_argument("--enable-proxy", dest="disable_proxy", action="store_false", help="启用代理")
+    parser.set_defaults(disable_proxy=True)
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -649,9 +657,6 @@ def main() -> None:
         backoff_factor = float(base_download.get("backoff_factor", 2.0))
         task.backoff_seconds = max(10, int(sleep_seconds * backoff_factor))
 
-    if args.disable_proxy:
-        disable_proxy()
-
     run_task(
         task=task,
         start_date=args.start_date,
@@ -661,6 +666,7 @@ def main() -> None:
         resume=args.resume,
         dry_run=args.dry_run,
         retry_failed=args.retry_failed,
+        disable_proxy_flag=args.disable_proxy,
     )
 
 

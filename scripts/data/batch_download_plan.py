@@ -105,7 +105,8 @@ def _should_skip_task(
 ) -> bool:
     if not start_date or not end_date:
         return False
-    if task.mode not in {"date_range", "list"}:
+    # list 模式通常按 ts_code/列表项拉取，仅靠全表最小最大日期无法判断是否完整
+    if task.mode != "date_range":
         return False
     output_path = _resolve_output(task.output, output_root)
     actual_path = checker._find_actual_file(output_path)
@@ -116,7 +117,7 @@ def _should_skip_task(
         return False
     plan_start = _parse_date(start_date, task.date_format)
     plan_end = _parse_date(end_date, task.date_format)
-    if plan_start is None or plan_end is None:
+    if plan_start is None or plan_end is None or pd.isna(plan_start) or pd.isna(plan_end):
         return False
     grace = timedelta(days=_coverage_grace_days(task.date_format))
     return min_date <= plan_start + grace and max_date >= plan_end - grace
