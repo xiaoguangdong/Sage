@@ -213,6 +213,7 @@ class TaskConfig:
     api: str
     mode: str
     output: str
+    output_aliases: Optional[List[str]] = None
     state: Optional[str] = None
     start_field: Optional[str] = None
     end_field: Optional[str] = None
@@ -250,6 +251,7 @@ class TaskConfig:
             api=payload["api"],
             mode=payload.get("mode", "single"),
             output=payload["output"],
+            output_aliases=payload.get("output_aliases") or None,
             state=payload.get("state"),
             start_field=payload.get("start_field"),
             end_field=payload.get("end_field"),
@@ -340,6 +342,17 @@ def _resolve_output(path_str: str, output_root: Path) -> Path:
     if not path.is_absolute():
         return output_root / path
     return path
+
+
+def _resolve_output_aliases(task: TaskConfig, output_root: Path) -> List[Path]:
+    aliases: List[Path] = []
+    for alias in task.output_aliases or []:
+        if not alias:
+            continue
+        alias_path = _resolve_output(alias, output_root)
+        if alias_path not in aliases:
+            aliases.append(alias_path)
+    return aliases
 
 
 def _resolve_state(path_str: Optional[str], project_root: Optional[Path] = None) -> Optional[Path]:
@@ -483,6 +496,7 @@ def run_task(
     failure_reason = None
     _log(f"开始任务: {task.name}, start_date={start_date}, end_date={end_date}, resume={resume}")
     output_path = _resolve_output(task.output, output_root)
+    output_aliases = _resolve_output_aliases(task, output_root)
     project_root = add_project_root()
     state_path = _resolve_state(task.state, project_root=project_root) if task.state else _default_state_path(task.name)
 
@@ -562,7 +576,16 @@ def run_task(
         _log(f"已有数据行数: {len(existing)}")
     else:
         existing = pd.DataFrame()
-        _log(f"输出文件不存在，将新建: {output_path}")
+        fallback_loaded = False
+        for alias_path in output_aliases:
+            if alias_path.exists():
+                _log(f"输出文件不存在，使用别名输出作为已有数据: {alias_path}")
+                existing = pd.read_parquet(alias_path)
+                _log(f"已有数据行数: {len(existing)}")
+                fallback_loaded = True
+                break
+        if not fallback_loaded:
+            _log(f"输出文件不存在，将新建: {output_path}")
 
     list_items = _load_list_items(task, project_root) if task.mode == "list" else [None]
     if task.mode == "list" and not list_items:
@@ -711,6 +734,10 @@ def run_task(
                         _log(f"⚠️  去重键 {task.dedup_keys} 在数据中不存在，跳过去重")
 
             _safe_to_parquet(combined, output_path)
+            for alias_path in output_aliases:
+                if alias_path == output_path:
+                    continue
+                _safe_to_parquet(combined, alias_path)
             existing = combined
 
             if state_path:
@@ -726,6 +753,9 @@ def run_task(
 
         if output_path.exists():
             _log(f"✅ 输出: {output_path}")
+        for alias_path in output_aliases:
+            if alias_path.exists() and alias_path != output_path:
+                _log(f"✅ 输出: {alias_path}")
     except Exception as exc:
         failure_reason = str(exc)
         raise

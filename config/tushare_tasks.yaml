@@ -173,6 +173,8 @@ tasks:
     quarters: ["0331", "0630", "0930", "1231"]
     state: "data/states/fina_indicator_vip.json"
     output: "fina_indicator_vip/fina_indicator_vip_all.parquet"
+    output_aliases:
+      - "fina_indicator/fina_indicator_all.parquet"
 
   ths_member:
     api: ths_member
@@ -294,6 +296,8 @@ tasks:
     limit: 8000
     state: "data/states/fina_mainbz_vip.json"
     output: "macro/segments/fina_mainbz_vip.parquet"
+    output_aliases:
+      - "macro/segments/fina_mainbz_all.parquet"
 
   tushare_anns:
     api: anns_d
