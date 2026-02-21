@@ -6,7 +6,7 @@ Tushare 批量下载脚本 - 基于下载计划
 import argparse
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
 
@@ -28,6 +28,13 @@ DATE_CANDIDATES = [
     "period",
     "f_ann_date",
 ]
+DEFAULT_COVERAGE_GRACE_DAYS = 7
+
+
+def _coverage_grace_days(date_format: str) -> int:
+    if date_format == "%Y%m":
+        return 31
+    return DEFAULT_COVERAGE_GRACE_DAYS
 
 
 def _resolve_output(path_str: str, output_root: Path) -> Path:
@@ -111,7 +118,8 @@ def _should_skip_task(
     plan_end = _parse_date(end_date, task.date_format)
     if plan_start is None or plan_end is None:
         return False
-    return min_date <= plan_start and max_date >= plan_end
+    grace = timedelta(days=_coverage_grace_days(task.date_format))
+    return min_date <= plan_start + grace and max_date >= plan_end - grace
 
 
 def log(msg: str):
