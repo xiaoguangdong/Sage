@@ -169,10 +169,16 @@ def _save_state(path: Path, payload: Dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _safe_to_parquet(df: pd.DataFrame, path: Path) -> None:
+def _write_parquet_atomic(df: pd.DataFrame, path: Path) -> None:
     _ensure_parent(path)
+    tmp_path = path.with_suffix(path.suffix + ".tmp")
+    df.to_parquet(tmp_path, index=False)
+    tmp_path.replace(path)
+
+
+def _safe_to_parquet(df: pd.DataFrame, path: Path) -> None:
     try:
-        df.to_parquet(path, index=False)
+        _write_parquet_atomic(df, path)
         return
     except Exception as exc:
         message = str(exc)
@@ -190,7 +196,7 @@ def _safe_to_parquet(df: pd.DataFrame, path: Path) -> None:
             if col in retry_df.columns:
                 retry_df[col] = _to_text_series(retry_df[col])
         if fallback_cols:
-            retry_df.to_parquet(path, index=False)
+            _write_parquet_atomic(retry_df, path)
             return
         raise
 
@@ -570,22 +576,27 @@ def run_task(
     )
     _log("Tushare 客户端初始化完成")
 
+    existing_frames: List[pd.DataFrame] = []
     if output_path.exists():
         _log(f"读取已有输出文件: {output_path}")
-        existing = pd.read_parquet(output_path)
+        existing_frames.append(pd.read_parquet(output_path))
+    for alias_path in output_aliases:
+        if alias_path.exists():
+            _log(f"读取已有别名输出: {alias_path}")
+            existing_frames.append(pd.read_parquet(alias_path))
+    if existing_frames:
+        existing = pd.concat(existing_frames, ignore_index=True)
+        if task.dedup_keys:
+            valid_keys = [k for k in task.dedup_keys if k in existing.columns]
+            if valid_keys:
+                for key in valid_keys:
+                    if key in DATE_LIKE_COLUMNS:
+                        existing[key] = _to_text_series(existing[key])
+                existing = existing.drop_duplicates(subset=valid_keys)
         _log(f"已有数据行数: {len(existing)}")
     else:
         existing = pd.DataFrame()
-        fallback_loaded = False
-        for alias_path in output_aliases:
-            if alias_path.exists():
-                _log(f"输出文件不存在，使用别名输出作为已有数据: {alias_path}")
-                existing = pd.read_parquet(alias_path)
-                _log(f"已有数据行数: {len(existing)}")
-                fallback_loaded = True
-                break
-        if not fallback_loaded:
-            _log(f"输出文件不存在，将新建: {output_path}")
+        _log(f"输出文件不存在，将新建: {output_path}")
 
     list_items = _load_list_items(task, project_root) if task.mode == "list" else [None]
     if task.mode == "list" and not list_items:
@@ -666,7 +677,13 @@ def run_task(
                 elif task.list_param:
                     params[task.list_param] = item
 
-            _log(f"[{step}/{total_steps}] {task.name} {win_start} ~ {win_end} ...")
+            window_desc = f"{win_start} ~ {win_end}".strip()
+            if item is not None:
+                if window_desc.strip(" ~") == "":
+                    window_desc = str(item)
+                else:
+                    window_desc = f"{window_desc} | {task.list_param or 'item'}={item}"
+            _log(f"[{step}/{total_steps}] {task.name} {window_desc} ...")
             try:
                 if task.pagination == "offset":
                     df = client.request_paged(task.api, params, limit=task.limit)
