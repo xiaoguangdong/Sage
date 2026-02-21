@@ -36,6 +36,14 @@ download_plans:
     desc: hs300_moneyflow_bydate 缺少近期数据
     start_date: '20260207'
     end_date: '20260213'
+  - task: northbound_hold
+    desc: northbound_hold 缺少早期数据
+    start_date: '20160101'
+    end_date: '20161227'
+  - task: northbound_top10
+    desc: northbound_top10 缺少早期数据
+    start_date: '20160101'
+    end_date: '20161207'
   - task: sw_industry_daily
     desc: sw_industry_daily 缺少早期数据
     start_date: '20160101'
@@ -56,6 +64,14 @@ download_plans:
     desc: fina_indicator 缺少近期数据
     start_date: '20230616'
     end_date: '20260213'
+  - task: dividend
+    desc: dividend 缺少早期数据
+    start_date: '20160101'
+    end_date: '20201231'
+  - task: forecast
+    desc: forecast 缺少早期数据
+    start_date: '20160101'
+    end_date: '20160330'
   - task: fina_indicator_vip
     desc: fina_indicator_vip 缺失季度 2026
     start_date: '20260101'
