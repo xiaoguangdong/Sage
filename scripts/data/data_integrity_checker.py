@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from collections import defaultdict
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import pandas as pd
 import yaml
@@ -57,6 +57,26 @@ class DataIntegrityChecker:
             self.config = yaml.safe_load(f)
 
         self.tasks = self.config.get("tasks", {})
+        self.integrity_exclude: Set[str] = set(self.config.get("integrity_exclude", []) or [])
+
+        policy = self.config.get("missing_handling", {}) or {}
+        delayed_grace_days = policy.get("delayed_grace_days", 7)
+        try:
+            delayed_grace_days = int(delayed_grace_days)
+        except Exception:
+            delayed_grace_days = 7
+        delayed_grace_days = max(0, delayed_grace_days)
+
+        structural_tasks = set(policy.get("structural_missing_tasks", []) or [])
+        structural_tasks.update(self.integrity_exclude)
+        skip_classes = set(policy.get("skip_missing_classes", ["structural_missing"]) or ["structural_missing"])
+
+        self.missing_policy = {
+            "structural_missing_tasks": structural_tasks,
+            "skip_missing_classes": skip_classes,
+            "delayed_grace_days": delayed_grace_days,
+            "delayed_grace_by_task": policy.get("delayed_grace_by_task", {}) or {},
+        }
 
     def _find_actual_file(self, expected_path: Path) -> Optional[Path]:
         """查找实际的文件路径（支持多种命名模式）
@@ -117,9 +137,8 @@ class DataIntegrityChecker:
         print(f"开始检查数据完整性 ({self.start_year}-{self.end_year})")
         print("=" * 80)
 
-        ignore_tasks = set(self.config.get("integrity_exclude", []) or [])
         for task_name, task_config in self.tasks.items():
-            if task_name in ignore_tasks:
+            if task_name in self.integrity_exclude:
                 print(f"\n跳过任务: {task_name} (integrity_exclude)")
                 results[task_name] = {
                     "task_name": task_name,
@@ -128,13 +147,63 @@ class DataIntegrityChecker:
                     "file_exists": False,
                     "missing_data": [],
                     "status": "skipped",
+                    "missing_class": "structural_missing",
+                    "skip_backfill": True,
+                    "skip_reason": "integrity_exclude",
                 }
                 continue
             print(f"\n检查任务: {task_name}")
             result = self._check_task(task_name, task_config)
+            result = self._attach_missing_meta(task_name, result, task_config)
             results[task_name] = result
 
         return results
+
+    def _task_delayed_grace_days(self, task_name: str) -> int:
+        override = (self.missing_policy.get("delayed_grace_by_task") or {}).get(task_name)
+        if override is None:
+            return int(self.missing_policy.get("delayed_grace_days", 7))
+        try:
+            return max(0, int(override))
+        except Exception:
+            return int(self.missing_policy.get("delayed_grace_days", 7))
+
+    def _classify_missing(
+        self, task_name: str, result: Dict[str, Any], task_config: Dict[str, Any]
+    ) -> Tuple[str, bool, str]:
+        status = result.get("status")
+        structural_tasks: Set[str] = set(self.missing_policy.get("structural_missing_tasks") or set())
+        skip_classes: Set[str] = set(self.missing_policy.get("skip_missing_classes") or set())
+
+        if status in {"ok"}:
+            return "none", False, ""
+        if status == "skipped":
+            return "structural_missing", True, result.get("skip_reason", "integrity_exclude")
+        if task_name in structural_tasks:
+            cls = "structural_missing"
+            return cls, cls in skip_classes, "任务在结构性缺失名单（数据源无/权限未开）"
+
+        if status == "incomplete":
+            max_date = self._parse_date(result.get("max_date"))
+            if max_date is not None:
+                target_end = self._target_window()[1]
+                lag_days = (target_end - max_date).days
+                grace_days = self._task_delayed_grace_days(task_name)
+                if 0 <= lag_days <= grace_days:
+                    cls = "delayed"
+                    return cls, cls in skip_classes, f"数据发布延迟窗口内（滞后 {lag_days} 天，阈值 {grace_days} 天）"
+
+        cls = "error"
+        return cls, cls in skip_classes, "需要补数或排查抓取/写入错误"
+
+    def _attach_missing_meta(
+        self, task_name: str, result: Dict[str, Any], task_config: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        missing_class, skip_backfill, skip_reason = self._classify_missing(task_name, result, task_config)
+        result["missing_class"] = missing_class
+        result["skip_backfill"] = bool(skip_backfill)
+        result["skip_reason"] = skip_reason
+        return result
 
     def _read_parquet(
         self,
@@ -386,8 +455,15 @@ class DataIntegrityChecker:
             status = result.get("status")
             if status not in {"incomplete", "missing_file", "empty", "invalid_dates"}:
                 continue
+            if result.get("skip_backfill"):
+                print(
+                    f"跳过补数任务: {task_name} "
+                    f"(missing_class={result.get('missing_class')}, reason={result.get('skip_reason')})"
+                )
+                continue
             task_config = self.tasks.get(task_name, {})
             mode = result.get("mode") or task_config.get("mode", "single")
+            missing_class = result.get("missing_class", "error")
 
             if mode in {"date_range", "list"}:
                 ranges = self._infer_missing_ranges(result)
@@ -398,6 +474,7 @@ class DataIntegrityChecker:
                             "desc": f"{task_name} {reason}",
                             "start_date": start_date,
                             "end_date": end_date,
+                            "missing_class": missing_class,
                         }
                     )
             elif mode == "year_quarters":
@@ -410,6 +487,7 @@ class DataIntegrityChecker:
                             "desc": f"{task_name} 缺失季度 {year}",
                             "start_date": f"{year}0101",
                             "end_date": f"{year}1231",
+                            "missing_class": missing_class,
                         }
                     )
 
@@ -519,6 +597,17 @@ class DataIntegrityChecker:
         report_lines.append(f"  ❌ 文件缺失: {missing_count}")
         report_lines.append(f"  ❌ 读取错误: {error_count}")
 
+        class_counts = defaultdict(int)
+        for r in results.values():
+            class_counts[r.get("missing_class", "none")] += 1
+        report_lines.append(
+            "  分类统计: "
+            f"none={class_counts['none']}, "
+            f"structural_missing={class_counts['structural_missing']}, "
+            f"delayed={class_counts['delayed']}, "
+            f"error={class_counts['error']}"
+        )
+
         # 详细信息
         report_lines.append("\n" + "=" * 80)
         report_lines.append("详细信息")
@@ -555,6 +644,11 @@ class DataIntegrityChecker:
                 elif result.get("missing_data"):
                     for missing in result["missing_data"]:
                         report_lines.append(f"    - {missing}")
+                if result.get("missing_class") and result.get("missing_class") != "none":
+                    report_lines.append(
+                        f"    分类: {result.get('missing_class')} "
+                        f"(skip_backfill={result.get('skip_backfill')}, reason={result.get('skip_reason')})"
+                    )
 
         # 3. 读取错误
         if status_groups["read_error"] or status_groups["invalid_dates"]:

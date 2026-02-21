@@ -123,6 +123,35 @@ def _should_skip_task(
     return min_date <= plan_start + grace and max_date >= plan_end - grace
 
 
+def _build_missing_skip_rules(raw_config: dict) -> dict:
+    policy = raw_config.get("missing_handling", {}) or {}
+    structural_tasks = set(raw_config.get("integrity_exclude", []) or [])
+    structural_tasks.update(policy.get("structural_missing_tasks", []) or [])
+    skip_classes = set(policy.get("skip_missing_classes", ["structural_missing"]) or ["structural_missing"])
+    return {
+        "structural_tasks": structural_tasks,
+        "skip_classes": skip_classes,
+    }
+
+
+def _should_skip_by_missing_rule(plan: dict, task_name: str, skip_rules: dict) -> tuple[bool, str]:
+    if bool(plan.get("force_run")):
+        return False, ""
+
+    if bool(plan.get("skip_backfill")):
+        reason = str(plan.get("skip_reason") or "计划标记为 skip_backfill")
+        return True, reason
+
+    missing_class = str(plan.get("missing_class") or "").strip()
+    if missing_class and missing_class in skip_rules["skip_classes"]:
+        return True, f"missing_class={missing_class} 命中跳过规则"
+
+    if task_name in skip_rules["structural_tasks"]:
+        return True, "任务在结构性缺失名单（数据源无/权限未开）"
+
+    return False, ""
+
+
 def log(msg: str):
     """带时间戳的日志"""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -164,6 +193,7 @@ def main():
     tasks_dict = raw_config.get("tasks", raw_config)
     data_root = project_root / "data" / "tushare"
     checker = DataIntegrityChecker(config_path, data_root, light_mode=True)
+    missing_skip_rules = _build_missing_skip_rules(raw_config)
 
     # 将配置转换为 TaskConfig 对象
     all_tasks = {}
@@ -226,6 +256,12 @@ def main():
                 continue
 
             task = all_tasks[task_name]
+
+            skip_by_rule, skip_reason = _should_skip_by_missing_rule(plan, task_name, missing_skip_rules)
+            if skip_by_rule:
+                log(f"⏭️  跳过 {task_name}：{skip_reason}")
+                success_count += 1
+                continue
 
             if _should_skip_task(task, start_date, end_date, data_root, checker):
                 log(f"⏭️  跳过 {task_name}：已有数据覆盖 {start_date}~{end_date}")
