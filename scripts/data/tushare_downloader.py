@@ -584,6 +584,7 @@ def run_task(
         if alias_path.exists():
             _log(f"读取已有别名输出: {alias_path}")
             existing_frames.append(pd.read_parquet(alias_path))
+    existing_sources = len(existing_frames)
     if existing_frames:
         existing = pd.concat(existing_frames, ignore_index=True)
         if task.dedup_keys:
@@ -660,6 +661,13 @@ def run_task(
         return last_end
 
     total_steps = len(work_items)
+    if total_steps == 0 and existing_sources > 0:
+        _log("无待处理窗口，写回合并后的历史数据")
+        _safe_to_parquet(existing, output_path)
+        for alias_path in output_aliases:
+            if alias_path == output_path:
+                continue
+            _safe_to_parquet(existing, alias_path)
     signature = current_signature
     try:
         for step, work in enumerate(work_items, 1):
