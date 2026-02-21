@@ -1,0 +1,12 @@
+daily_tasks:
+  - daily_kline
+  - daily_basic
+  - margin
+  - hs300_constituents
+  - hs300_moneyflow_bydate
+  - sw_industry_daily
+  - ths_daily
+  - northbound_flow
+  - northbound_hold
+  - northbound_top10
+  - sw_valuation
