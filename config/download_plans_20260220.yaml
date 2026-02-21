@@ -32,6 +32,8 @@ download_plans:
     desc: hs300_moneyflow 缺少近期数据
     start_date: '20260207'
     end_date: '20260213'
+    skip_backfill: true
+    skip_reason: "改用 hs300_moneyflow_bydate 全市场拉取后过滤"
   - task: hs300_moneyflow_bydate
     desc: hs300_moneyflow_bydate 缺少近期数据
     start_date: '20260207'

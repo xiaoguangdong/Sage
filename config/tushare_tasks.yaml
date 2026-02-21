@@ -98,6 +98,11 @@ tasks:
     start_field: start_date
     end_field: end_date
     split: month
+    pagination: offset
+    limit: 5000
+    filter_field: ts_code
+    filter_list_file: "data/tushare/constituents/hs300_constituents_all.parquet"
+    filter_list_column: "con_code"
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/hs300_moneyflow_bydate.json"
     output: "moneyflow/moneyflow_all.parquet"

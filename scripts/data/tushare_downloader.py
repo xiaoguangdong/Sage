@@ -227,6 +227,12 @@ class TaskConfig:
     list_columns: Optional[List[str]] = None
     list_items: Optional[List[Any]] = None
     list_param: Optional[str] = None
+    filter_field: Optional[str] = None
+    filter_list_file: Optional[str] = None
+    filter_list_format: Optional[str] = None
+    filter_list_column: Optional[str] = None
+    filter_list_columns: Optional[List[str]] = None
+    filter_list_items: Optional[List[Any]] = None
     quarters: Optional[List[str]] = None
     start_year: Optional[int] = None
     end_year: Optional[int] = None
@@ -257,6 +263,12 @@ class TaskConfig:
             list_columns=payload.get("list_columns"),
             list_items=payload.get("list_items"),
             list_param=payload.get("list_param"),
+            filter_field=payload.get("filter_field"),
+            filter_list_file=payload.get("filter_list_file"),
+            filter_list_format=payload.get("filter_list_format"),
+            filter_list_column=payload.get("filter_list_column"),
+            filter_list_columns=payload.get("filter_list_columns"),
+            filter_list_items=payload.get("filter_list_items"),
             quarters=payload.get("quarters"),
             start_year=payload.get("start_year"),
             end_year=payload.get("end_year"),
@@ -394,6 +406,32 @@ def _load_list_items(task: TaskConfig, project_root: Path) -> List[Any]:
     raise ValueError(f"列表文件缺少列: {columns}")
 
 
+def _load_filter_items(task: TaskConfig, project_root: Path) -> Optional[set[str]]:
+    if task.filter_list_items:
+        return {str(v) for v in task.filter_list_items if v is not None}
+    if not task.filter_list_file:
+        return None
+    list_path = Path(task.filter_list_file)
+    if not list_path.is_absolute():
+        list_path = project_root / list_path
+    if not list_path.exists():
+        raise FileNotFoundError(f"过滤列表文件不存在: {list_path}")
+
+    fmt = (task.filter_list_format or list_path.suffix.replace(".", "")).lower()
+    if fmt in ("csv", "txt"):
+        df = pd.read_csv(list_path)
+    elif fmt in ("parquet", "pq"):
+        df = pd.read_parquet(list_path)
+    else:
+        df = pd.read_csv(list_path)
+
+    columns = task.filter_list_columns or ([task.filter_list_column] if task.filter_list_column else [])
+    for col in columns:
+        if col and col in df.columns:
+            return set(df[col].dropna().astype(str).unique().tolist())
+    raise ValueError(f"过滤列表文件缺少列: {columns}")
+
+
 def _iter_quarters(task: TaskConfig) -> List[str]:
     start_year = task.start_year or datetime.now().year
     end_year = task.end_year or start_year
@@ -517,6 +555,12 @@ def run_task(
     if task.mode == "year_quarters":
         list_items = _iter_quarters(task)
 
+    filter_items = None
+    if task.filter_field:
+        filter_items = _load_filter_items(task, project_root)
+        if filter_items is None:
+            _log(f"⚠️  未加载过滤列表，跳过过滤: {task.name}")
+
     work_items: List[Dict[str, Any]] = []
     for item in list_items:
         for win_start, win_end in windows:
@@ -626,6 +670,13 @@ def run_task(
                     },
                 )
             continue
+
+        if filter_items and task.filter_field in df.columns:
+            before = len(df)
+            df = df[df[task.filter_field].astype(str).isin(filter_items)]
+            _log(f"过滤 {task.filter_field}: {before} -> {len(df)}")
+        elif filter_items and task.filter_field not in df.columns:
+            _log(f"⚠️  过滤字段不存在: {task.filter_field}")
 
         if existing.empty:
             combined = df
