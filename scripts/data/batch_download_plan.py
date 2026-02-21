@@ -8,12 +8,110 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import List, Optional
 
 # 添加项目根目录到路径
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
+import pandas as pd
+
+from scripts.data.data_integrity_checker import DataIntegrityChecker
 from scripts.data.tushare_downloader import TaskConfig, _load_yaml, run_task
+
+DATE_CANDIDATES = [
+    "trade_date",
+    "ann_date",
+    "end_date",
+    "cal_date",
+    "month",
+    "period",
+    "f_ann_date",
+]
+
+
+def _resolve_output(path_str: str, output_root: Path) -> Path:
+    path = Path(path_str)
+    if not path.is_absolute():
+        return output_root / path
+    return path
+
+
+def _parse_date(value: str, date_format: str) -> Optional[datetime]:
+    if value is None:
+        return None
+    try:
+        return datetime.strptime(str(value), date_format)
+    except Exception:
+        try:
+            return pd.to_datetime(value, errors="coerce")
+        except Exception:
+            return None
+
+
+def _load_date_bounds(path: Path, date_format: str) -> tuple[Optional[datetime], Optional[datetime]]:
+    files: List[Path]
+    if path.is_dir():
+        files = sorted(path.glob("*.parquet"))
+    else:
+        files = [path]
+    min_date = None
+    max_date = None
+    for file in files:
+        try:
+            df = pd.read_parquet(file, columns=DATE_CANDIDATES)
+        except Exception:
+            try:
+                df = pd.read_parquet(file)
+            except Exception:
+                continue
+        date_col = None
+        for col in DATE_CANDIDATES:
+            if col in df.columns:
+                date_col = col
+                break
+        if date_col is None:
+            continue
+        series = df[date_col]
+        if series.empty:
+            continue
+        dt = pd.to_datetime(series.astype(str), format=date_format, errors="coerce")
+        if dt.empty:
+            continue
+        file_min = dt.min()
+        file_max = dt.max()
+        if pd.isna(file_min) or pd.isna(file_max):
+            continue
+        if min_date is None or file_min < min_date:
+            min_date = file_min
+        if max_date is None or file_max > max_date:
+            max_date = file_max
+    return min_date, max_date
+
+
+def _should_skip_task(
+    task: TaskConfig,
+    start_date: Optional[str],
+    end_date: Optional[str],
+    output_root: Path,
+    checker: DataIntegrityChecker,
+) -> bool:
+    if not start_date or not end_date:
+        return False
+    if task.mode not in {"date_range", "list"}:
+        return False
+    output_path = _resolve_output(task.output, output_root)
+    actual_path = checker._find_actual_file(output_path)
+    if actual_path is None:
+        return False
+    min_date, max_date = _load_date_bounds(actual_path, task.date_format)
+    if min_date is None or max_date is None:
+        return False
+    plan_start = _parse_date(start_date, task.date_format)
+    plan_end = _parse_date(end_date, task.date_format)
+    if plan_start is None or plan_end is None:
+        return False
+    return min_date <= plan_start and max_date >= plan_end
 
 
 def log(msg: str):
@@ -55,6 +153,8 @@ def main():
 
     # 获取 tasks 字典
     tasks_dict = raw_config.get("tasks", raw_config)
+    data_root = project_root / "data" / "tushare"
+    checker = DataIntegrityChecker(config_path, data_root, light_mode=True)
 
     # 将配置转换为 TaskConfig 对象
     all_tasks = {}
@@ -117,6 +217,11 @@ def main():
                 continue
 
             task = all_tasks[task_name]
+
+            if _should_skip_task(task, start_date, end_date, data_root, checker):
+                log(f"⏭️  跳过 {task_name}：已有数据覆盖 {start_date}~{end_date}")
+                success_count += 1
+                continue
 
             # 执行下载
             run_task(
