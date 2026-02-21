@@ -11,24 +11,15 @@
 输出每只股票的横截面强弱分（0-100）
 """
 
-import logging
 import os
-import sys
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, log_task_summary, setup_logger
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger("calculate_stock_factors", module="models")
 
 
 class StockFactorCalculator:
@@ -431,30 +422,44 @@ class StockFactorCalculator:
 
 def main():
     """主函数"""
-    calculator = StockFactorCalculator()
-    df, latest_df = calculator.run()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        calculator = StockFactorCalculator()
+        df, latest_df = calculator.run()
 
-    if df is not None and latest_df is not None:
-        print("\n" + "=" * 70)
-        print("最新得分Top 20股票：")
-        print("=" * 70)
-        print(
-            latest_df[
-                [
-                    "ts_code",
-                    "score",
-                    "4w_ret",
-                    "12w_ret",
-                    "roe_ttm",
-                    "gross_margin",
-                    "turnover",
-                    "amt_rank",
-                    "vol_12w",
-                    "beta",
+        if df is not None and latest_df is not None:
+            print("\n" + "=" * 70)
+            print("最新得分Top 20股票：")
+            print("=" * 70)
+            print(
+                latest_df[
+                    [
+                        "ts_code",
+                        "score",
+                        "4w_ret",
+                        "12w_ret",
+                        "roe_ttm",
+                        "gross_margin",
+                        "turnover",
+                        "amt_rank",
+                        "vol_12w",
+                        "beta",
+                    ]
                 ]
-            ]
-            .head(20)
-            .to_string()
+                .head(20)
+                .to_string()
+            )
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="calculate_stock_factors",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
         )
 
 

@@ -4,15 +4,14 @@
 避免模型退化成"选高波动率小股票"的博弈模型
 """
 
-import logging
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-from scripts.data._shared.runtime import get_tushare_root
+from scripts.data._shared.runtime import get_tushare_root, log_task_summary, setup_logger
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger("style_model_value_enhanced", module="models")
 
 
 class ValueEnhancedStyleModel:
@@ -247,12 +246,26 @@ class ValueEnhancedStyleModel:
 
 def main():
     """主函数"""
-    model = ValueEnhancedStyleModel()
-    model.run()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        model = ValueEnhancedStyleModel()
+        model.run()
 
-    logger.info("=" * 70)
-    logger.info("✓ 价值增强版风格模型分析完成！")
-    logger.info("=" * 70)
+        logger.info("=" * 70)
+        logger.info("✓ 价值增强版风格模型分析完成！")
+        logger.info("=" * 70)
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="style_model_value_enhanced",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

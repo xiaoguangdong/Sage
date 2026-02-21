@@ -1,10 +1,10 @@
 """选股模型多区间回测 — 支持趋势模型仓位联动 + 增强风控"""
 
 import copy
-import logging
 import os
 import sys
 import warnings
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -17,8 +17,9 @@ from sage_core.portfolio.enhanced_risk_control import EnhancedRiskControl, RiskC
 from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
+from scripts.data._shared.runtime import log_task_summary, setup_logger
 
-logging.basicConfig(level=logging.WARNING)
+logger = setup_logger("backtest_multi_period", module="backtest")
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
 HOLD_DAYS, TOP_N = 20, 30
 
@@ -469,4 +470,18 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        main()
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="backtest_multi_period",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )

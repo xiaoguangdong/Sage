@@ -5,10 +5,10 @@
 """
 
 import copy
-import logging
 import os
 import sys
 import warnings
+from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -22,9 +22,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
+from scripts.data._shared.runtime import log_task_summary, setup_logger
 
-logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger("backtest_stock_selection", module="backtest")
 
 plt.rcParams["font.sans-serif"] = ["SimHei", "Arial Unicode MS", "DejaVu Sans"]
 plt.rcParams["axes.unicode_minus"] = False
@@ -360,4 +360,18 @@ def run_backtest():
 
 
 if __name__ == "__main__":
-    run_backtest()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        run_backtest()
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="backtest_stock_selection",
+            window=f"{BT_START}~{BT_END}",
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )

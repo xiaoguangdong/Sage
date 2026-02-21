@@ -1,10 +1,10 @@
 """展示回测期间每期选股结果（单一模型 vs Regime模型）"""
 
 import copy
-import logging
 import os
 import sys
 import warnings
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
@@ -15,8 +15,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
+from scripts.data._shared.runtime import log_task_summary, setup_logger
 
-logging.basicConfig(level=logging.WARNING)
+logger = setup_logger("show_stock_picks", module="backtest")
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
 
 BT_START, BT_END = "2024-09-10", "2026-01-01"
@@ -264,4 +265,18 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        main()
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="show_stock_picks",
+            window=f"{BT_START}~{BT_END}",
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )

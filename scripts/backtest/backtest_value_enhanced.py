@@ -4,15 +4,14 @@
 基于之前的因子数据，加入价值约束，测试胜率是否提升
 """
 
-import logging
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, log_task_summary, setup_logger
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger("backtest_value_enhanced", module="backtest")
 
 
 def backtest_with_value_filter():
@@ -172,4 +171,18 @@ def backtest_with_value_filter():
 
 
 if __name__ == "__main__":
-    backtest_with_value_filter()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        backtest_with_value_filter()
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="backtest_value_enhanced",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )

@@ -21,7 +21,6 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 import time
 from datetime import datetime
@@ -33,7 +32,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.data._shared.runtime import get_tushare_root, get_tushare_token
+from scripts.data._shared.runtime import get_tushare_root, get_tushare_token, log_task_summary, setup_logger
 
 try:
     import tushare as ts
@@ -81,22 +80,7 @@ class HistoricalDataBackfiller:
 
     def _setup_logging(self):
         """配置日志（带时间戳）"""
-        log_dir = ROOT / "logs" / "data"
-        log_dir.mkdir(parents=True, exist_ok=True)
-
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        log_file = log_dir / f"backfill_{timestamp}.log"
-
-        # 配置日志格式
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler(sys.stdout)],
-        )
-
-        self.logger = logging.getLogger(__name__)
-        self.log(f"日志文件: {log_file}")
+        self.logger = setup_logger("backfill_historical_data", module="data")
 
     def log(self, message: str, level: str = "INFO"):
         """统一日志输出"""
@@ -525,22 +509,36 @@ class HistoricalDataBackfiller:
 
 
 def main():
+    start_time = datetime.now().timestamp()
+    failure_reason = None
     parser = argparse.ArgumentParser(description="补充历史数据（2016-2020）")
     parser.add_argument("--start-year", type=int, default=2016, help="起始年份")
     parser.add_argument("--end-year", type=int, default=2020, help="结束年份")
     parser.add_argument("--dry-run", action="store_true", help="测试模式（不实际下载）")
     parser.add_argument("--sleep-seconds", type=int, default=60, help="请求间隔（秒），默认60秒")
 
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
 
-    backfiller = HistoricalDataBackfiller(
-        start_year=args.start_year,
-        end_year=args.end_year,
-        dry_run=args.dry_run,
-        sleep_seconds=args.sleep_seconds,
-    )
+        backfiller = HistoricalDataBackfiller(
+            start_year=args.start_year,
+            end_year=args.end_year,
+            dry_run=args.dry_run,
+            sleep_seconds=args.sleep_seconds,
+        )
 
-    backfiller.backfill_all()
+        backfiller.backfill_all()
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            setup_logger("backfill_historical_data", module="data"),
+            task_name="backfill_historical_data",
+            window=f"{args.start_year}~{args.end_year}" if "args" in locals() else None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

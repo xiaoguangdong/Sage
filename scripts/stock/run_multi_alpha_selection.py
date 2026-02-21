@@ -5,8 +5,8 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -16,13 +16,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from sage_core.stock_selection.multi_alpha_selector import MultiAlphaStockSelector
-from scripts.data._shared.runtime import get_tushare_root
+from scripts.data._shared.runtime import get_tushare_root, log_task_summary, setup_logger
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-)
-logger = logging.getLogger("multi_alpha_selection")
+logger = setup_logger("multi_alpha_selection", module="stock")
 
 
 def _find_latest_trade_date(data_dir: Path) -> str:
@@ -47,6 +43,8 @@ def _find_latest_trade_date(data_dir: Path) -> str:
 
 
 def main():
+    start_time = datetime.now().timestamp()
+    failure_reason = None
     parser = argparse.ArgumentParser(description="多逻辑选股模型测试脚本")
     parser.add_argument("--date", type=str, default=None, help="交易日期 YYYYMMDD (默认自动取最新)")
     parser.add_argument("--top-n", type=int, default=30, help="每个子组合选股数量")
@@ -55,31 +53,43 @@ def main():
     parser.add_argument("--data-dir", type=str, default=str(get_tushare_root()), help="数据目录")
     parser.add_argument("--output", type=str, default=None, help="输出CSV路径")
 
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
 
-    data_dir = Path(args.data_dir)
-    trade_date = args.date or _find_latest_trade_date(data_dir)
+        data_dir = Path(args.data_dir)
+        trade_date = args.date or _find_latest_trade_date(data_dir)
 
-    logger.info("运行多逻辑选股: trade_date=%s", trade_date)
+        logger.info("运行多逻辑选股: trade_date=%s", trade_date)
 
-    selector = MultiAlphaStockSelector(data_dir=str(data_dir))
-    results = selector.select(
-        trade_date=trade_date,
-        top_n=args.top_n,
-        allocation_method=args.allocation,
-        regime=args.regime,
-    )
+        selector = MultiAlphaStockSelector(data_dir=str(data_dir))
+        results = selector.select(
+            trade_date=trade_date,
+            top_n=args.top_n,
+            allocation_method=args.allocation,
+            regime=args.regime,
+        )
 
-    for name in ["value", "growth", "frontier", "combined"]:
-        df = results[name]
-        logger.info("\n==== %s Top %d ====" % (name.upper(), args.top_n))
-        logger.info("\n%s", df.to_string(index=False))
+        for name in ["value", "growth", "frontier", "combined"]:
+            df = results[name]
+            logger.info("\n==== %s Top %d ====" % (name.upper(), args.top_n))
+            logger.info("\n%s", df.to_string(index=False))
 
-    if args.output:
-        output_path = Path(args.output)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        results["all_scores"].to_csv(output_path, index=False)
-        logger.info("结果已保存: %s", output_path)
+        if args.output:
+            output_path = Path(args.output)
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            results["all_scores"].to_csv(output_path, index=False)
+            logger.info("结果已保存: %s", output_path)
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="multi_alpha_selection",
+            window="cli",
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

@@ -5,24 +5,15 @@
 基于9个核心指标，识别市场风格状态
 """
 
-import logging
 import os
-import sys
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, log_task_summary, setup_logger
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger("style_model_9indicators", module="models")
 
 
 class StyleModel9Indicators:
@@ -339,17 +330,31 @@ class StyleModel9Indicators:
 
 def main():
     """主函数"""
-    model = StyleModel9Indicators()
-    results = model.run()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        model = StyleModel9Indicators()
+        results = model.run()
 
-    if results is not None:
-        print("\n" + "=" * 70)
-        print("使用说明：")
-        print("=" * 70)
-        print("1. ACCUMULATION: 积累期，建议仓位50%")
-        print("2. HEALTHY_UP: 健康扩张，建议仓位100%")
-        print("3. DISTRIBUTION: 风险转移，建议仓位30%")
-        print("4. EXIT: 逻辑失效，建议清仓")
+        if results is not None:
+            print("\n" + "=" * 70)
+            print("使用说明：")
+            print("=" * 70)
+            print("1. ACCUMULATION: 积累期，建议仓位50%")
+            print("2. HEALTHY_UP: 健康扩张，建议仓位100%")
+            print("3. DISTRIBUTION: 风险转移，建议仓位30%")
+            print("4. EXIT: 逻辑失效，建议清仓")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="style_model_9indicators",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

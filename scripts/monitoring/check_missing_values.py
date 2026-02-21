@@ -2,8 +2,8 @@
 数据缺失值检查脚本
 """
 
-import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Dict
 
@@ -12,10 +12,9 @@ import pandas as pd
 # 添加项目路径
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
+from scripts.data._shared.runtime import log_task_summary, setup_logger
 
-# 配置日志
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger("check_missing_values", module="monitoring")
 
 
 def check_single_file(file_path: str) -> Dict:
@@ -178,5 +177,19 @@ def check_data_quality_summary(data_dir: str = "data/baostock"):
 
 
 if __name__ == "__main__":
-    # 检查数据缺失值
-    check_data_quality_summary("data/baostock")
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        # 检查数据缺失值
+        check_data_quality_summary("data/baostock")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="check_missing_values",
+            window="data/baostock",
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )

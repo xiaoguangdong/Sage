@@ -5,24 +5,15 @@
 基于观察资金流向，逆向推导市场逻辑，动态调整因子权重
 """
 
-import logging
 import os
-import sys
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, log_task_summary, setup_logger
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger("style_model_observation", module="models")
 
 
 class StyleModelObservation:
@@ -450,21 +441,35 @@ class StyleModelObservation:
 
 def main():
     """主函数"""
-    model = StyleModelObservation()
-    results = model.run()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        model = StyleModelObservation()
+        results = model.run()
 
-    if results is not None:
-        print("\n" + "=" * 70)
-        print("使用说明：")
-        print("=" * 70)
-        print("1. momentum: 动量驱动，提高动量因子权重")
-        print("2. fundamental: 基本面驱动，提高质量因子权重")
-        print("3. small_cap: 小盘投机，降低质量因子权重")
-        print("4. institution: 机构抱团，平衡权重")
-        print("\n警告级别：")
-        print("- GREEN: 逻辑健康，继续执行")
-        print("- YELLOW: 逻辑弱化，建议降仓")
-        print("- RED: 逻辑失效，建议清仓")
+        if results is not None:
+            print("\n" + "=" * 70)
+            print("使用说明：")
+            print("=" * 70)
+            print("1. momentum: 动量驱动，提高动量因子权重")
+            print("2. fundamental: 基本面驱动，提高质量因子权重")
+            print("3. small_cap: 小盘投机，降低质量因子权重")
+            print("4. institution: 机构抱团，平衡权重")
+            print("\n警告级别：")
+            print("- GREEN: 逻辑健康，继续执行")
+            print("- YELLOW: 逻辑弱化，建议降仓")
+            print("- RED: 逻辑失效，建议清仓")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="style_model_observation",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

@@ -5,25 +5,16 @@
 识别当前市场风格（趋势、流动性、基本面、投机），为量化因子选择提供依据
 """
 
-import logging
 import os
-import sys
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 from scipy import stats
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, log_task_summary, setup_logger
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger("calculate_market_regime", module="strategy")
 
 
 class MarketRegimeAnalyzer:
@@ -340,21 +331,35 @@ class MarketRegimeAnalyzer:
 
 def main():
     """主函数"""
-    analyzer = MarketRegimeAnalyzer()
-    regime_df = analyzer.run()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        analyzer = MarketRegimeAnalyzer()
+        regime_df = analyzer.run()
 
-    if regime_df is not None:
-        print("\n" + "=" * 70)
-        print("使用说明：")
-        print("=" * 70)
-        print("1. trend_raw > 0: 趋势市，可以使用动量因子")
-        print("2. liquidity_raw > 0: 流动性驱动，关注换手率")
-        print("3. fundamental_raw > 0: 基本面有效，关注ROE等基本面指标")
-        print("4. speculative_raw > 0: 投机情绪高涨，关注高波动、小盘股")
-        print("\n根据这些风格维度，动态调整因子权重：")
-        print("- 趋势市: 增加动量因子权重")
-        print("- 基本面市: 增加质量因子权重")
-        print("- 投机市: 关注小盘、高波动股票")
+        if regime_df is not None:
+            print("\n" + "=" * 70)
+            print("使用说明：")
+            print("=" * 70)
+            print("1. trend_raw > 0: 趋势市，可以使用动量因子")
+            print("2. liquidity_raw > 0: 流动性驱动，关注换手率")
+            print("3. fundamental_raw > 0: 基本面有效，关注ROE等基本面指标")
+            print("4. speculative_raw > 0: 投机情绪高涨，关注高波动、小盘股")
+            print("\n根据这些风格维度，动态调整因子权重：")
+            print("- 趋势市: 增加动量因子权重")
+            print("- 基本面市: 增加质量因子权重")
+            print("- 投机市: 关注小盘、高波动股票")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="calculate_market_regime",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

@@ -5,24 +5,15 @@
 根据市场风格状态动态调整因子权重
 """
 
-import logging
 import os
-import sys
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, log_task_summary, setup_logger
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger("adaptive_factor_weights", module="models")
 
 
 class AdaptiveFactorWeightSystem:
@@ -276,18 +267,32 @@ class AdaptiveFactorWeightSystem:
 
 def main():
     """主函数"""
-    system = AdaptiveFactorWeightSystem()
-    adaptive_scores = system.run()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        system = AdaptiveFactorWeightSystem()
+        adaptive_scores = system.run()
 
-    if adaptive_scores is not None:
-        print("\n" + "=" * 70)
-        print("使用说明：")
-        print("=" * 70)
-        print("1. trend_raw > 0: 趋势市，momentum_weight 自动增加")
-        print("2. trend_raw < 0: 反转市，momentum_weight 自动降低")
-        print("3. fundamental_raw > 0: 基本面市，quality_weight 自动增加")
-        print("4. speculative_raw > 0: 投机市，risk_weight 自动降低（鼓励冒险）")
-        print("\n自适应得分相比固定得分，能更好地适应市场风格切换！")
+        if adaptive_scores is not None:
+            print("\n" + "=" * 70)
+            print("使用说明：")
+            print("=" * 70)
+            print("1. trend_raw > 0: 趋势市，momentum_weight 自动增加")
+            print("2. trend_raw < 0: 反转市，momentum_weight 自动降低")
+            print("3. fundamental_raw > 0: 基本面市，quality_weight 自动增加")
+            print("4. speculative_raw > 0: 投机市，risk_weight 自动降低（鼓励冒险）")
+            print("\n自适应得分相比固定得分，能更好地适应市场风格切换！")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="adaptive_factor_weights",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

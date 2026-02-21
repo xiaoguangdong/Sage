@@ -2,9 +2,9 @@
 测试分 Regime 选股模型 — 使用真实沪深300成分股数据
 """
 
-import logging
 import os
 import sys
+from datetime import datetime
 
 import pandas as pd
 
@@ -13,9 +13,9 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from sage_core.stock_selection.regime_stock_selector import REGIME_NAMES, RegimeSelectionConfig, RegimeStockSelector
 from sage_core.stock_selection.stock_selector import SelectionConfig, StockSelector
 from sage_core.trend.trend_model import TrendModelConfig, TrendModelRuleV2
+from scripts.data._shared.runtime import log_task_summary, setup_logger
 
-logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
-logger = logging.getLogger(__name__)
+logger = setup_logger("test_regime_selector", module="backtest")
 
 DATA_ROOT = os.path.join(os.path.dirname(__file__), "..", "data", "tushare")
 
@@ -183,4 +183,18 @@ def run_test():
 
 
 if __name__ == "__main__":
-    run_test()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        run_test()
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="test_regime_selector",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )

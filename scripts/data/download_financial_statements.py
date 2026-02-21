@@ -11,9 +11,9 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -23,7 +23,7 @@ import tushare as ts
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.data._shared.runtime import get_tushare_root, get_tushare_token
+from scripts.data._shared.runtime import get_tushare_root, get_tushare_token, log_task_summary, setup_logger
 
 
 class FinancialStatementsDownloader:
@@ -59,12 +59,7 @@ class FinancialStatementsDownloader:
         self.dividend_dir.mkdir(parents=True, exist_ok=True)
 
         # 配置日志
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s [%(levelname)s] %(message)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-        )
-        self.logger = logging.getLogger(__name__)
+        self.logger = setup_logger("download_financial_statements", module="data")
 
     def download_income(self):
         """下载利润表"""
@@ -242,22 +237,36 @@ class FinancialStatementsDownloader:
 
 
 def main():
+    start_time = datetime.now().timestamp()
+    failure_reason = None
     parser = argparse.ArgumentParser(description="下载财务三表数据")
     parser.add_argument("--start-year", type=int, default=2020, help="起始年份")
     parser.add_argument("--end-year", type=int, default=2024, help="结束年份")
     parser.add_argument("--sleep-seconds", type=int, default=60, help="请求间隔（秒）")
     parser.add_argument("--dry-run", action="store_true", help="干运行模式（不实际下载）")
 
-    args = parser.parse_args()
+    try:
+        args = parser.parse_args()
 
-    downloader = FinancialStatementsDownloader(
-        start_year=args.start_year,
-        end_year=args.end_year,
-        sleep_seconds=args.sleep_seconds,
-        dry_run=args.dry_run,
-    )
+        downloader = FinancialStatementsDownloader(
+            start_year=args.start_year,
+            end_year=args.end_year,
+            sleep_seconds=args.sleep_seconds,
+            dry_run=args.dry_run,
+        )
 
-    downloader.run()
+        downloader.run()
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            setup_logger("download_financial_statements", module="data"),
+            task_name="download_financial_statements",
+            window=f"{args.start_year}~{args.end_year}" if "args" in locals() else None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":

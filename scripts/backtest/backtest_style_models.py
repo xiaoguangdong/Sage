@@ -5,26 +5,16 @@
 对比9指标版本和观察推导版本的表现
 """
 
-import logging
 import os
-import sys
 from datetime import datetime
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from scripts.data._shared.runtime import get_data_path, get_tushare_root
+from scripts.data._shared.runtime import get_data_path, get_tushare_root, log_task_summary, setup_logger
 
-# 配置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
-logger = logging.getLogger(__name__)
+logger = setup_logger("backtest_style_models", module="backtest")
 
 
 class StyleModelBacktester:
@@ -432,16 +422,30 @@ class StyleModelBacktester:
 
 def main():
     """主函数"""
-    backtester = StyleModelBacktester()
-    comparison = backtester.run()
+    start_time = datetime.now().timestamp()
+    failure_reason = None
+    try:
+        backtester = StyleModelBacktester()
+        comparison = backtester.run()
 
-    if comparison is not None:
-        print("\n" + "=" * 70)
-        print("对比完成！")
-        print("=" * 70)
-        print("\n文件位置：")
-        print("- 对比报告: data/processed/factors/style_models_comparison_report.txt")
-        print("- 对比图表: data/processed/factors/style_models_comparison.png")
+        if comparison is not None:
+            print("\n" + "=" * 70)
+            print("对比完成！")
+            print("=" * 70)
+            print("\n文件位置：")
+            print("- 对比报告: data/processed/factors/style_models_comparison_report.txt")
+            print("- 对比图表: data/processed/factors/style_models_comparison.png")
+    except Exception as exc:
+        failure_reason = str(exc)
+        raise
+    finally:
+        log_task_summary(
+            logger,
+            task_name="backtest_style_models",
+            window=None,
+            elapsed_s=datetime.now().timestamp() - start_time,
+            error=failure_reason,
+        )
 
 
 if __name__ == "__main__":
