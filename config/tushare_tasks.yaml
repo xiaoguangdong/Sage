@@ -103,6 +103,7 @@ tasks:
     filter_field: ts_code
     filter_list_file: "data/tushare/constituents/hs300_constituents_all.parquet"
     filter_list_column: "con_code"
+    skip_coverage_check: true
     dedup_keys: ["ts_code", "trade_date"]
     state: "data/states/hs300_moneyflow_bydate.json"
     output: "moneyflow/moneyflow_all.parquet"

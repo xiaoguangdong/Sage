@@ -105,6 +105,11 @@ def _should_skip_task(
 ) -> bool:
     if not start_date or not end_date:
         return False
+    if getattr(task, "skip_coverage_check", False):
+        return False
+    if task.filter_field:
+        # 过滤模式会导致“整体覆盖”误判，直接放行
+        return False
     # list 模式通常按 ts_code/列表项拉取，仅靠全表最小最大日期无法判断是否完整
     if task.mode != "date_range":
         return False

@@ -233,6 +233,7 @@ class TaskConfig:
     filter_list_column: Optional[str] = None
     filter_list_columns: Optional[List[str]] = None
     filter_list_items: Optional[List[Any]] = None
+    skip_coverage_check: bool = False
     quarters: Optional[List[str]] = None
     start_year: Optional[int] = None
     end_year: Optional[int] = None
@@ -269,6 +270,7 @@ class TaskConfig:
             filter_list_column=payload.get("filter_list_column"),
             filter_list_columns=payload.get("filter_list_columns"),
             filter_list_items=payload.get("filter_list_items"),
+            skip_coverage_check=bool(payload.get("skip_coverage_check", False)),
             quarters=payload.get("quarters"),
             start_year=payload.get("start_year"),
             end_year=payload.get("end_year"),
